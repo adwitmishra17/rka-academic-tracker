@@ -1,0 +1,166 @@
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --green:        #1a4a2e;
+  --green-dark:   #0f2d1b;
+  --green-mid:    #2a6b45;
+  --green-light:  #e8f2ec;
+  --green-muted:  #c8dfd0;
+  --crimson:      #8b1a1a;
+  --crimson-light:#fdf0f0;
+  --gold:         #c9a227;
+  --gold-light:   #fdf6e3;
+  --gold-dark:    #9e7d1a;
+  --white:        #ffffff;
+  --off-white:    #f8f7f4;
+  --gray-50:      #f5f4f1;
+  --gray-100:     #ede9e3;
+  --gray-200:     #d4cfc7;
+  --gray-400:     #9e9890;
+  --gray-600:     #6b6560;
+  --gray-800:     #3a3630;
+  --text:         #1e1b18;
+  --text-muted:   #6b6560;
+  --shadow-sm:    0 1px 3px rgba(0,0,0,0.08);
+  --shadow-md:    0 4px 16px rgba(0,0,0,0.10);
+  --shadow-lg:    0 8px 32px rgba(0,0,0,0.13);
+  --radius-sm:    6px;
+  --radius-md:    10px;
+  --radius-lg:    16px;
+  --sidebar-w:    260px;
+  --font-display: 'Playfair Display', Georgia, serif;
+  --font-body:    'DM Sans', system-ui, sans-serif;
+}
+
+html { font-size: 16px; }
+body {
+  font-family: var(--font-body);
+  background: var(--off-white);
+  color: var(--text);
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: var(--gray-100); }
+::-webkit-scrollbar-thumb { background: var(--green-muted); border-radius: 3px; }
+
+/* Animations */
+@keyframes fadeIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }
+@keyframes slideIn { from { opacity:0; transform:translateX(-12px); } to { opacity:1; transform:translateX(0); } }
+@keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:0.5; } }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.fade-in { animation: fadeIn 0.35s ease forwards; }
+.slide-in { animation: slideIn 0.3s ease forwards; }
+
+/* ============================================================
+   DARK MODE — Firebase Console + Gemini inspired
+   Deep navy bg, Gemini multicolour accents on interactive elements
+   ============================================================ */
+
+[data-theme="dark"] {
+  /* Backgrounds — Firebase dark layering */
+  --off-white:    #0f0f14;
+  --white:        #1a1a24;
+  --gray-50:      #1e1e2c;
+  --gray-100:     #252534;
+  --gray-200:     #32324a;
+  --gray-400:     #6b6b8f;
+  --gray-600:     #9494b8;
+  --gray-800:     #c8c8e8;
+
+  /* Text */
+  --text:         #e8e8f4;
+  --text-muted:   #8888aa;
+
+  /* Brand colours shift for dark bg visibility */
+  --green:        #4ade80;
+  --green-dark:   #22c55e;
+  --green-mid:    #86efac;
+  --green-light:  #0a1f12;
+  --green-muted:  #14341e;
+  --crimson:      #f87171;
+  --crimson-light:#2d0e0e;
+  --gold:         #fbbf24;
+  --gold-light:   #211600;
+  --gold-dark:    #fcd34d;
+
+  /* Shadows deeper */
+  --shadow-sm:    0 1px 4px rgba(0,0,0,0.5);
+  --shadow-md:    0 4px 20px rgba(0,0,0,0.6);
+  --shadow-lg:    0 8px 40px rgba(0,0,0,0.7);
+}
+
+/* Body background */
+[data-theme="dark"] body {
+  background: #0f0f14;
+}
+
+/* Scrollbars */
+[data-theme="dark"] ::-webkit-scrollbar-track { background: #1a1a24; }
+[data-theme="dark"] ::-webkit-scrollbar-thumb { background: #32324a; border-radius: 3px; }
+
+/* ---- Gemini gradient border utility (dark mode only) ---- */
+/* Subtle multicoloured border glow over existing border */
+[data-theme="dark"] .gemini-border {
+  position: relative;
+  border-color: transparent !important;
+}
+[data-theme="dark"] .gemini-border::before {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(135deg, #4285f4 0%, #9b72cb 33%, #d96570 66%, #f29900 100%);
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+  opacity: 0.55;
+  z-index: 0;
+}
+[data-theme="dark"] .gemini-border:hover::before {
+  opacity: 0.9;
+  transition: opacity 0.25s ease;
+}
+[data-theme="dark"] .gemini-border > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* Dark mode topbar */
+[data-theme="dark"] .topbar {
+  background: #1a1a24 !important;
+  border-bottom: 1px solid #252534 !important;
+}
+
+/* Inputs in dark mode */
+[data-theme="dark"] input:not([type="checkbox"]):not([type="radio"]),
+[data-theme="dark"] select,
+[data-theme="dark"] textarea {
+  background: #1e1e2c !important;
+  color: #e8e8f4 !important;
+  border-color: #32324a !important;
+}
+[data-theme="dark"] input::placeholder,
+[data-theme="dark"] textarea::placeholder {
+  color: #6b6b8f !important;
+}
+
+/* Tables */
+[data-theme="dark"] table th {
+  background: #1e1e2c !important;
+  color: #8888aa !important;
+}
+[data-theme="dark"] tr:hover {
+  background: #1e1e2c !important;
+}
+
+/* Sidebar stays dark regardless */
+[data-theme="dark"] aside {
+  background: #0a0a12 !important;
+}

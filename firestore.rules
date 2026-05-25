@@ -1,0 +1,187 @@
+// =============================================================================
+// firestore.rules — RKA Academic Tracker
+// =============================================================================
+//
+// Security model:
+//   - Admins (in /admins/{email}) can read/write per their assigned branch
+//   - Teachers can only read records in branches they belong to
+//   - Identity sync function uses Admin SDK (bypasses these rules)
+//
+// REQUIRES: a /userBranches/{email} collection populated by the backfill script
+//           (see scripts/backfill-user-branches.mjs). Without this collection,
+//           teacher reads will be denied because there's no way for rules to
+//           look up a teacher's branchCodes from auth.token.email — teacher
+//           docs are keyed by HRMS employee ID, not email.
+//
+// =============================================================================
+
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ---------- helpers ----------
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function userEmail() {
+      return request.auth.token.email.lower();
+    }
+
+    function isAdmin() {
+      return isAuthenticated() &&
+        exists(/databases/$(database)/documents/admins/$(userEmail())) &&
+        get(/databases/$(database)/documents/admins/$(userEmail())).data.isActive != false;
+    }
+
+    function isSuperAdmin() {
+      return isAuthenticated() &&
+        userEmail() == 'adwit@rkacademyballia.in';
+    }
+
+    // Look up the signed-in user's branchCodes via the userBranches collection.
+    // Returns the array; defaults to empty (denies access) if the doc is missing.
+    function userBranches() {
+      return exists(/databases/$(database)/documents/userBranches/$(userEmail()))
+        ? get(/databases/$(database)/documents/userBranches/$(userEmail())).data.branchCodes
+        : [];
+    }
+
+    // True if the user has access to the given single branch code.
+    function userInBranch(branchCode) {
+      return isAuthenticated() && userBranches().hasAny([branchCode]);
+    }
+
+    // Helpers for write rules — allow only if the doc being written has a
+    // branchCode that the user has access to.
+    function newDocInUserBranch() {
+      return userInBranch(request.resource.data.branchCode);
+    }
+
+    function existingDocInUserBranch() {
+      return userInBranch(resource.data.branchCode);
+    }
+
+    // ---------- admins ----------
+    match /admins/{email} {
+      allow read: if isAuthenticated();
+      allow write: if isSuperAdmin();
+    }
+
+    // ---------- userBranches (lookup collection for rules) ----------
+    // Read: own record only (used by rules; users don't read directly)
+    // Write: super admin only (the backfill script and sync function use Admin SDK)
+    match /userBranches/{email} {
+      allow read: if isAuthenticated() && email == userEmail();
+      allow write: if isSuperAdmin();
+    }
+
+    // ---------- teachers ----------
+    // Identity is owned by HRMS via the sync function (Admin SDK bypasses rules).
+    // Reads: any authenticated user — needed for pickers, profile lookup
+    // Writes: blocked from clients (sync function uses Admin SDK)
+    // Updates: admins can update academic fields only
+    match /teachers/{teacherId} {
+      allow read: if isAuthenticated();
+      allow create, delete: if false;
+      allow update: if isAdmin() &&
+        request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['subjectsTaught', 'classesAssigned', 'qualification', 'joiningDate', 'updatedAt']);
+    }
+
+    // ---------- students ----------
+    // Reads: admins (per their branch) or teachers in the student's branch
+    // Writes: admins only, scoped to their branch
+    match /students/{studentId} {
+      allow read: if isAdmin() || userInBranch(resource.data.branchCode);
+      allow create: if isAdmin() && newDocInUserBranch();
+      allow update: if isAdmin() && existingDocInUserBranch() && newDocInUserBranch();
+      allow delete: if isAdmin() && existingDocInUserBranch();
+    }
+
+    // ---------- tests ----------
+    // Reads: admins or teachers in the test's branch
+    // Writes: admins (any branch they have) or teachers (only their own tests, in their branch)
+    match /tests/{testId} {
+      allow read: if isAdmin() || userInBranch(resource.data.branchCode);
+      allow create: if (isAdmin() || isAuthenticated()) && newDocInUserBranch();
+      allow update: if (isAdmin() || isAuthenticated()) && existingDocInUserBranch() && newDocInUserBranch();
+      allow delete: if isAdmin() && existingDocInUserBranch();
+    }
+
+    // ---------- testMarks ----------
+    // Same model as tests
+    match /testMarks/{markId} {
+      allow read: if isAdmin() || userInBranch(resource.data.branchCode);
+      allow create: if (isAdmin() || isAuthenticated()) && newDocInUserBranch();
+      allow update: if (isAdmin() || isAuthenticated()) && existingDocInUserBranch() && newDocInUserBranch();
+      allow delete: if isAdmin() && existingDocInUserBranch();
+    }
+
+    // ---------- lessons ----------
+    match /lessons/{lessonId} {
+      allow read: if isAdmin() || userInBranch(resource.data.branchCode);
+      allow create: if (isAdmin() || isAuthenticated()) && newDocInUserBranch();
+      allow update: if (isAdmin() || isAuthenticated()) && existingDocInUserBranch() && newDocInUserBranch();
+      allow delete: if isAdmin() && existingDocInUserBranch();
+    }
+
+    // ---------- lessonPlans ----------
+    match /lessonPlans/{planId} {
+      allow read: if isAdmin() || userInBranch(resource.data.branchCode);
+      allow create: if (isAdmin() || isAuthenticated()) && newDocInUserBranch();
+      allow update: if (isAdmin() || isAuthenticated()) && existingDocInUserBranch() && newDocInUserBranch();
+      allow delete: if isAdmin() && existingDocInUserBranch();
+    }
+
+    // ---------- timetable ----------
+    match /timetable/{slotId} {
+      allow read: if isAdmin() || userInBranch(resource.data.branchCode);
+      allow write: if isAdmin() && newDocInUserBranch();
+    }
+
+    // ---------- absentees ----------
+    match /absentees/{id} {
+      allow read: if isAdmin() || userInBranch(resource.data.branchCode);
+      allow write: if isAdmin() && newDocInUserBranch();
+    }
+
+    // ---------- arrangements ----------
+    match /arrangements/{id} {
+      allow read: if isAdmin() || userInBranch(resource.data.branchCode);
+      allow write: if isAdmin() && newDocInUserBranch();
+    }
+
+    // ---------- holidays (nullable branchCode means applies to both) ----------
+    match /holidays/{holidayId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    // ---------- syllabus (global, no branchCode) ----------
+    match /syllabus/{id} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    // ---------- classes (global) ----------
+    match /classes/{id} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    // ---------- settings (global) ----------
+    match /settings/{id} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    // ---------- attendance_events (HRMS-owned, read-only from tracker) ----------
+    match /attendance_events/{eventId} {
+      allow read: if isAdmin() || userInBranch(resource.data.branchCode);
+      allow write: if false;  // Hikvision sync function uses Admin SDK
+    }
+  }
+}

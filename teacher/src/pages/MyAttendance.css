@@ -1,0 +1,382 @@
+/* =========================================================================
+   MyAttendance.css
+
+   Mobile-first stylesheet matching the RKA design system:
+     forest green  #1a4a2e  (primary)
+     crimson       #8b1a1a  (error / absent)
+     gold          #c9a227  (accent)
+     Playfair Display (display) + DM Sans (body)
+
+   If your app already exposes these as CSS custom properties (e.g.
+   --rka-forest, --rka-crimson, --rka-gold), feel free to swap the
+   hard-coded values below for your variables.
+   ========================================================================= */
+
+.rka-attendance {
+  --rka-forest: #1a4a2e;
+  --rka-forest-soft: #e7efe9;
+  --rka-crimson: #8b1a1a;
+  --rka-crimson-soft: #f7e7e7;
+  --rka-gold: #c9a227;
+  --rka-gold-soft: #faf2d6;
+  --rka-ink: #1d2420;
+  --rka-ink-muted: #6b7570;
+  --rka-paper: #fbfaf6;
+  --rka-line: #e8e6dd;
+
+  font-family: "DM Sans", -apple-system, BlinkMacSystemFont, sans-serif;
+  color: var(--rka-ink);
+  background: var(--rka-paper);
+  min-height: 100vh;
+  padding: 1.25rem 1.1rem 4rem;
+  max-width: 560px;
+  margin: 0 auto;
+  box-sizing: border-box;
+}
+
+/* ---------- Back link --------------------------------------------------- */
+
+.rka-attendance__back {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--rka-ink-muted);
+  text-decoration: none;
+  font-size: 0.82rem;
+  font-weight: 500;
+  margin-bottom: 1rem;
+  transition: color 0.12s;
+}
+
+.rka-attendance__back:hover,
+.rka-attendance__back:focus {
+  color: var(--rka-forest);
+}
+
+/* ---------- Header ------------------------------------------------------- */
+
+.rka-attendance__header {
+  margin-bottom: 1.5rem;
+}
+
+.rka-attendance__eyebrow {
+  font-size: 0.78rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--rka-gold);
+  margin: 0 0 0.35rem;
+  font-weight: 600;
+}
+
+.rka-attendance__name {
+  font-family: "Playfair Display", Georgia, serif;
+  font-size: 1.75rem;
+  font-weight: 700;
+  color: var(--rka-forest);
+  margin: 0 0 0.35rem;
+  line-height: 1.15;
+}
+
+.rka-attendance__staff-id {
+  font-size: 0.85rem;
+  color: var(--rka-ink-muted);
+  margin: 0;
+  line-height: 1.4;
+}
+
+.rka-attendance__staff-id span {
+  font-weight: 600;
+  color: var(--rka-ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.rka-attendance__staff-id small {
+  font-size: 0.75rem;
+  color: var(--rka-ink-muted);
+}
+
+/* ---------- Today card --------------------------------------------------- */
+
+.rka-today {
+  background: linear-gradient(135deg, var(--rka-forest) 0%, #143821 100%);
+  color: #fff;
+  border-radius: 18px;
+  padding: 1.25rem 1.25rem 1.4rem;
+  box-shadow: 0 8px 24px -10px rgba(26, 74, 46, 0.45);
+  margin-bottom: 1.75rem;
+  position: relative;
+  overflow: hidden;
+}
+
+.rka-today::after {
+  /* Subtle gold flourish in the corner — small detail, not a decoration. */
+  content: "";
+  position: absolute;
+  inset: auto -30px -30px auto;
+  width: 110px;
+  height: 110px;
+  background: radial-gradient(circle, rgba(201, 162, 39, 0.22) 0%, transparent 65%);
+  pointer-events: none;
+}
+
+.rka-today__top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.15rem;
+}
+
+.rka-today__title {
+  font-family: "Playfair Display", Georgia, serif;
+  font-weight: 600;
+  font-size: 1.15rem;
+  margin: 0;
+  letter-spacing: 0.01em;
+}
+
+.rka-today__date {
+  font-size: 0.85rem;
+  opacity: 0.78;
+  margin: 0 0 1.1rem;
+}
+
+.rka-today__times {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+}
+
+.rka-today__time {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.rka-today__label {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  opacity: 0.7;
+}
+
+.rka-today__value {
+  font-family: "Playfair Display", Georgia, serif;
+  font-size: 1.85rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+}
+
+.rka-today__divider {
+  width: 1px;
+  height: 38px;
+  background: rgba(255, 255, 255, 0.18);
+}
+
+.rka-today__extra {
+  margin: 0.9rem 0 0;
+  font-size: 0.78rem;
+  opacity: 0.75;
+}
+
+/* ---------- Status pills ------------------------------------------------- */
+
+.rka-pill {
+  display: inline-block;
+  padding: 0.28rem 0.65rem;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.rka-pill--present {
+  background: rgba(201, 162, 39, 0.22);
+  color: var(--rka-gold);
+  /* On the dark Today card, gold reads better than crimson/green. */
+}
+
+.rka-pill--single-punch {
+  background: rgba(255, 255, 255, 0.16);
+  color: #f3e3a8;
+}
+
+.rka-pill--no-record {
+  background: rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.75);
+}
+
+/* ---------- 30-day list -------------------------------------------------- */
+
+.rka-history__title {
+  font-family: "Playfair Display", Georgia, serif;
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: var(--rka-forest);
+  margin: 0 0 0.85rem;
+  letter-spacing: 0.01em;
+}
+
+.rka-history__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border-top: 1px solid var(--rka-line);
+}
+
+.rka-day {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.85rem 0.25rem;
+  border-bottom: 1px solid var(--rka-line);
+}
+
+.rka-day--today {
+  background: var(--rka-forest-soft);
+  margin: 0 -0.5rem;
+  padding: 0.85rem 0.75rem;
+  border-bottom: 1px solid var(--rka-line);
+  border-radius: 10px;
+}
+
+.rka-day__date {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  flex: 1;
+  min-width: 0;
+}
+
+.rka-day__date-main {
+  font-size: 0.92rem;
+  font-weight: 500;
+  color: var(--rka-ink);
+}
+
+.rka-day__today-tag {
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--rka-forest);
+  background: var(--rka-gold-soft);
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+}
+
+.rka-day__times {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--rka-ink);
+  font-size: 0.92rem;
+}
+
+.rka-day__arrow {
+  color: var(--rka-ink-muted);
+  font-size: 0.85rem;
+}
+
+.rka-day__no-record {
+  font-size: 0.85rem;
+  color: var(--rka-ink-muted);
+  font-style: italic;
+}
+
+/* ---------- Footer / range note ------------------------------------------ */
+
+.rka-attendance__footer {
+  margin-top: 1.5rem;
+  font-size: 0.78rem;
+  color: var(--rka-ink-muted);
+  line-height: 1.5;
+  text-align: center;
+}
+
+/* ---------- Loading skeleton --------------------------------------------- */
+
+.rka-attendance__skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.rka-attendance__skeleton-card {
+  height: 150px;
+  border-radius: 18px;
+  background: linear-gradient(90deg, #eeece4 0%, #f6f4ec 50%, #eeece4 100%);
+  background-size: 200% 100%;
+  animation: rka-shimmer 1.4s infinite;
+}
+
+.rka-attendance__skeleton-row {
+  height: 48px;
+  border-radius: 8px;
+  background: linear-gradient(90deg, #eeece4 0%, #f6f4ec 50%, #eeece4 100%);
+  background-size: 200% 100%;
+  animation: rka-shimmer 1.4s infinite;
+}
+
+.rka-attendance__loading-label {
+  text-align: center;
+  font-size: 0.85rem;
+  color: var(--rka-ink-muted);
+  margin-top: 1.25rem;
+}
+
+@keyframes rka-shimmer {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* ---------- Empty / error states ----------------------------------------- */
+
+.rka-empty {
+  margin-top: 3rem;
+  padding: 2rem 1.5rem;
+  text-align: center;
+  border-radius: 14px;
+  border: 1px solid var(--rka-line);
+  background: #fff;
+}
+
+.rka-empty--error {
+  border-color: var(--rka-crimson);
+  background: var(--rka-crimson-soft);
+}
+
+.rka-empty__title {
+  font-family: "Playfair Display", Georgia, serif;
+  font-size: 1.2rem;
+  color: var(--rka-forest);
+  margin: 0 0 0.6rem;
+}
+
+.rka-empty--error .rka-empty__title {
+  color: var(--rka-crimson);
+}
+
+.rka-empty__message {
+  font-size: 0.92rem;
+  color: var(--rka-ink-muted);
+  margin: 0;
+  line-height: 1.5;
+}
+
+/* ---------- Small phone tweaks ------------------------------------------- */
+
+@media (max-width: 360px) {
+  .rka-today__value {
+    font-size: 1.55rem;
+  }
+  .rka-attendance__name {
+    font-size: 1.5rem;
+  }
+}

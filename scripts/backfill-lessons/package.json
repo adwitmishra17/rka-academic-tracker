@@ -1,0 +1,13 @@
+{
+  "name": "rka-lessons-backfill",
+  "version": "1.0.0",
+  "description": "One-off backfill of slotId / offSchedule / coveringFor on RKA Academic Tracker lesson docs.",
+  "main": "backfill_slot_id.js",
+  "scripts": {
+    "dry": "node backfill_slot_id.js --dry-run",
+    "backfill": "node backfill_slot_id.js"
+  },
+  "dependencies": {
+    "firebase-admin": "^12.0.0"
+  }
+}
