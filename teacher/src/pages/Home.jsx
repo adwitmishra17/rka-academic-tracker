@@ -5,6 +5,9 @@ import { db } from '../firebase/config'
 import { useAuth } from '../App'
 import { getTeacherClasses } from '../utils/teacherClasses'
 import { format, subDays } from 'date-fns'
+import { HPC_CLASSES } from '../lib/hpc'
+
+const HPC_CLASS_SET = new Set(HPC_CLASSES)
 
 export default function Home() {
   const { teacher, user } = useAuth()
@@ -21,6 +24,8 @@ export default function Home() {
   useEffect(() => {
     if (teacher || user) getTeacherClasses(teacher, user).then(setMyClasses)
   }, [teacher, user])
+
+  const hasHpcClasses = myClasses.some(c => HPC_CLASS_SET.has(c))
 
   const teacherId = teacher?.id || user?.uid || ''
 
@@ -189,6 +194,81 @@ export default function Home() {
             <div style={{ fontSize: 14, fontWeight: 600, lineHeight: 1.3, color: '#185fa5' }}>Student<br />Analytics</div>
           </div>
         </Link>
+      </div>
+
+      {/* Report Card Entry section */}
+      <div className="fade-up" style={{ marginBottom: 24 }}>
+        <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 16, fontWeight: 600, color: 'var(--text)', marginBottom: 12 }}>
+          Report Card Entry
+        </h2>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+
+          {/* Enter Exam Marks */}
+          <Link to="/exam-marks" style={{ textDecoration: 'none' }}>
+            <div style={{
+              background: 'var(--white)', borderRadius: 'var(--radius-lg)',
+              border: '1.5px solid var(--gray-100)', padding: '14px 16px',
+              display: 'flex', alignItems: 'center', gap: 12,
+            }}>
+              <div style={{ width: 40, height: 40, borderRadius: 10, background: '#e6f1fb', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#185fa5" strokeWidth="1.8">
+                  <path d="M12 20h9" />
+                  <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
+                </svg>
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--text)', marginBottom: 2 }}>Enter Exam Marks</div>
+                <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Scholastic subjects · numeric marks</div>
+              </div>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" strokeWidth="2"><polyline points="9 18 15 12 9 6" /></svg>
+            </div>
+          </Link>
+
+          {/* Enter Co-scholastic Grades */}
+          <Link to="/exam-grades" style={{ textDecoration: 'none' }}>
+            <div style={{
+              background: 'var(--white)', borderRadius: 'var(--radius-lg)',
+              border: '1.5px solid var(--gray-100)', padding: '14px 16px',
+              display: 'flex', alignItems: 'center', gap: 12,
+            }}>
+              <div style={{ width: 40, height: 40, borderRadius: 10, background: 'rgba(109,61,202,0.09)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#6d3dca" strokeWidth="1.8">
+                  <circle cx="12" cy="8" r="6" />
+                  <path d="M15.477 12.89L17 22l-5-3-5 3 1.523-9.11" />
+                </svg>
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--text)', marginBottom: 2 }}>Enter Grades</div>
+                <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Co-scholastic subjects · A+ / A / B grade</div>
+              </div>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" strokeWidth="2"><polyline points="9 18 15 12 9 6" /></svg>
+            </div>
+          </Link>
+
+          {/* HPC Assessment — only for teachers with HPC classes (Nursery–Class 2) */}
+          {hasHpcClasses && (
+            <Link to="/hpc" style={{ textDecoration: 'none' }}>
+              <div style={{
+                background: 'var(--white)', borderRadius: 'var(--radius-lg)',
+                border: '1.5px solid rgba(201,162,39,0.45)', padding: '14px 16px',
+                display: 'flex', alignItems: 'center', gap: 12,
+              }}>
+                <div style={{ width: 40, height: 40, borderRadius: 10, background: 'var(--gold-light)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--gold-dark)" strokeWidth="1.8">
+                    <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z" />
+                    <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z" />
+                  </svg>
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--text)', marginBottom: 2 }}>HPC Assessment</div>
+                  <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>NEP 2020 · Holistic Progress Card</div>
+                </div>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" strokeWidth="2"><polyline points="9 18 15 12 9 6" /></svg>
+              </div>
+            </Link>
+          )}
+
+        </div>
       </div>
 
       {/* My Class Students tile — class teachers only */}

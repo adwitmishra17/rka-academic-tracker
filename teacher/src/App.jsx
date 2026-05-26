@@ -16,6 +16,9 @@ import MyAttendance from './pages/MyAttendance'
 import MyDocuments from './pages/MyDocuments'
 import MyStudents from './pages/MyStudents'
 import StudentAttendance from './pages/StudentAttendance'
+import ExamMarksEntry from './pages/ExamMarksEntry'
+import ExamGradesEntry from './pages/ExamGradesEntry'
+import HpcEntry from './pages/HpcEntry'
 import Layout from './components/Layout'
 import { startVersionWatcher, reloadForUpdate } from './lib/versionCheck'
 
@@ -108,6 +111,9 @@ export default function App() {
             <Route path="hrms/documents" element={<MyDocuments />} />
             <Route path="my-students" element={<MyStudents />} />
             <Route path="student-attendance" element={<StudentAttendance />} />
+            <Route path="exam-marks"  element={<ExamMarksEntry />} />
+            <Route path="exam-grades" element={<ExamGradesEntry />} />
+            <Route path="hpc"         element={<HpcEntry />} />
           </Route>
         </Routes>
       </BrowserRouter>
