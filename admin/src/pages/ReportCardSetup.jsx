@@ -21,6 +21,66 @@ const STANDARD_TERMS = [
   { shortCode: 'AN', name: 'Annual',      sortOrder: 4 },
 ]
 
+// Class-aware quick-add subject cloud. Admins click chips to add subjects;
+// teacher is auto-filled from the active timetable. Custom subjects (not in
+// the cloud) still go through the manual Add Subject form below.
+const SUBJECT_GROUPS = {
+  preprimary:    {
+    scholastic:    ['English', 'Hindi', 'Numeracy', 'EVS', 'Pre-Reading', 'Pre-Writing'],
+    co_scholastic: ['Rhymes', 'Drawing', 'Music', 'Dance', 'Stories'],
+  },
+  primary_lower: {
+    scholastic:    ['English', 'Hindi', 'Mathematics', 'EVS', 'General Knowledge'],
+    co_scholastic: ['Art & Craft', 'Music', 'Physical Education', 'Moral Science'],
+  },
+  primary_upper: {
+    scholastic:    ['English', 'Hindi', 'Mathematics', 'EVS', 'Science', 'Social Studies', 'Computer', 'Sanskrit', 'General Knowledge'],
+    co_scholastic: ['Art & Craft', 'Music', 'Physical Education', 'Moral Science'],
+  },
+  middle:        {
+    scholastic:    ['English', 'Hindi', 'Mathematics', 'Science', 'Social Studies', 'Sanskrit', 'Computer', 'General Knowledge'],
+    co_scholastic: ['Art & Craft', 'Music', 'Physical Education', 'Moral Science'],
+  },
+  secondary:     {
+    scholastic:    ['English', 'Hindi', 'Mathematics', 'Science', 'Social Studies', 'Sanskrit', 'IT / Computer'],
+    co_scholastic: ['Art', 'Physical Education'],
+  },
+  sr_science:    {
+    scholastic:    ['English', 'Physics', 'Chemistry', 'Biology', 'Mathematics', 'Computer Science', 'Physical Education', 'Hindi'],
+    co_scholastic: [],
+  },
+  sr_commerce:   {
+    scholastic:    ['English', 'Accountancy', 'Business Studies', 'Economics', 'Mathematics', 'Computer Science', 'Physical Education', 'Hindi'],
+    co_scholastic: [],
+  },
+  sr_humanities: {
+    scholastic:    ['English', 'History', 'Geography', 'Political Science', 'Economics', 'Sociology', 'Psychology', 'Hindi', 'Physical Education'],
+    co_scholastic: [],
+  },
+}
+
+function suggestedSubjectsFor(className) {
+  if (['Nursery', 'LKG', 'UKG'].includes(className))         return SUBJECT_GROUPS.preprimary
+  if (['Class 1', 'Class 2'].includes(className))            return SUBJECT_GROUPS.primary_lower
+  if (['Class 3', 'Class 4', 'Class 5'].includes(className)) return SUBJECT_GROUPS.primary_upper
+  if (['Class 6', 'Class 7', 'Class 8'].includes(className)) return SUBJECT_GROUPS.middle
+  if (['Class 9', 'Class 10'].includes(className))           return SUBJECT_GROUPS.secondary
+  if (/^Class 1[12] Science$/.test(className))               return SUBJECT_GROUPS.sr_science
+  if (/^Class 1[12] Commerce$/.test(className))              return SUBJECT_GROUPS.sr_commerce
+  if (/^Class 1[12] Humanities$/.test(className))            return SUBJECT_GROUPS.sr_humanities
+  return { scholastic: [], co_scholastic: [] }
+}
+
+// Look up the timetable for "who teaches `subjectName` to `className`?"
+function lookupTeacherFromTimetable(slots, className, subjectName) {
+  const subj = (subjectName || '').toLowerCase()
+  const slot = (slots || []).find(s =>
+    (s.classNames || []).includes(className) &&
+    (s.subject || '').toLowerCase() === subj
+  )
+  return slot ? { teacherId: slot.teacherId, teacherName: slot.teacherName || '' } : null
+}
+
 const HPC_DOMAINS = [
   { key: 'physical',  label: 'Physical Development' },
   { key: 'socio',     label: 'Socio-Emotional' },
@@ -247,9 +307,25 @@ export default function ReportCardSetup() {
   const [subjects,        setSubjects]        = useState([])
   const [loadingSubjects, setLoadingSubjects] = useState(false)
   const [teachers,        setTeachers]        = useState([])
+  const [timetableSlots,  setTimetableSlots]  = useState([])
   const [newSubj,         setNewSubj]         = useState({ name: '', code: '', kind: 'scholastic', teacherId: '', teacherName: '' })
   const [addingSubj,      setAddingSubj]      = useState(false)
   const [subjError,       setSubjError]       = useState('')
+
+  // Subject cloud draft state. Chip clicks update pendingCloudChanges instead
+  // of writing to Firestore immediately. The Save button commits everything.
+  // Key format: `${kind}__${subjectName}` (double-underscore avoids name clashes).
+  // Value: 'add' or 'remove'.
+  const [pendingCloudChanges, setPendingCloudChanges] = useState({})
+  const [savingCloud,         setSavingCloud]         = useState(false)
+  const [cloudSaved,          setCloudSaved]          = useState(false)
+
+  // Reset draft state when the admin switches session or class — pending
+  // changes don't carry across contexts.
+  useEffect(() => {
+    setPendingCloudChanges({})
+    setCloudSaved(false)
+  }, [subjectsSession, subjectsClass])
 
   const loadSubjects = useCallback(async () => {
     if (!subjectsSession) return
@@ -287,6 +363,90 @@ export default function ReportCardSetup() {
       } catch (e) { console.error('loadTeachers:', e) }
     })()
   }, [subjectsSession])
+
+  // Load timetable slots for the session's branch (used by the subject cloud
+  // to auto-fill assignedTeacherId when a chip is clicked)
+  useEffect(() => {
+    if (!subjectsSession) { setTimetableSlots([]); return }
+    ;(async () => {
+      try {
+        const snap = await getDocs(query(
+          collection(db, 'timetable'),
+          where('branchCode', '==', subjectsSession.branchCode),
+        ))
+        setTimetableSlots(snap.docs.map(d => ({ id: d.id, ...d.data() })))
+      } catch (e) { console.error('loadTimetable:', e) }
+    })()
+  }, [subjectsSession])
+
+  // Toggle a chip in the draft state — no Firestore write until Save is clicked.
+  // Three transitions are possible:
+  //   (already added,   no pending change)   → mark 'remove'
+  //   (not yet added,   no pending change)   → mark 'add'
+  //   (any state,       has pending change)  → cancel the pending change
+  function toggleCloudChip(subjectName, kind) {
+    if (!subjectsSession) return
+    setCloudSaved(false)
+    const key = `${kind}__${subjectName}`
+    const isAdded = subjects.some(s =>
+      (s.subjectName || '').toLowerCase() === subjectName.toLowerCase() && s.kind === kind
+    )
+    setPendingCloudChanges(prev => {
+      const next = { ...prev }
+      if (next[key]) { delete next[key] }            // cancel pending
+      else if (isAdded) { next[key] = 'remove' }
+      else { next[key] = 'add' }
+      return next
+    })
+  }
+
+  // Commit all pending chip changes in a single sweep. Each 'add' resolves
+  // the teacher from the timetable; each 'remove' deletes the existing doc.
+  async function saveCloudChanges() {
+    const entries = Object.entries(pendingCloudChanges)
+    if (entries.length === 0 || !subjectsSession) return
+    setSavingCloud(true)
+    let runningOrder = subjects.length > 0 ? Math.max(...subjects.map(s => s.sortOrder || 0)) : 0
+    try {
+      for (const [key, action] of entries) {
+        const [kind, ...nameParts] = key.split('__')
+        const subjectName = nameParts.join('__')
+        if (action === 'add') {
+          // Skip if it was added by some other path in the meantime
+          if (subjects.some(s => (s.subjectName || '').toLowerCase() === subjectName.toLowerCase() && s.kind === kind)) continue
+          const teacher = lookupTeacherFromTimetable(timetableSlots, subjectsClass, subjectName)
+          runningOrder += 1
+          await addDoc(collection(db, 'examSubjects'), {
+            branchCode:          subjectsSession.branchCode,
+            sessionCode:         subjectsSession.sessionCode,
+            className:           subjectsClass,
+            subjectName,
+            subjectCode:         '',
+            kind,
+            isOptional:          false,
+            sortOrder:           runningOrder,
+            assignedTeacherId:   teacher?.teacherId   || '',
+            assignedTeacherName: teacher?.teacherName || '',
+            createdAt:           Timestamp.now(),
+            createdBy:           user?.email || '',
+          })
+        } else if (action === 'remove') {
+          const subj = subjects.find(s =>
+            (s.subjectName || '').toLowerCase() === subjectName.toLowerCase() && s.kind === kind
+          )
+          if (subj) await deleteDoc(doc(db, 'examSubjects', subj.id))
+        }
+      }
+      setPendingCloudChanges({})
+      await loadSubjects()
+      setCloudSaved(true)
+      setTimeout(() => setCloudSaved(false), 2500)
+    } catch (e) {
+      console.error('saveCloudChanges:', e)
+      setSubjError('Failed to save subjects. Try again.')
+    }
+    setSavingCloud(false)
+  }
 
   async function addSubject() {
     const name = newSubj.name.trim()
@@ -559,6 +719,19 @@ export default function ReportCardSetup() {
 
           ) : (
             <>
+              {/* Subject cloud — class-aware draft picker with Save button */}
+              <SubjectCloud
+                className={subjectsClass}
+                suggestions={suggestedSubjectsFor(subjectsClass)}
+                addedSubjects={subjects}
+                pendingChanges={pendingCloudChanges}
+                onToggle={toggleCloudChip}
+                onSave={saveCloudChanges}
+                saving={savingCloud}
+                saved={cloudSaved}
+                lookupTeacher={(name) => lookupTeacherFromTimetable(timetableSlots, subjectsClass, name)}
+              />
+
               {/* Subject list */}
               <div style={{ marginBottom: 16 }}>
                 {loadingSubjects ? <Spinner /> :
@@ -658,6 +831,150 @@ export default function ReportCardSetup() {
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
 const colLabel = { fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }
+
+/**
+ * SubjectCloud — class-aware draft chip picker.
+ *
+ * Chip clicks build up `pendingChanges` in the parent (without writing to
+ * Firestore). The Save button at the bottom commits them in one sweep.
+ *
+ * Visual states per chip:
+ *   • Outlined dashed  + name           → currently absent, no pending change
+ *   • Filled green     ✓ name           → currently present, no pending change
+ *   • Outlined amber   ＋ name (italic)  → pending add (will be created on Save)
+ *   • Outlined amber   ✕ name (italic)  → pending remove (will be deleted on Save)
+ *
+ * After Save: chips snap back to absent/present (the green/outlined states),
+ * pendingChanges is cleared, and "✓ Saved Successfully" briefly appears.
+ */
+function SubjectCloud({
+  className, suggestions, addedSubjects, pendingChanges,
+  onToggle, onSave, saving, saved, lookupTeacher,
+}) {
+  if (!suggestions || (suggestions.scholastic.length === 0 && suggestions.co_scholastic.length === 0)) {
+    return null
+  }
+  const pendingCount = Object.keys(pendingChanges || {}).length
+
+  const isAdded  = (name, kind) =>
+    addedSubjects.some(s => (s.subjectName || '').toLowerCase() === name.toLowerCase() && s.kind === kind)
+  const pendingFor = (name, kind) => pendingChanges[`${kind}__${name}`] || null
+
+  const chip = (name, kind) => {
+    const added   = isAdded(name, kind)
+    const pending = pendingFor(name, kind)            // 'add' | 'remove' | null
+    const teacher = !added && !pending ? lookupTeacher(name) : null
+
+    let icon, border, bg, color, fontStyle
+    if (pending === 'add') {
+      icon = '＋'; border = '1px dashed var(--gold)'; bg = 'rgba(201,162,39,0.10)'; color = 'var(--gold-dark)'; fontStyle = 'italic'
+    } else if (pending === 'remove') {
+      icon = '✕'; border = '1px dashed var(--gold)'; bg = 'rgba(201,162,39,0.10)'; color = 'var(--gold-dark)'; fontStyle = 'italic'
+    } else if (added) {
+      icon = '✓'; border = '1px solid var(--green)'; bg = 'var(--green-light)'; color = 'var(--green-dark)'; fontStyle = 'normal'
+    } else {
+      icon = '+'; border = '1px dashed var(--gray-300)'; bg = 'var(--white)'; color = 'var(--text)'; fontStyle = 'normal'
+    }
+
+    const tooltip = pending === 'add'
+        ? 'Pending add — click to cancel'
+      : pending === 'remove'
+        ? 'Pending remove — click to cancel'
+      : added
+        ? 'Click to mark for removal'
+      : teacher
+        ? `Click to add — will auto-assign ${teacher.teacherName} (from timetable)`
+        : 'Click to add — no teacher in timetable; you can pick one inline after Save'
+
+    return (
+      <button
+        key={`${kind}_${name}`}
+        onClick={() => onToggle(name, kind)}
+        title={tooltip}
+        style={{
+          padding: '6px 12px', borderRadius: 18,
+          border, background: bg, color,
+          fontSize: 12.5, fontWeight: added || pending ? 600 : 500, fontStyle,
+          cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 5,
+          transition: 'all 0.15s',
+        }}
+      >
+        <span style={{ fontSize: 13, lineHeight: 1 }}>{icon}</span>
+        <span>{name}</span>
+        {!added && !pending && teacher && (
+          <span style={{ fontSize: 10, color: 'var(--text-muted)', fontWeight: 400, marginLeft: 2 }}>
+            · {teacher.teacherName.split(' ')[0]}
+          </span>
+        )}
+      </button>
+    )
+  }
+
+  return (
+    <div style={{ background: 'var(--white)', border: '1px solid var(--gray-100)', borderRadius: 'var(--radius-lg)', padding: '16px 18px', marginBottom: 16 }}>
+      <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', marginBottom: 4 }}>
+        Quick add for {className}
+      </div>
+      <p style={{ fontSize: 11.5, color: 'var(--text-muted)', marginBottom: 14, lineHeight: 1.55 }}>
+        Click chips to mark for add (＋) or remove (✕). Teacher is auto-filled from the timetable
+        when a (class × subject) slot exists. Click <strong>Save Changes</strong> to commit.
+      </p>
+
+      {suggestions.scholastic.length > 0 && (
+        <div style={{ marginBottom: suggestions.co_scholastic.length > 0 ? 12 : 14 }}>
+          <div style={{ ...colLabel, marginBottom: 8 }}>Scholastic</div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+            {suggestions.scholastic.map(name => chip(name, 'scholastic'))}
+          </div>
+        </div>
+      )}
+
+      {suggestions.co_scholastic.length > 0 && (
+        <div style={{ marginBottom: 14 }}>
+          <div style={{ ...colLabel, marginBottom: 8 }}>Co-Scholastic</div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+            {suggestions.co_scholastic.map(name => chip(name, 'co_scholastic'))}
+          </div>
+        </div>
+      )}
+
+      {/* Save footer */}
+      <div style={{
+        marginTop: 4, paddingTop: 14,
+        borderTop: '1px solid var(--gray-100)',
+        display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 12,
+      }}>
+        {saved && (
+          <span style={{
+            fontSize: 12.5, fontWeight: 600, color: 'var(--green)',
+            display: 'inline-flex', alignItems: 'center', gap: 5,
+          }}>
+            <span style={{ fontSize: 14 }}>✓</span> Saved Successfully
+          </span>
+        )}
+        {!saved && pendingCount > 0 && (
+          <span style={{ fontSize: 11.5, color: 'var(--text-muted)' }}>
+            {pendingCount} unsaved change{pendingCount > 1 ? 's' : ''}
+          </span>
+        )}
+        <button
+          onClick={onSave}
+          disabled={saving || pendingCount === 0}
+          style={{
+            padding: '8px 18px', borderRadius: 'var(--radius-sm)',
+            background: (saving || pendingCount === 0) ? 'var(--gray-200)' : 'var(--green)',
+            color:      (saving || pendingCount === 0) ? 'var(--gray-400)'  : 'white',
+            border: 'none', fontSize: 13, fontWeight: 600,
+            cursor: (saving || pendingCount === 0) ? 'not-allowed' : 'pointer',
+            transition: 'all 0.15s',
+          }}
+        >
+          {saving ? 'Saving…' : 'Save Changes'}
+        </button>
+      </div>
+    </div>
+  )
+}
 
 function SubjectRow({ subj, teachers, isLast, onSave, onDelete }) {
   const [editing,      setEditing]      = useState(false)
