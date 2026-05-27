@@ -1,0 +1,13 @@
+{
+  "name": "rka-wipe-students-and-testmarks",
+  "version": "1.0.0",
+  "description": "One-off wipe of the Firestore students and testMarks collections after the Tracker pivots to reading students from the SMS Supabase. Idempotent and reversible only via Firestore PITR (export first if you care).",
+  "main": "wipe.js",
+  "scripts": {
+    "dry": "node wipe.js --dry-run",
+    "wipe": "node wipe.js --confirm"
+  },
+  "dependencies": {
+    "firebase-admin": "^12.0.0"
+  }
+}

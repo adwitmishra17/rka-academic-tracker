@@ -38,28 +38,53 @@ const distDir    = path.join(__dirname, 'dist')
 const app  = express()
 const PORT = process.env.PORT || 3000
 
+// ─── Startup diagnostics: which env vars did we actually pick up? ───────────
+// (Prints names only, never values — safe to leave in production logs.)
+const seen = {
+  SUPABASE_URL:                       !!process.env.SUPABASE_URL,
+  SUPABASE_SERVICE_ROLE_KEY:          !!process.env.SUPABASE_SERVICE_ROLE_KEY,
+  FIREBASE_SERVICE_ACCOUNT_JSON:      !!process.env.FIREBASE_SERVICE_ACCOUNT_JSON,
+  FIREBASE_SERVICE_ACCOUNT_JSON_B64:  !!process.env.FIREBASE_SERVICE_ACCOUNT_JSON_B64,
+  FIREBASE_SERVICE_ACCOUNT_PATH:      !!process.env.FIREBASE_SERVICE_ACCOUNT_PATH,
+}
+console.log('[admin] env vars present:', seen)
+
 // ─── Initialise Firebase Admin ──────────────────────────────────────────────
-// Either inline the service account JSON (FIREBASE_SERVICE_ACCOUNT_JSON) or
-// point at a file (FIREBASE_SERVICE_ACCOUNT_PATH). Falls back gracefully —
-// if neither is set, /api routes return 503 but static serving still works.
+// Three ways to provide the service account, in order of preference:
+//   FIREBASE_SERVICE_ACCOUNT_JSON_B64 — base64-encoded JSON (recommended for
+//       Hostinger control-panel env vars: avoids the private_key newline
+//       mangling that often breaks plain JSON paste-in)
+//   FIREBASE_SERVICE_ACCOUNT_JSON     — raw JSON string (only safe if your
+//       host preserves \n inside the value correctly)
+//   FIREBASE_SERVICE_ACCOUNT_PATH     — filesystem path (for local dev)
 let firebaseReady = false
 try {
   let serviceAccount = null
-  if (process.env.FIREBASE_SERVICE_ACCOUNT_JSON) {
+  let source = null
+  if (process.env.FIREBASE_SERVICE_ACCOUNT_JSON_B64) {
+    const decoded = Buffer.from(process.env.FIREBASE_SERVICE_ACCOUNT_JSON_B64, 'base64').toString('utf8')
+    serviceAccount = JSON.parse(decoded)
+    source = 'FIREBASE_SERVICE_ACCOUNT_JSON_B64'
+  } else if (process.env.FIREBASE_SERVICE_ACCOUNT_JSON) {
     serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_JSON)
+    source = 'FIREBASE_SERVICE_ACCOUNT_JSON'
   } else if (process.env.FIREBASE_SERVICE_ACCOUNT_PATH) {
     const raw = fs.readFileSync(process.env.FIREBASE_SERVICE_ACCOUNT_PATH, 'utf8')
     serviceAccount = JSON.parse(raw)
+    source = 'FIREBASE_SERVICE_ACCOUNT_PATH'
   }
   if (serviceAccount) {
     admin.initializeApp({ credential: admin.credential.cert(serviceAccount) })
     firebaseReady = true
-    console.log('[admin] Firebase Admin initialised')
+    console.log(`[admin] Firebase Admin initialised (source: ${source}, project: ${serviceAccount.project_id})`)
   } else {
-    console.warn('[admin] Firebase Admin not initialised — /api routes disabled')
+    console.warn('[admin] Firebase Admin not initialised — none of FIREBASE_SERVICE_ACCOUNT_JSON_B64 / FIREBASE_SERVICE_ACCOUNT_JSON / FIREBASE_SERVICE_ACCOUNT_PATH set')
   }
 } catch (e) {
-  console.error('[admin] Firebase Admin init failed:', e.message)
+  console.error('[admin] Firebase Admin init FAILED:', e.message)
+  if (e.message.includes('JSON')) {
+    console.error('[admin]   → most likely the service-account JSON is malformed. Common cause: newlines in private_key got stripped when pasted into the host control panel. Use FIREBASE_SERVICE_ACCOUNT_JSON_B64 (base64-encoded) instead.')
+  }
 }
 
 // ─── Initialise Supabase ────────────────────────────────────────────────────
@@ -70,9 +95,12 @@ if (process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY) {
     process.env.SUPABASE_SERVICE_ROLE_KEY,
     { auth: { persistSession: false } },
   )
-  console.log('[admin] Supabase client initialised')
+  console.log(`[admin] Supabase client initialised (url: ${process.env.SUPABASE_URL})`)
 } else {
-  console.warn('[admin] SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY not set — /api routes disabled')
+  const missing = []
+  if (!process.env.SUPABASE_URL)              missing.push('SUPABASE_URL')
+  if (!process.env.SUPABASE_SERVICE_ROLE_KEY) missing.push('SUPABASE_SERVICE_ROLE_KEY')
+  console.warn(`[admin] Supabase NOT initialised — missing: ${missing.join(', ')}`)
 }
 
 const apiReady = firebaseReady && !!supabase
