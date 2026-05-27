@@ -1,8 +1,9 @@
 import React, { useState, useEffect, createContext, useContext } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
-import { onAuthStateChanged, signOut } from 'firebase/auth'
+import { onAuthStateChanged, signOut, signInWithCustomToken } from 'firebase/auth'
 import { collection, getDocs, query, where } from 'firebase/firestore'
 import { auth, db } from './firebase/config'
+import ImpersonationBanner, { setImpersonationState, clearImpersonationState } from './components/ImpersonationBanner'
 import Login from './pages/Login'
 import Home from './pages/Home'
 import LogLesson from './pages/LogLesson'
@@ -28,6 +29,31 @@ export const useAuth = () => useContext(AuthContext)
 export default function App() {
   const [user, setUser] = useState(undefined)
   const [teacher, setTeacher] = useState(null)
+
+  // ── Impersonation detection ────────────────────────────────────────────
+  // The admin tracker's /impersonate page opens this PWA in a new tab with
+  // ?impersonate=<customToken>&actor=<adminEmail>. We pick that up exactly
+  // once on first load, sign in with the custom token, stash actor info in
+  // sessionStorage (read by ImpersonationBanner), and clean the URL so the
+  // token isn't sitting in browser history / Referer headers.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const token  = params.get('impersonate')
+    const actor  = params.get('actor')
+    if (!token) return
+    // Strip the params immediately so a page refresh doesn't try to re-sign-in
+    // with an expired token.
+    const url = new URL(window.location.href)
+    url.searchParams.delete('impersonate')
+    url.searchParams.delete('actor')
+    window.history.replaceState({}, '', url.pathname + (url.search || ''))
+    setImpersonationState(actor || 'admin')
+    signInWithCustomToken(auth, token).catch(e => {
+      console.error('Impersonation sign-in failed:', e)
+      clearImpersonationState()
+      alert('Impersonation failed: ' + (e.message || 'unknown error'))
+    })
+  }, [])
 
   useEffect(() => {
     return onAuthStateChanged(auth, async u => {
@@ -94,6 +120,7 @@ export default function App() {
 
   return (
     <AuthContext.Provider value={{ user, teacher }}>
+      <ImpersonationBanner />
       <VersionBanner />
       <BrowserRouter>
         <Routes>

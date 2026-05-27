@@ -246,6 +246,90 @@ app.get('/api/students/:id', verifyAuth, async (req, res) => {
 })
 
 /**
+ * POST /api/admin/impersonate
+ *
+ * Super admin → "log in as teacher X" for bug identification.
+ *
+ * Mints a Firebase custom token tied to the teacher's Auth UID, writes an
+ * audit record, and returns the token + the teacher PWA URL. The admin's
+ * frontend opens that URL with ?impersonate=<token>&actor=<admin-email> in
+ * a new tab; the teacher PWA detects the param and signs in with the token.
+ *
+ * Body: { teacherDocId: string }
+ * Auth: only the super admin email may call this.
+ */
+const SUPER_ADMIN_EMAIL = 'adwit@rkacademyballia.in'
+const TEACHER_PWA_URL   = process.env.TEACHER_PWA_URL || 'https://teacher.rkacademyballia.in'
+
+app.post('/api/admin/impersonate', verifyAuth, async (req, res) => {
+  try {
+    if (req.user.email !== SUPER_ADMIN_EMAIL) {
+      return res.status(403).json({ error: 'Forbidden — super admin only' })
+    }
+    const { teacherDocId } = req.body || {}
+    if (!teacherDocId) return res.status(400).json({ error: 'teacherDocId is required' })
+
+    // Load teacher record from Firestore (teachers collection is still
+    // Tracker-owned; not in Supabase).
+    const teacherSnap = await admin.firestore()
+      .collection('teachers').doc(teacherDocId).get()
+    if (!teacherSnap.exists) return res.status(404).json({ error: 'Teacher not found' })
+    const teacher = teacherSnap.data()
+    const teacherEmail = (teacher.email || teacher.personalEmail || '').trim().toLowerCase()
+    if (!teacherEmail) return res.status(400).json({ error: 'Teacher record has no email' })
+
+    // Resolve (or create) the matching Firebase Auth user. Teachers who have
+    // never logged in via Google OAuth don't have an Auth account yet —
+    // createUser() makes one with their email so the custom token can attach
+    // to a stable UID.
+    let firebaseUser
+    try {
+      firebaseUser = await admin.auth().getUserByEmail(teacherEmail)
+    } catch (e) {
+      if (e.code === 'auth/user-not-found') {
+        firebaseUser = await admin.auth().createUser({
+          email: teacherEmail,
+          displayName: teacher.fullName || teacherEmail,
+        })
+        console.log(`[admin] impersonate: created Auth user for ${teacherEmail} (had never signed in)`)
+      } else {
+        throw e
+      }
+    }
+
+    // Mint a custom token. The `impersonatedBy` custom claim lets the teacher
+    // PWA (or anywhere else) detect impersonation from the ID token alone,
+    // independent of the URL/sessionStorage trail.
+    const customToken = await admin.auth().createCustomToken(firebaseUser.uid, {
+      impersonatedBy: req.user.email,
+    })
+
+    // Audit — written via Admin SDK so it bypasses Firestore rules.
+    await admin.firestore().collection('impersonationAudit').add({
+      adminEmail:    req.user.email,
+      teacherEmail,
+      teacherDocId,
+      teacherName:   teacher.fullName || '',
+      teacherUid:    firebaseUser.uid,
+      action:        'start',
+      at:            admin.firestore.FieldValue.serverTimestamp(),
+      userAgent:     req.headers['user-agent'] || '',
+    })
+    console.log(`[admin] impersonate: ${req.user.email} → ${teacherEmail}`)
+
+    res.json({
+      customToken,
+      teacherEmail,
+      teacherName:   teacher.fullName || '',
+      teacherPwaUrl: TEACHER_PWA_URL,
+    })
+  } catch (e) {
+    console.error('[admin] /api/admin/impersonate:', e)
+    res.status(500).json({ error: e.message || 'Internal error' })
+  }
+})
+
+/**
  * GET /api/health — unauthenticated quick check + diagnostics.
  *
  * Returns booleans for which env vars are visible to the Node process plus

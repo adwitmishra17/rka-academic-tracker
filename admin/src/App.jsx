@@ -39,6 +39,7 @@ import TeacherArrangement from './pages/TeacherArrangement'
 import TestDetail from './pages/TestDetail'
 import SyllabusUpload from './pages/SyllabusUpload'
 import ReportCardSetup from './pages/ReportCardSetup'
+import Impersonate from './pages/Impersonate'
 import Layout from './components/Layout'
 
 export const AuthContext = createContext(null)
@@ -226,6 +227,7 @@ export default function App() {
             <Route path="tests/:testId" element={<TestDetail />} />
             <Route path="syllabus-upload" element={<SyllabusUpload />} />
             <Route path="report-card-setup" element={<ReportCardSetup />} />
+            <Route path="impersonate" element={<Impersonate />} />
           </Route>
         </Routes>
       </BrowserRouter>
