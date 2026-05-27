@@ -57,30 +57,33 @@ console.log('[admin] env vars present:', seen)
 //   FIREBASE_SERVICE_ACCOUNT_JSON     — raw JSON string (only safe if your
 //       host preserves \n inside the value correctly)
 //   FIREBASE_SERVICE_ACCOUNT_PATH     — filesystem path (for local dev)
-let firebaseReady = false
+let firebaseReady       = false
+let firebaseInitError   = null   // exposed via /api/health for remote debugging
+let firebaseInitSource  = null   // which env var path was used
 try {
   let serviceAccount = null
-  let source = null
   if (process.env.FIREBASE_SERVICE_ACCOUNT_JSON_B64) {
     const decoded = Buffer.from(process.env.FIREBASE_SERVICE_ACCOUNT_JSON_B64, 'base64').toString('utf8')
     serviceAccount = JSON.parse(decoded)
-    source = 'FIREBASE_SERVICE_ACCOUNT_JSON_B64'
+    firebaseInitSource = 'FIREBASE_SERVICE_ACCOUNT_JSON_B64'
   } else if (process.env.FIREBASE_SERVICE_ACCOUNT_JSON) {
     serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_JSON)
-    source = 'FIREBASE_SERVICE_ACCOUNT_JSON'
+    firebaseInitSource = 'FIREBASE_SERVICE_ACCOUNT_JSON'
   } else if (process.env.FIREBASE_SERVICE_ACCOUNT_PATH) {
     const raw = fs.readFileSync(process.env.FIREBASE_SERVICE_ACCOUNT_PATH, 'utf8')
     serviceAccount = JSON.parse(raw)
-    source = 'FIREBASE_SERVICE_ACCOUNT_PATH'
+    firebaseInitSource = 'FIREBASE_SERVICE_ACCOUNT_PATH'
   }
   if (serviceAccount) {
     admin.initializeApp({ credential: admin.credential.cert(serviceAccount) })
     firebaseReady = true
-    console.log(`[admin] Firebase Admin initialised (source: ${source}, project: ${serviceAccount.project_id})`)
+    console.log(`[admin] Firebase Admin initialised (source: ${firebaseInitSource}, project: ${serviceAccount.project_id})`)
   } else {
-    console.warn('[admin] Firebase Admin not initialised — none of FIREBASE_SERVICE_ACCOUNT_JSON_B64 / FIREBASE_SERVICE_ACCOUNT_JSON / FIREBASE_SERVICE_ACCOUNT_PATH set')
+    firebaseInitError = 'No service-account env var set (FIREBASE_SERVICE_ACCOUNT_JSON_B64 / FIREBASE_SERVICE_ACCOUNT_JSON / FIREBASE_SERVICE_ACCOUNT_PATH)'
+    console.warn(`[admin] Firebase Admin not initialised — ${firebaseInitError}`)
   }
 } catch (e) {
+  firebaseInitError = e.message
   console.error('[admin] Firebase Admin init FAILED:', e.message)
   if (e.message.includes('JSON')) {
     console.error('[admin]   → most likely the service-account JSON is malformed. Common cause: newlines in private_key got stripped when pasted into the host control panel. Use FIREBASE_SERVICE_ACCOUNT_JSON_B64 (base64-encoded) instead.')
@@ -243,7 +246,11 @@ app.get('/api/students/:id', verifyAuth, async (req, res) => {
 })
 
 /**
- * GET /api/health — unauthenticated quick check for monitoring.
+ * GET /api/health — unauthenticated quick check + diagnostics.
+ *
+ * Returns booleans for which env vars are visible to the Node process plus
+ * the last init error (if any) — useful for diagnosing 503s without needing
+ * access to Hostinger's Node logs. No secret values are exposed.
  */
 app.get('/api/health', (_req, res) => {
   res.json({
@@ -251,6 +258,17 @@ app.get('/api/health', (_req, res) => {
     firebase: firebaseReady,
     supabase: !!supabase,
     apiReady,
+    diag: {
+      env_present: {
+        SUPABASE_URL:                      !!process.env.SUPABASE_URL,
+        SUPABASE_SERVICE_ROLE_KEY:         !!process.env.SUPABASE_SERVICE_ROLE_KEY,
+        FIREBASE_SERVICE_ACCOUNT_JSON_B64: !!process.env.FIREBASE_SERVICE_ACCOUNT_JSON_B64,
+        FIREBASE_SERVICE_ACCOUNT_JSON:     !!process.env.FIREBASE_SERVICE_ACCOUNT_JSON,
+        FIREBASE_SERVICE_ACCOUNT_PATH:     !!process.env.FIREBASE_SERVICE_ACCOUNT_PATH,
+      },
+      firebase_init_source: firebaseInitSource,
+      firebase_init_error:  firebaseInitError,
+    },
   })
 })
 
