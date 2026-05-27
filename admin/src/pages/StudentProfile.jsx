@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useAuth } from '../App'
-import { doc, getDoc, collection, getDocs, query, where } from 'firebase/firestore'
+import { collection, getDocs, query, where } from 'firebase/firestore'
 import { db } from '../firebase/config'
+import { apiGet } from '../lib/api'
 import { isAccessible } from '../lib/branchQuery'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, ReferenceLine } from 'recharts'
 import StudentProfileTab from '../components/StudentProfileTab'
@@ -39,13 +40,17 @@ export default function StudentProfile() {
   useEffect(() => {
     async function load() {
       try {
-        const [studentDoc, marksSnap, testsSnap] = await Promise.all([
-          getDoc(doc(db, 'students', studentId)),
-          getDocs(query(collection(db, 'testMarks'), where('studentName', '==', ''))), // placeholder
+        // Student record now comes from the SMS Supabase via /api/students/:id.
+        // testMarks + tests are still Tracker-owned (Firestore).
+        const [studentResp, testsSnap] = await Promise.all([
+          apiGet(`/api/students/${studentId}`).catch(e => {
+            if (e.status === 404) return null
+            throw e
+          }),
           getDocs(collection(db, 'tests')),
         ])
-        if (!studentDoc.exists()) { navigate('/students'); return }
-        const studentData = { id: studentDoc.id, ...studentDoc.data() }
+        if (!studentResp || !studentResp.student) { navigate('/students'); return }
+        const studentData = studentResp.student
         // Defense in depth: a branch admin shouldn't be able to view a student
         // belonging to the other branch by guessing the URL. Bounce them.
         if (!isAccessible(studentData.branchCode, effectiveBranches)) {
@@ -53,11 +58,11 @@ export default function StudentProfile() {
           return
         }
         setStudent(studentData)
-        setTests(testsSnap.docs.map(d => ({ id:d.id, ...d.data() })))
-        // Load marks by student name
-        const marksSnap2 = await getDocs(query(collection(db, 'testMarks'), where('studentName', '==', studentData.fullName)))
-        setMarks(marksSnap2.docs.map(d => ({ id:d.id, ...d.data() })))
-      } catch(e) { console.error(e) }
+        setTests(testsSnap.docs.map(d => ({ id: d.id, ...d.data() })))
+        // Load marks by student name (testMarks rows don't carry the Supabase UUID).
+        const marksSnap = await getDocs(query(collection(db, 'testMarks'), where('studentName', '==', studentData.fullName)))
+        setMarks(marksSnap.docs.map(d => ({ id: d.id, ...d.data() })))
+      } catch (e) { console.error('StudentProfile.load:', e) }
       setLoading(false)
     }
     load()

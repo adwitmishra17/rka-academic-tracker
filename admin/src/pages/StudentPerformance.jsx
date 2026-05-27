@@ -3,6 +3,7 @@ import { collection, getDocs, query, where } from 'firebase/firestore'
 import { db } from '../firebase/config'
 import { useClasses } from '../hooks/useClasses'
 import { useAuth } from '../App'
+import { fetchStudents } from '../lib/api'
 import { branchConstraints } from '../lib/branchQuery'
 
 // CLASSES loaded via useClasses()
@@ -54,14 +55,15 @@ export default function StudentPerformance() {
     async function load() {
       setLoading(true)
       try {
-        const [testsSnap, marksSnap, studentsSnap] = await Promise.all([
+        const [testsSnap, marksSnap, studentsList] = await Promise.all([
           getDocs(query(collection(db, 'tests'), where('className', '==', selectedClass), where('subject', '==', selectedSubject), ...branchConstraints('branchCode', effectiveBranches))),
           getDocs(query(collection(db, 'testMarks'), where('className', '==', selectedClass), where('subject', '==', selectedSubject), ...branchConstraints('branchCode', effectiveBranches))),
-          getDocs(query(collection(db, 'students'), where('className', '==', selectedClass), ...branchConstraints('branchCode', effectiveBranches))),
+          // Students for this class come from SMS Supabase via /api/students.
+          fetchStudents({ branchCodes: effectiveBranches, className: selectedClass }),
         ])
         setTests(testsSnap.docs.map(d => ({ id:d.id, ...d.data() })).sort((a,b) => (a.testDate||'').localeCompare(b.testDate||'')))
         setMarks(marksSnap.docs.map(d => ({ id:d.id, ...d.data() })))
-        setStudents(studentsSnap.docs.map(d => ({ id:d.id, ...d.data() })))
+        setStudents(studentsList)
       } catch(e) { console.error(e) }
       setLoading(false)
     }

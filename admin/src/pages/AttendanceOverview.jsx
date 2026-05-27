@@ -9,6 +9,7 @@ import { useNavigate } from 'react-router-dom'
 import { collection, getDocs, query, where } from 'firebase/firestore'
 import { db } from '../firebase/config'
 import { useAuth } from '../App'
+import { fetchStudents } from '../lib/api'
 import { branchConstraints } from '../lib/branchQuery'
 import { todayIST, friendlyDateLabel, isSunday } from '../lib/attendanceDates'
 
@@ -39,16 +40,14 @@ export default function AttendanceOverview() {
         if (!classMap.has(key)) classMap.set(key, { className: c.className, branchCode: c.branchCode, total: 0 })
       })
 
-      // 2) Count active students per class+branch, branch-scoped.
-      const studentsSnap = await getDocs(query(
-        collection(db, 'students'),
-        ...branchConstraints('branchCode', effectiveBranches),
-      ))
+      // 2) Count active students per class+branch, sourced from SMS Supabase
+      //    via /api/students. The id here is the Supabase UUID — used below to
+      //    filter out attendance docs for withdrawn students.
+      const studentsList = await fetchStudents({ branchCodes: effectiveBranches })
       const activeStudentIds = new Set()
-      studentsSnap.forEach(d => {
-        const s = d.data()
-        if (s.isActive === false) return
-        activeStudentIds.add(d.id)
+      studentsList.forEach(s => {
+        if (!s.isActive) return
+        activeStudentIds.add(s.id)
         const key = (s.className || '?') + '||' + (s.branchCode || '?')
         if (!classMap.has(key)) classMap.set(key, { className: s.className || '?', branchCode: s.branchCode || '?', total: 0 })
         classMap.get(key).total++

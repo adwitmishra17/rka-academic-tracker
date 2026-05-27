@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { collection, doc, getDoc, getDocs, query, where, limit } from 'firebase/firestore'
 import { useAuth } from '../App'
+import { fetchStudents } from '../lib/api'
 import { branchConstraints, branchConstraintsArray } from '../lib/branchQuery'
 import { db } from '../firebase/config'
 import { useClasses } from '../hooks/useClasses'
@@ -119,12 +120,13 @@ export default function Dashboard() {
         // Per-branch periods doc. On All Branches (super admin), pick the
         // first allowed branch — schedule rendering needs a single template.
         const periodsBranch = currentBranch || allowedBranches[0] || 'MAIN'
-        const [teachersSnap, lessonsSnap, testsSnap, marksSnap, studentsSnap, missedSnap, ttSnap, periodsDoc, arrSnap] = await Promise.all([
+        const [teachersSnap, lessonsSnap, testsSnap, marksSnap, studentsList, missedSnap, ttSnap, periodsDoc, arrSnap] = await Promise.all([
           getDocs(query(collection(db, 'teachers'), ...branchConstraintsArray('branchCodes', effectiveBranches))).catch(() => empty),
           getDocs(query(collection(db, 'lessons'), ...branchConstraints('branchCode', effectiveBranches))).catch(() => empty),
           getDocs(query(collection(db, 'tests'), ...branchConstraints('branchCode', effectiveBranches))).catch(() => empty),
           getDocs(query(collection(db, 'testMarks'), where('isAbsent', '==', true), ...branchConstraints('branchCode', effectiveBranches))).catch(() => empty),
-          getDocs(query(collection(db, 'students'), ...branchConstraints('branchCode', effectiveBranches))).catch(() => empty),
+          // Students come from SMS Supabase via /api/students (no Firestore).
+          fetchStudents({ branchCodes: effectiveBranches }).catch(() => []),
           getDocs(query(collection(db, 'missedLessonAlerts'), where('isResolved', '==', false), ...branchConstraints('branchCode', effectiveBranches))).catch(() => empty),
           getDocs(query(collection(db, 'timetable'), ...branchConstraints('branchCode', effectiveBranches))).catch(() => empty),
           getDoc(doc(db, 'settings', `periods_${periodsBranch}`)).catch(() => null),
@@ -139,7 +141,7 @@ export default function Dashboard() {
           .slice(0, 20)
         const todayLessons = sortedLessons.filter(l => l.date === todayStr)
         const activeNamesLower = new Set(
-          studentsSnap.docs.map(d => d.data()).filter(s => s.isActive !== false).map(s => (s.fullName||'').trim().toLowerCase())
+          studentsList.filter(s => s.isActive).map(s => (s.fullName || '').trim().toLowerCase())
         )
         // Build set of valid test IDs to filter out orphaned absentees from deleted tests
         const validTestIds = new Set(testsSnap.docs.map(d => d.id))

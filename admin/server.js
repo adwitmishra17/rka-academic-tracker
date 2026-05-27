@@ -1,42 +1,246 @@
-// ============================================================
+// ============================================================================
 // admin/server.js
-// Express server that serves the built Vite admin app with SPA
-// fallback. Hostinger's Node.js deploy runs:
-//   npm install  →  npm run build  →  npm start
-// `npm start` invokes this file, which serves dist/ on the port
-// Hostinger assigns via process.env.PORT.
-// ============================================================
+//
+// Express server that:
+//   1. Serves the built Vite admin SPA from dist/ (existing behaviour)
+//   2. Exposes /api/* endpoints that read from the SMS Supabase using the
+//      service-role key (never reaches the browser)
+//
+// Auth: every /api/* request must carry a Firebase Auth ID token in the
+//   Authorization: Bearer <token> header. The token is verified via the
+//   Firebase Admin SDK before any Supabase work is done.
+//
+// Env vars (see .env.example):
+//   SUPABASE_URL
+//   SUPABASE_SERVICE_ROLE_KEY
+//   FIREBASE_SERVICE_ACCOUNT_PATH   (or FIREBASE_SERVICE_ACCOUNT_JSON inline)
+//   PORT                            (Hostinger sets this automatically)
+//
+// Hostinger runs: npm install → npm run build → npm start (this file)
+// ============================================================================
 
-import express from 'express';
-import path from 'path';
-import { fileURLToPath } from 'url';
+import express  from 'express'
+import path     from 'path'
+import fs       from 'fs'
+import { fileURLToPath } from 'url'
+import dotenv   from 'dotenv'
+import admin    from 'firebase-admin'
+import { createClient } from '@supabase/supabase-js'
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname  = path.dirname(__filename);
+// Load .env / .env.local in dev (Hostinger injects env vars directly).
+dotenv.config()
+dotenv.config({ path: '.env.local' })
 
-const app  = express();
-const PORT = process.env.PORT || 3000;
-const distDir = path.join(__dirname, 'dist');
+const __filename = fileURLToPath(import.meta.url)
+const __dirname  = path.dirname(__filename)
+const distDir    = path.join(__dirname, 'dist')
 
-// Static assets — hashed filenames are safe to long-cache for a year.
-// We override Cache-Control for index.html below so a new build is
-// picked up by browsers on the next page load.
+const app  = express()
+const PORT = process.env.PORT || 3000
+
+// ─── Initialise Firebase Admin ──────────────────────────────────────────────
+// Either inline the service account JSON (FIREBASE_SERVICE_ACCOUNT_JSON) or
+// point at a file (FIREBASE_SERVICE_ACCOUNT_PATH). Falls back gracefully —
+// if neither is set, /api routes return 503 but static serving still works.
+let firebaseReady = false
+try {
+  let serviceAccount = null
+  if (process.env.FIREBASE_SERVICE_ACCOUNT_JSON) {
+    serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_JSON)
+  } else if (process.env.FIREBASE_SERVICE_ACCOUNT_PATH) {
+    const raw = fs.readFileSync(process.env.FIREBASE_SERVICE_ACCOUNT_PATH, 'utf8')
+    serviceAccount = JSON.parse(raw)
+  }
+  if (serviceAccount) {
+    admin.initializeApp({ credential: admin.credential.cert(serviceAccount) })
+    firebaseReady = true
+    console.log('[admin] Firebase Admin initialised')
+  } else {
+    console.warn('[admin] Firebase Admin not initialised — /api routes disabled')
+  }
+} catch (e) {
+  console.error('[admin] Firebase Admin init failed:', e.message)
+}
+
+// ─── Initialise Supabase ────────────────────────────────────────────────────
+let supabase = null
+if (process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY) {
+  supabase = createClient(
+    process.env.SUPABASE_URL,
+    process.env.SUPABASE_SERVICE_ROLE_KEY,
+    { auth: { persistSession: false } },
+  )
+  console.log('[admin] Supabase client initialised')
+} else {
+  console.warn('[admin] SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY not set — /api routes disabled')
+}
+
+const apiReady = firebaseReady && !!supabase
+
+// ─── Middleware ─────────────────────────────────────────────────────────────
+app.use(express.json({ limit: '1mb' }))
+
+// Auth middleware — verifies Firebase ID token, attaches { uid, email } to req.user.
+async function verifyAuth(req, res, next) {
+  if (!apiReady) return res.status(503).json({ error: 'API not configured on server' })
+  const header = req.headers.authorization || ''
+  const token = header.startsWith('Bearer ') ? header.slice(7) : null
+  if (!token) return res.status(401).json({ error: 'Missing Authorization header' })
+  try {
+    const decoded = await admin.auth().verifyIdToken(token)
+    req.user = { uid: decoded.uid, email: (decoded.email || '').toLowerCase() }
+    next()
+  } catch (e) {
+    console.warn('[admin] token verify failed:', e.message)
+    res.status(401).json({ error: 'Invalid or expired token' })
+  }
+}
+
+// ─── Helpers ────────────────────────────────────────────────────────────────
+
+// In-memory caches for the (small, rarely-changing) branches table.
+let branchesCache = null  // { id → { id, code, name } }
+async function loadBranches() {
+  if (branchesCache) return branchesCache
+  const { data, error } = await supabase.from('branches').select('id, code, name')
+  if (error) throw error
+  branchesCache = Object.fromEntries(data.map(b => [b.id, b]))
+  return branchesCache
+}
+async function branchIdForCode(code) {
+  const branches = await loadBranches()
+  const entry = Object.values(branches).find(b => b.code === code)
+  return entry?.id || null
+}
+
+// Transform a Supabase students row into the camelCase shape the Tracker
+// frontend already understands (mirrors the Firestore schema). Keeps the
+// view code unchanged — only the data source changed.
+function toFrontendStudent(row, branches) {
+  return {
+    id:               row.id,
+    fullName:         row.full_name        || '',
+    admissionNo:      row.admission_no     || '',
+    legacyCompId:     row.legacy_comp_id   || '',
+    apaarId:          row.apaar_id         || '',
+    gender:           row.gender           || '',
+    dateOfBirth:      row.date_of_birth    || '',
+    dateOfAdmission:  row.date_of_admission|| '',
+    branchCode:       branches[row.branch_id]?.code || '',
+    className:        row.class_name       || '',
+    section:          row.section          || '',
+    rollNumber:       row.roll_number != null ? String(row.roll_number) : '',
+    optionalSubject:  row.optional_subject || '',
+    sciencePath:      row.science_path     || '',
+    fatherName:       row.father_name      || '',
+    motherName:       row.mother_name      || '',
+    guardianName:     row.guardian_name    || '',
+    parentPhone:      row.parent_phone     || '',
+    parentPhoneAlt:   row.parent_phone_alt || '',
+    parentEmail:      row.parent_email     || '',
+    religion:         row.religion         || '',
+    category:         row.category         || '',
+    caste:            row.caste            || '',
+    house:            row.house            || '',
+    addressPresent:   row.address_present  || '',
+    addressPermanent: row.address_permanent|| '',
+    parentOccupation: row.parent_occupation|| '',
+    priorSchool:      row.prior_school     || '',
+    transportRoute:   row.transport_route  || '',
+    isActive:         row.is_active !== false,
+    photoKey:         row.photo_key        || '',
+    // Withdrawal metadata (read-only for Tracker; SMS owns the state)
+    withdrawnAt:      row.withdrawn_at     || null,
+    withdrawnBy:      row.withdrawn_by     || '',
+    withdrawalReason: row.withdrawal_reason|| '',
+  }
+}
+
+// ─── API routes ─────────────────────────────────────────────────────────────
+
+/**
+ * GET /api/students
+ * Query params:
+ *   branchCode = MAIN|CITY   (optional; if omitted, returns all branches the
+ *                             caller is allowed to see — currently no
+ *                             server-side enforcement; relies on the SPA's
+ *                             branch picker. Add RLS here later if needed.)
+ *   className  = exact match (optional)
+ *   isActive   = true|false  (optional; defaults to undefined = all)
+ */
+app.get('/api/students', verifyAuth, async (req, res) => {
+  try {
+    const branches = await loadBranches()
+    let q = supabase.from('students').select('*')
+
+    if (req.query.branchCode) {
+      const bid = await branchIdForCode(req.query.branchCode)
+      if (!bid) return res.json({ students: [] })
+      q = q.eq('branch_id', bid)
+    }
+    if (req.query.className) q = q.eq('class_name', req.query.className)
+    if (req.query.isActive === 'true')  q = q.eq('is_active', true)
+    if (req.query.isActive === 'false') q = q.eq('is_active', false)
+
+    // Default to active-only; Tracker UI explicitly toggles to show withdrawn.
+    // If neither was specified, leave the filter off so the toggle works.
+    const { data, error } = await q.order('class_name').order('roll_number')
+    if (error) throw error
+    res.json({ students: data.map(r => toFrontendStudent(r, branches)) })
+  } catch (e) {
+    console.error('[admin] GET /api/students:', e)
+    res.status(500).json({ error: e.message || 'Internal error' })
+  }
+})
+
+/**
+ * GET /api/students/:id
+ * Returns one student by Supabase UUID.
+ */
+app.get('/api/students/:id', verifyAuth, async (req, res) => {
+  try {
+    const branches = await loadBranches()
+    const { data, error } = await supabase
+      .from('students')
+      .select('*')
+      .eq('id', req.params.id)
+      .maybeSingle()
+    if (error) throw error
+    if (!data) return res.status(404).json({ error: 'Student not found' })
+    res.json({ student: toFrontendStudent(data, branches) })
+  } catch (e) {
+    console.error('[admin] GET /api/students/:id:', e)
+    res.status(500).json({ error: e.message || 'Internal error' })
+  }
+})
+
+/**
+ * GET /api/health — unauthenticated quick check for monitoring.
+ */
+app.get('/api/health', (_req, res) => {
+  res.json({
+    ok: true,
+    firebase: firebaseReady,
+    supabase: !!supabase,
+    apiReady,
+  })
+})
+
+// ─── Static + SPA fallback (must come AFTER /api routes) ────────────────────
 app.use(express.static(distDir, {
   maxAge: '1y',
-  index: false,             // SPA fallback handles the root
+  index: false,
   setHeaders: (res, filePath) => {
     if (path.basename(filePath) === 'index.html') {
-      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate')
     }
   },
-}));
+}))
 
-// SPA fallback — any unmatched path returns index.html so React
-// Router can resolve client-side routes (/students/:id, /tests, etc.).
 app.get('*', (_req, res) => {
-  res.sendFile(path.join(distDir, 'index.html'));
-});
+  res.sendFile(path.join(distDir, 'index.html'))
+})
 
 app.listen(PORT, () => {
-  console.log(`[admin] listening on port ${PORT}`);
-});
+  console.log(`[admin] listening on port ${PORT}  (apiReady=${apiReady})`)
+})

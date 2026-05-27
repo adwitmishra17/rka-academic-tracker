@@ -3,6 +3,7 @@ import { collection, getDocs, query, where, orderBy } from 'firebase/firestore'
 import { db } from '../firebase/config'
 import { useClasses } from '../hooks/useClasses'
 import { useAuth } from '../App'
+import { fetchStudents } from '../lib/api'
 import { branchConstraints } from '../lib/branchQuery'
 
 // CLASSES loaded via useClasses({ includeAll: true })
@@ -20,17 +21,17 @@ export default function Absentees() {
   useEffect(() => {
     async function load() {
       try {
-        const [marksSnap, studentsSnap, testsSnap] = await Promise.all([
+        const [marksSnap, studentsList, testsSnap] = await Promise.all([
           getDocs(query(collection(db, 'testMarks'), where('isAbsent', '==', true), ...branchConstraints('branchCode', effectiveBranches))),
-          getDocs(query(collection(db, 'students'), ...branchConstraints('branchCode', effectiveBranches))),
+          fetchStudents({ branchCodes: effectiveBranches }),
           getDocs(query(collection(db, 'tests'), ...branchConstraints('branchCode', effectiveBranches))),
         ])
         const testIds = new Set(testsSnap.docs.map(d => d.id))
-        // Build a set of active student names (trimmed, lowercase for robust matching)
+        // Build a set of active student names (trimmed, lowercase for robust matching).
+        // studentsList comes from SMS Supabase via /api/students.
         const activeNamesLower = new Set(
-          studentsSnap.docs
-            .map(d => d.data())
-            .filter(s => s.isActive !== false)
+          studentsList
+            .filter(s => s.isActive)
             .map(s => (s.fullName || '').trim().toLowerCase())
         )
         const allMarks = marksSnap.docs.map(d => ({ id:d.id, ...d.data() }))

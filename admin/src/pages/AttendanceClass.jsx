@@ -14,6 +14,7 @@ import {
 } from 'firebase/firestore'
 import { db } from '../firebase/config'
 import { useAuth } from '../App'
+import { fetchStudents } from '../lib/api'
 import { writeAttendanceAudit } from '../lib/attendanceAudit'
 import { todayIST, lastSevenDays, friendlyDateLabel, isSunday } from '../lib/attendanceDates'
 
@@ -36,21 +37,17 @@ export default function AttendanceClass() {
   async function load() {
     setLoading(true); setError('')
     try {
-      // Roster — class + branch, both active and inactive (for withdrawn notation)
-      const studentsSnap = await getDocs(query(
-        collection(db, 'students'),
-        where('className', '==', decodedClassName),
-        where('branchCode', '==', branchCode),
-      ))
-      const studentList = studentsSnap.docs
-        .map(d => ({ id: d.id, ...d.data() }))
-        .sort((a, b) => {
-          // Active first, then by roll number
-          if ((a.isActive !== false) !== (b.isActive !== false)) {
-            return (a.isActive !== false) ? -1 : 1
-          }
-          return Number(a.rollNumber || 0) - Number(b.rollNumber || 0)
-        })
+      // Roster — class + branch, both active and inactive (for withdrawn notation).
+      // Sourced from SMS Supabase via /api/students.
+      const roster = await fetchStudents({
+        branchCodes: [branchCode],
+        className:   decodedClassName,
+      })
+      const studentList = roster.sort((a, b) => {
+        // Active first, then by roll number
+        if (a.isActive !== b.isActive) return a.isActive ? -1 : 1
+        return Number(a.rollNumber || 0) - Number(b.rollNumber || 0)
+      })
       setStudents(studentList)
 
       // Attendance for this date — could use a single query, but doc IDs are
