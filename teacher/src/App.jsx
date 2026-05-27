@@ -29,6 +29,9 @@ export const useAuth = () => useContext(AuthContext)
 export default function App() {
   const [user, setUser] = useState(undefined)
   const [teacher, setTeacher] = useState(null)
+  // Held high while signInWithCustomToken is in flight so we don't briefly
+  // render /login between "auth state = null" and "auth state = teacher".
+  const [signingInAsImpersonator, setSigningInAsImpersonator] = useState(false)
 
   // ── Impersonation detection ────────────────────────────────────────────
   // The admin tracker's /impersonate page opens this PWA in a new tab with
@@ -40,6 +43,9 @@ export default function App() {
     const params = new URLSearchParams(window.location.search)
     const token  = params.get('impersonate')
     const actor  = params.get('actor')
+    // Diagnostic — if you don't see this line in the teacher PWA console
+    // when you open the impersonation tab, the new code hasn't deployed yet.
+    console.log('[impersonation] App mount; token present:', !!token)
     if (!token) return
     // Strip the params immediately so a page refresh doesn't try to re-sign-in
     // with an expired token.
@@ -48,11 +54,18 @@ export default function App() {
     url.searchParams.delete('actor')
     window.history.replaceState({}, '', url.pathname + (url.search || ''))
     setImpersonationState(actor || 'admin')
-    signInWithCustomToken(auth, token).catch(e => {
-      console.error('Impersonation sign-in failed:', e)
-      clearImpersonationState()
-      alert('Impersonation failed: ' + (e.message || 'unknown error'))
-    })
+    setSigningInAsImpersonator(true)
+    signInWithCustomToken(auth, token)
+      .then(cred => {
+        console.log('[impersonation] signed in as', cred.user.email)
+        setSigningInAsImpersonator(false)
+      })
+      .catch(e => {
+        console.error('[impersonation] sign-in failed:', e)
+        clearImpersonationState()
+        setSigningInAsImpersonator(false)
+        alert('Impersonation failed: ' + (e.message || 'unknown error'))
+      })
   }, [])
 
   useEffect(() => {
@@ -111,10 +124,13 @@ export default function App() {
     })
   }, [])
 
-  if (user === undefined) return (
+  // Hold the loading screen during impersonation sign-in so we never flash
+  // /login between Firebase's "no user" state and the custom-token sign-in
+  // completing.
+  if (user === undefined || signingInAsImpersonator) return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100vh', gap: 16 }}>
       <div style={{ width: 36, height: 36, border: '3px solid var(--green-muted)', borderTopColor: 'var(--green)', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
-      <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>Loading…</p>
+      <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>{signingInAsImpersonator ? 'Signing in as teacher…' : 'Loading…'}</p>
     </div>
   )
 
