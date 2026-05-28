@@ -226,20 +226,39 @@ exports.syncExamSubjects = onDocumentWritten('examSubjects/{docId}', async event
     return
   }
 
-  // Columns written here MUST match the SMS exam_subjects schema:
-  //   id, branch_id, session_code, class_name, subject_name, subject_code,
-  //   is_optional, sort_order, created_at, updated_at, created_by, updated_by,
-  //   kind, tracker_doc_id
-  // Tracker has no notion of subject_code/is_optional/created_by/updated_by,
-  // and assignedTeacherId is Tracker-only (used for teacher PWA visibility).
+  // Resolve the assigned teacher's EMAIL so the teacher PWA can filter
+  // subjects to the logged-in teacher. We use email (not Firebase UID, and
+  // not the Firestore teachers doc ID) as the cross-system link because:
+  //   • the admin stores assignedTeacherId = Firestore teachers doc ID
+  //   • the teacher PWA knows the logged-in teacher's email (auth email)
+  //   • email is stable and identical on both sides — no UID resolution,
+  //     no chicken-and-egg with teachers who haven't signed in yet.
+  // The teacher PWA must filter exam_subjects by assigned_teacher_email.
+  let assignedTeacherEmail = null
+  if (data.assignedTeacherId) {
+    try {
+      const tSnap = await admin.firestore().collection('teachers').doc(data.assignedTeacherId).get()
+      if (tSnap.exists) {
+        const t = tSnap.data()
+        assignedTeacherEmail = (t.email || t.personalEmail || '').trim().toLowerCase() || null
+      }
+    } catch (e) {
+      console.warn(`syncExamSubjects: teacher lookup failed for ${data.assignedTeacherId}: ${e.message}`)
+    }
+  }
+
+  // Columns written here MUST exist in the SMS exam_subjects schema. Beyond
+  // the base columns, this requires:
+  //   ALTER TABLE exam_subjects ADD COLUMN IF NOT EXISTS assigned_teacher_email TEXT;
   const row = {
-    tracker_doc_id: docId,
-    branch_id:      branchId,
-    session_code:   data.sessionCode,
-    class_name:     data.className,
-    subject_name:   data.subjectName,
-    kind:           data.kind,            // 'scholastic' | 'co_scholastic'
-    sort_order:     data.sortOrder ?? 0,
+    tracker_doc_id:         docId,
+    branch_id:              branchId,
+    session_code:           data.sessionCode,
+    class_name:             data.className,
+    subject_name:           data.subjectName,
+    kind:                   data.kind,            // 'scholastic' | 'co_scholastic'
+    sort_order:             data.sortOrder ?? 0,
+    assigned_teacher_email: assignedTeacherEmail, // null when no teacher assigned
   }
 
   const { error } = await supabase()
@@ -247,7 +266,7 @@ exports.syncExamSubjects = onDocumentWritten('examSubjects/{docId}', async event
     .upsert(row, { onConflict: 'tracker_doc_id' })
 
   if (error) console.error(`syncExamSubjects failed (${docId}):`, error.message)
-  else       console.log(`syncExamSubjects ok: ${docId} [${data.className} / ${data.subjectName}]`)
+  else       console.log(`syncExamSubjects ok: ${docId} [${data.className} / ${data.subjectName}] teacher=${assignedTeacherEmail || '—'}`)
 })
 
 

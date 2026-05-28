@@ -1,0 +1,13 @@
+{
+  "name": "rka-resync-exam-subjects",
+  "version": "1.0.0",
+  "description": "Touches every Firestore examSubjects doc so the (updated) syncExamSubjects Cloud Function re-runs and backfills assigned_teacher_email into Supabase exam_subjects.",
+  "main": "resync.js",
+  "scripts": {
+    "dry": "node resync.js --dry-run",
+    "resync": "node resync.js --confirm"
+  },
+  "dependencies": {
+    "firebase-admin": "^12.0.0"
+  }
+}
