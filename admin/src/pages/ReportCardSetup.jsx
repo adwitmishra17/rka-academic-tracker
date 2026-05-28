@@ -81,6 +81,49 @@ function lookupTeacherFromTimetable(slots, className, subjectName) {
   return slot ? { teacherId: slot.teacherId, teacherName: slot.teacherName || '' } : null
 }
 
+// Subject-name hints used to guess scholastic vs co-scholastic when importing
+// from the timetable. Conservative — anything not matched defaults to
+// scholastic, and the admin can flip it in the import preview.
+const CO_SCHOLASTIC_HINTS = [
+  'art', 'craft', 'music', 'dance', 'physical education', ' pe', 'pe ',
+  'sport', 'game', 'moral', 'yoga', 'drawing', 'painting', 'club',
+  'library', 'value education', 'life skill',
+]
+function guessKindFromName(subjectName) {
+  const n = ` ${(subjectName || '').toLowerCase()} `
+  return CO_SCHOLASTIC_HINTS.some(h => n.includes(h)) ? 'co_scholastic' : 'scholastic'
+}
+
+// Derive the distinct (subject → most-frequent teacher) list for a class from
+// the timetable slots. A subject taught across many periods by one teacher and
+// a few by another picks the majority teacher; the admin can override later.
+function deriveSubjectsFromTimetable(slots, className) {
+  const bySubject = new Map()  // subject → Map(teacherId → { id, name, count })
+  ;(slots || []).forEach(s => {
+    if (!(s.classNames || []).includes(className)) return
+    const subject = (s.subject || '').trim()
+    if (!subject) return
+    if (!bySubject.has(subject)) bySubject.set(subject, new Map())
+    const tMap = bySubject.get(subject)
+    const tid  = s.teacherId || ''
+    const cur  = tMap.get(tid) || { id: tid, name: s.teacherName || '', count: 0 }
+    cur.count += 1
+    tMap.set(tid, cur)
+  })
+  const result = []
+  for (const [subject, tMap] of bySubject) {
+    let best = null
+    for (const t of tMap.values()) if (!best || t.count > best.count) best = t
+    result.push({
+      subjectName: subject,
+      teacherId:   best?.id   || '',
+      teacherName: best?.name || '',
+      kind:        guessKindFromName(subject),
+    })
+  }
+  return result.sort((a, b) => a.subjectName.localeCompare(b.subjectName))
+}
+
 const HPC_DOMAINS = [
   { key: 'physical',  label: 'Physical Development' },
   { key: 'socio',     label: 'Socio-Emotional' },
@@ -320,6 +363,12 @@ export default function ReportCardSetup() {
   const [savingCloud,         setSavingCloud]         = useState(false)
   const [cloudSaved,          setCloudSaved]          = useState(false)
 
+  // "Import from Timetable" modal state. importRows is the editable preview:
+  // each row = { subjectName, teacherId, teacherName, kind, include, exists }.
+  const [showImport,   setShowImport]   = useState(false)
+  const [importRows,   setImportRows]   = useState([])
+  const [importing,    setImporting]    = useState(false)
+
   // Reset draft state when the admin switches session or class — pending
   // changes don't carry across contexts.
   useEffect(() => {
@@ -446,6 +495,62 @@ export default function ReportCardSetup() {
       setSubjError('Failed to save subjects. Try again.')
     }
     setSavingCloud(false)
+  }
+
+  // ── Import from Timetable ──────────────────────────────────────────────
+  // Derive the subject + teacher list for the selected class straight from
+  // the timetable, present it as an editable preview, and let the admin
+  // bulk-add. Subjects already mapped are pre-flagged and unchecked.
+  function openImportFromTimetable() {
+    if (!subjectsSession) return
+    const derived = deriveSubjectsFromTimetable(timetableSlots, subjectsClass)
+    const rows = derived.map(d => {
+      const exists = subjects.some(s =>
+        (s.subjectName || '').toLowerCase() === d.subjectName.toLowerCase() && s.kind === d.kind
+      )
+      return { ...d, exists, include: !exists }   // default-include only new ones
+    })
+    setImportRows(rows)
+    setSubjError('')
+    setShowImport(true)
+  }
+
+  function updateImportRow(idx, patch) {
+    setImportRows(rows => rows.map((r, i) => i === idx ? { ...r, ...patch } : r))
+  }
+
+  async function commitImport() {
+    const toAdd = importRows.filter(r => r.include && !r.exists)
+    if (toAdd.length === 0) { setShowImport(false); return }
+    setImporting(true)
+    let runningOrder = subjects.length > 0 ? Math.max(...subjects.map(s => s.sortOrder || 0)) : 0
+    try {
+      for (const r of toAdd) {
+        // Re-check existence against the chosen kind (admin may have toggled it)
+        if (subjects.some(s => (s.subjectName || '').toLowerCase() === r.subjectName.toLowerCase() && s.kind === r.kind)) continue
+        runningOrder += 1
+        await addDoc(collection(db, 'examSubjects'), {
+          branchCode:          subjectsSession.branchCode,
+          sessionCode:         subjectsSession.sessionCode,
+          className:           subjectsClass,
+          subjectName:         r.subjectName,
+          subjectCode:         '',
+          kind:                r.kind,
+          isOptional:          false,
+          sortOrder:           runningOrder,
+          assignedTeacherId:   r.teacherId   || '',
+          assignedTeacherName: r.teacherName || '',
+          createdAt:           Timestamp.now(),
+          createdBy:           user?.email || '',
+        })
+      }
+      setShowImport(false)
+      await loadSubjects()
+    } catch (e) {
+      console.error('commitImport:', e)
+      setSubjError('Failed to import subjects. Try again.')
+    }
+    setImporting(false)
   }
 
   async function addSubject() {
@@ -719,6 +824,30 @@ export default function ReportCardSetup() {
 
           ) : (
             <>
+              {/* Import from Timetable — derives subjects + teachers from the
+                  class's scheduled periods in one action */}
+              <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
+                <button
+                  onClick={openImportFromTimetable}
+                  disabled={timetableSlots.length === 0}
+                  title={timetableSlots.length === 0 ? 'No timetable found for this branch' : 'Derive subjects and teachers from the timetable'}
+                  style={{
+                    padding: '8px 14px', borderRadius: 'var(--radius-sm)',
+                    background: timetableSlots.length === 0 ? 'var(--gray-100)' : 'var(--white)',
+                    color: timetableSlots.length === 0 ? 'var(--gray-400)' : 'var(--green-dark)',
+                    border: '1px solid var(--green-muted)',
+                    fontSize: 12.5, fontWeight: 600,
+                    cursor: timetableSlots.length === 0 ? 'not-allowed' : 'pointer',
+                    display: 'inline-flex', alignItems: 'center', gap: 7,
+                  }}
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
+                  </svg>
+                  Import from Timetable
+                </button>
+              </div>
+
               {/* Subject cloud — class-aware draft picker with Save button */}
               <SubjectCloud
                 className={subjectsClass}
@@ -822,6 +951,99 @@ export default function ReportCardSetup() {
               </div>
             </>
           )}
+        </div>
+      )}
+
+      {/* ── Import-from-Timetable preview modal ──────────────────────────── */}
+      {showImport && (
+        <div
+          onClick={() => !importing && setShowImport(false)}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 200, padding: 20 }}
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            className="fade-in"
+            style={{ background: 'var(--white)', borderRadius: 'var(--radius-lg)', width: '100%', maxWidth: 640, maxHeight: '85vh', display: 'flex', flexDirection: 'column', boxShadow: 'var(--shadow-lg)' }}
+          >
+            <div style={{ padding: '18px 22px', borderBottom: '1px solid var(--gray-100)' }}>
+              <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 18, fontWeight: 600, color: 'var(--green-dark)' }}>
+                Import from Timetable — {subjectsClass}
+              </h2>
+              <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4, lineHeight: 1.5 }}>
+                Subjects and teachers derived from the timetable. Review the scholastic / co-scholastic
+                split (auto-guessed from the name), uncheck anything not graded on the report card, then add.
+              </p>
+            </div>
+
+            <div style={{ flex: 1, overflowY: 'auto', padding: '8px 0' }}>
+              {importRows.length === 0 ? (
+                <div style={{ padding: '32px 22px', textAlign: 'center', color: 'var(--text-muted)', fontSize: 13 }}>
+                  No subjects found in the timetable for <strong>{subjectsClass}</strong>.
+                  Check that the timetable has periods scheduled for this class.
+                </div>
+              ) : importRows.map((r, i) => (
+                <div key={r.subjectName} style={{
+                  display: 'flex', alignItems: 'center', gap: 12, padding: '9px 22px',
+                  borderBottom: i < importRows.length - 1 ? '1px solid var(--gray-50)' : 'none',
+                  opacity: r.exists ? 0.55 : 1,
+                }}>
+                  <input
+                    type="checkbox"
+                    checked={r.include}
+                    disabled={r.exists}
+                    onChange={e => updateImportRow(i, { include: e.target.checked })}
+                    style={{ flexShrink: 0, width: 16, height: 16, cursor: r.exists ? 'not-allowed' : 'pointer' }}
+                  />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 13.5, fontWeight: 500, color: 'var(--text)' }}>
+                      {r.subjectName}
+                      {r.exists && <span style={{ fontSize: 10.5, color: 'var(--text-muted)', marginLeft: 8, fontWeight: 400 }}>· already mapped</span>}
+                    </div>
+                    <div style={{ fontSize: 11.5, color: 'var(--text-muted)' }}>
+                      {r.teacherName ? `Teacher: ${r.teacherName}` : 'No teacher in timetable'}
+                    </div>
+                  </div>
+                  {/* Kind toggle */}
+                  <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+                    {['scholastic', 'co_scholastic'].map(k => (
+                      <button
+                        key={k}
+                        onClick={() => !r.exists && updateImportRow(i, { kind: k })}
+                        disabled={r.exists}
+                        style={{
+                          padding: '4px 9px', borderRadius: 6, fontSize: 10.5, fontWeight: 600,
+                          border: '1px solid ' + (r.kind === k ? 'var(--green)' : 'var(--gray-200)'),
+                          background: r.kind === k ? 'var(--green-light)' : 'var(--white)',
+                          color: r.kind === k ? 'var(--green-dark)' : 'var(--text-muted)',
+                          cursor: r.exists ? 'not-allowed' : 'pointer',
+                        }}
+                      >
+                        {k === 'scholastic' ? 'Scholastic' : 'Co-Sch.'}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div style={{ padding: '14px 22px', borderTop: '1px solid var(--gray-100)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+              <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                {importRows.filter(r => r.include && !r.exists).length} of {importRows.filter(r => !r.exists).length} new subjects selected
+              </span>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button onClick={() => setShowImport(false)} disabled={importing} style={{ padding: '8px 16px', borderRadius: 'var(--radius-sm)', background: 'var(--white)', color: 'var(--text-muted)', border: '1px solid var(--gray-200)', fontSize: 13, fontWeight: 500, cursor: importing ? 'not-allowed' : 'pointer' }}>
+                  Cancel
+                </button>
+                <button
+                  onClick={commitImport}
+                  disabled={importing || importRows.filter(r => r.include && !r.exists).length === 0}
+                  style={btn('primary', importing || importRows.filter(r => r.include && !r.exists).length === 0)}
+                >
+                  {importing ? 'Adding…' : `Add ${importRows.filter(r => r.include && !r.exists).length} subjects`}
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       )}
     </div>
