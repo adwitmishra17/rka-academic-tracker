@@ -596,6 +596,121 @@ app.post('/api/hpc/void', verifyAuth, async (req, res) => {
   } catch (e) { console.error('[admin] POST /api/hpc/void:', e); res.status(500).json({ error: e.message }) }
 })
 
+// ─── Board Candidates / CBSE List of Candidates (LoC) ───────────────────────
+// Owned in Supabase (no mirror). Full CRUD via service-role; gated by verifyAuth.
+function detectStream(className) {
+  if (!className) return null
+  if (/Science$/.test(className))    return 'Science'
+  if (/Commerce$/.test(className))   return 'Commerce'
+  if (/Humanities$/.test(className)) return 'Humanities'
+  return null
+}
+const LOC_EDITABLE = ['candidate_name','father_name','mother_name','date_of_birth','gender','nationality','category','religion','aadhaar_no','apaar_id','subject_codes','subject_names','identification_mark_1','identification_mark_2','is_cwsn','cwsn_category','needs_scribe','needs_extra_time','science_path','stream','photo_url','signature_url','remarks']
+
+// GET /api/loc?branchCode=&sessionCode=&examClass=&status=&q=
+app.get('/api/loc', verifyAuth, async (req, res) => {
+  try {
+    const { branchCode, sessionCode, examClass, status, q } = req.query
+    let query = supabase.from('loc_candidates')
+      .select('*, students(full_name, admission_no, class_name, section), branches(code)')
+      .order('candidate_name').limit(1000)
+    if (branchCode) { const bid = await branchIdForCode(branchCode); if (!bid) return res.json({ candidates: [] }); query = query.eq('branch_id', bid) }
+    if (sessionCode) query = query.eq('session_code', sessionCode)
+    if (examClass)   query = query.eq('exam_class', examClass)
+    if (status)      query = query.eq('status', status)
+    if (q?.trim())   query = query.or(`candidate_name.ilike.%${q.trim()}%,aadhaar_no.ilike.%${q.trim()}%,apaar_id.ilike.%${q.trim()}%`)
+    const { data, error } = await query
+    if (error) throw error
+    res.json({ candidates: data })
+  } catch (e) { console.error('[admin] GET /api/loc:', e); res.status(500).json({ error: e.message }) }
+})
+
+// GET /api/loc/eligible?branchCode=&sessionCode=&examClass= — Class 10/12 students not yet enrolled.
+app.get('/api/loc/eligible', verifyAuth, async (req, res) => {
+  try {
+    const { branchCode, sessionCode, examClass } = req.query
+    if (!branchCode || !sessionCode || !examClass) return res.json({ students: [] })
+    const bid = await branchIdForCode(branchCode)
+    if (!bid) return res.json({ students: [] })
+    let sq = supabase.from('students')
+      .select('id, full_name, admission_no, class_name, section, roll_number')
+      .eq('branch_id', bid).eq('is_active', true).eq('deleted_in_sms', false)
+    sq = examClass === '10' ? sq.eq('class_name', 'Class 10') : sq.ilike('class_name', 'Class 12%')
+    const { data: sd, error } = await sq.order('class_name').order('roll_number')
+    if (error) throw error
+    const { data: enrolled } = await supabase.from('loc_candidates').select('student_id').eq('session_code', sessionCode).eq('exam_class', examClass)
+    const taken = new Set((enrolled || []).map(r => r.student_id))
+    res.json({ students: (sd || []).filter(s => !taken.has(s.id)) })
+  } catch (e) { console.error('[admin] GET /api/loc/eligible:', e); res.status(500).json({ error: e.message }) }
+})
+
+// GET /api/loc/subjects?examClass=&stream=
+app.get('/api/loc/subjects', verifyAuth, async (req, res) => {
+  try {
+    const { examClass, stream } = req.query
+    let q = supabase.from('cbse_subjects').select('code, name, exam_class, stream').eq('is_active', true).order('code')
+    if (examClass) q = q.eq('exam_class', examClass)
+    const { data, error } = await q
+    if (error) throw error
+    const all = data || []
+    res.json({ subjects: !stream ? all.filter(s => s.stream == null) : all.filter(s => s.stream == null || s.stream === stream) })
+  } catch (e) { console.error('[admin] GET /api/loc/subjects:', e); res.status(500).json({ error: e.message }) }
+})
+
+// POST /api/loc/enrol  { studentId, sessionCode, examClass }
+app.post('/api/loc/enrol', verifyAuth, async (req, res) => {
+  try {
+    const { studentId, sessionCode, examClass } = req.body || {}
+    if (!studentId || !sessionCode || !examClass) return res.status(400).json({ error: 'studentId, sessionCode, examClass required' })
+    const { data: st, error: se } = await supabase.from('students')
+      .select('id, branch_id, class_name, full_name, father_name, mother_name, date_of_birth, gender, category, religion, apaar_id, science_path')
+      .eq('id', studentId).single()
+    if (se) throw se
+    const row = {
+      student_id: st.id, branch_id: st.branch_id, session_code: sessionCode, exam_class: examClass,
+      stream: detectStream(st.class_name), science_path: st.science_path || null,
+      candidate_name: st.full_name, father_name: st.father_name, mother_name: st.mother_name,
+      date_of_birth: st.date_of_birth, gender: st.gender, category: st.category, religion: st.religion,
+      apaar_id: st.apaar_id, created_by: req.user.email,
+    }
+    const { data, error } = await supabase.from('loc_candidates').insert(row).select('*').single()
+    if (error) throw error
+    res.json({ candidate: data })
+  } catch (e) { console.error('[admin] POST /api/loc/enrol:', e); res.status(500).json({ error: e.message }) }
+})
+
+// PATCH /api/loc/:id — edit CBSE fields (whitelisted).
+app.patch('/api/loc/:id', verifyAuth, async (req, res) => {
+  try {
+    const patch = { updated_by: req.user.email, updated_at: new Date().toISOString() }
+    for (const k of LOC_EDITABLE) if (k in (req.body || {})) patch[k] = req.body[k]
+    const { data, error } = await supabase.from('loc_candidates').update(patch).eq('id', req.params.id).select('*').single()
+    if (error) throw error
+    res.json({ candidate: data })
+  } catch (e) { console.error('[admin] PATCH /api/loc/:id:', e); res.status(500).json({ error: e.message }) }
+})
+
+// POST /api/loc/:id/finalise  &  /withdraw
+app.post('/api/loc/:id/finalise', verifyAuth, async (req, res) => {
+  try {
+    const { data, error } = await supabase.from('loc_candidates').update({ status: 'finalised', finalised_at: new Date().toISOString(), finalised_by: req.user.email, updated_at: new Date().toISOString() }).eq('id', req.params.id).select('*').single()
+    if (error) throw error; res.json({ candidate: data })
+  } catch (e) { console.error('[admin] POST /api/loc/:id/finalise:', e); res.status(500).json({ error: e.message }) }
+})
+app.post('/api/loc/:id/withdraw', verifyAuth, async (req, res) => {
+  try {
+    const { reason } = req.body || {}
+    const { data, error } = await supabase.from('loc_candidates').update({ status: 'withdrawn', withdrawn_at: new Date().toISOString(), withdrawn_by: req.user.email, withdrawal_reason: reason || null, updated_at: new Date().toISOString() }).eq('id', req.params.id).select('*').single()
+    if (error) throw error; res.json({ candidate: data })
+  } catch (e) { console.error('[admin] POST /api/loc/:id/withdraw:', e); res.status(500).json({ error: e.message }) }
+})
+
+// DELETE /api/loc/:id
+app.delete('/api/loc/:id', verifyAuth, async (req, res) => {
+  try { const { error } = await supabase.from('loc_candidates').delete().eq('id', req.params.id); if (error) throw error; res.json({ ok: true }) }
+  catch (e) { console.error('[admin] DELETE /api/loc/:id:', e); res.status(500).json({ error: e.message }) }
+})
+
 // ─── Static + SPA fallback (must come AFTER /api routes) ────────────────────
 app.use(express.static(distDir, {
   maxAge: '1y',

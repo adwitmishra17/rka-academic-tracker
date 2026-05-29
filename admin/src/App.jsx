@@ -42,6 +42,7 @@ import ReportCards from './pages/ReportCards'
 import ReportCardPrint from './pages/ReportCardPrint'
 import HpcCards from './pages/HpcCards'
 import HpcPrint from './pages/HpcPrint'
+import LoC from './pages/LoC'
 import Impersonate from './pages/Impersonate'
 import Layout from './components/Layout'
 
@@ -237,6 +238,7 @@ export default function App() {
             <Route path="report-card-setup" element={<ReportCardSetup />} />
             <Route path="report-cards" element={<ReportCards />} />
             <Route path="hpc" element={<HpcCards />} />
+            <Route path="board-candidates" element={<LoC />} />
             <Route path="impersonate" element={<Impersonate />} />
           </Route>
         </Routes>

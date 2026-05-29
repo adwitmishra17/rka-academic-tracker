@@ -53,6 +53,20 @@ export async function apiPost(path, body) {
   return parseOrThrow(res)
 }
 
+export async function apiPatch(path, body) {
+  const res = await fetch(path, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...(await authHeader()) },
+    body: JSON.stringify(body || {}),
+  })
+  return parseOrThrow(res)
+}
+
+export async function apiDelete(path) {
+  const res = await fetch(path, { method: 'DELETE', headers: { ...(await authHeader()) } })
+  return parseOrThrow(res)
+}
+
 /**
  * fetchStudents — multi-branch fan-out helper.
  *
@@ -93,4 +107,16 @@ export const hpcApi = {
   get:      (id)                                      => apiGet(`/api/hpc/${id}`),
   override: (id, domains, general_remarks)            => apiPost('/api/hpc/override', { id, domains, general_remarks }),
   void:     (id, reason)                              => apiPost('/api/hpc/void', { id, reason }),
+}
+
+// ── Board Candidates (LoC) helpers ──
+export const locApi = {
+  list:     (params)                              => apiGet('/api/loc', params),
+  eligible: (branchCode, sessionCode, examClass)  => apiGet('/api/loc/eligible', { branchCode, sessionCode, examClass }),
+  subjects: (examClass, stream)                   => apiGet('/api/loc/subjects', { examClass, stream }),
+  enrol:    (studentId, sessionCode, examClass)   => apiPost('/api/loc/enrol', { studentId, sessionCode, examClass }),
+  update:   (id, patch)                           => apiPatch(`/api/loc/${id}`, patch),
+  finalise: (id)                                  => apiPost(`/api/loc/${id}/finalise`, {}),
+  withdraw: (id, reason)                          => apiPost(`/api/loc/${id}/withdraw`, { reason }),
+  remove:   (id)                                  => apiDelete(`/api/loc/${id}`),
 }
