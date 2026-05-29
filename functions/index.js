@@ -207,6 +207,54 @@ function tsToIso(ts) {
 }
 
 
+// ── Auto date sheet ──────────────────────────────────────────────────────────
+/**
+ * Ensure a placeholder exam_paper exists for a scholastic subject in EVERY term
+ * of its (branch, session). This is what makes a subject appear in SMS
+ * (Examinations / Report Cards / Admit Cards) the moment it's saved in the
+ * Tracker — no manual date sheet step needed.
+ *
+ * INSERT-ONLY: if a paper already exists for a (subject_id, term_id) it is left
+ * untouched, so max-marks / date / marks edits made later in SMS or the teacher
+ * PWA are never clobbered. SMS holds edit authority.
+ *
+ * Defaults are placeholders (max 100, passing 33, NO exam date); the real date
+ * sheet (dates / times / max marks) is filled in afterwards.
+ */
+async function ensurePapersForSubject(subjectId, branchId, sessionCode) {
+  const sb = supabase()
+
+  const { data: terms, error: tErr } = await sb
+    .from('exam_terms').select('id')
+    .eq('branch_id', branchId).eq('session_code', sessionCode)
+  if (tErr) { console.error('ensurePapers: terms query failed:', tErr.message); return }
+  if (!terms?.length) return  // no terms yet — papers appear once terms are set up
+
+  const { data: existing, error: pErr } = await sb
+    .from('exam_papers').select('term_id').eq('subject_id', subjectId)
+  if (pErr) { console.error('ensurePapers: papers query failed:', pErr.message); return }
+  const have = new Set((existing ?? []).map((p) => p.term_id))
+
+  const rows = terms.filter((t) => !have.has(t.id)).map((t) => ({
+    tracker_doc_id: `auto_${subjectId}_${t.id}`,
+    subject_id:     subjectId,
+    term_id:        t.id,
+    paper_name:     'Main',
+    max_marks:      100,
+    passing_marks:  33,
+    exam_date:      null,
+    has_practical:  false,
+    theory_max:     null,
+    practical_max:  0,
+  }))
+  if (!rows.length) return
+
+  const { error: insErr } = await sb.from('exam_papers').insert(rows)
+  if (insErr) console.error('ensurePapers: insert failed:', insErr.message)
+  else        console.log(`ensurePapers: +${rows.length} paper(s) for subject ${subjectId}`)
+}
+
+
 // =============================================================================
 // TRIGGER 1 — examSubjects → exam_subjects
 //
@@ -277,8 +325,29 @@ exports.syncExamSubjects = onDocumentWritten('examSubjects/{docId}', async event
     .from('exam_subjects')
     .upsert(row, { onConflict: 'branch_id,session_code,class_name,subject_name' })
 
-  if (error) console.error(`syncExamSubjects failed (${docId}):`, error.message)
-  else       console.log(`syncExamSubjects ok: ${docId} [${data.className} / ${data.subjectName}] teacher=${assignedTeacherEmail || '—'}`)
+  if (error) {
+    console.error(`syncExamSubjects failed (${docId}):`, error.message)
+    return
+  }
+  console.log(`syncExamSubjects ok: ${docId} [${data.className} / ${data.subjectName}] teacher=${assignedTeacherEmail || '—'}`)
+
+  // Auto-create the "date sheet" (placeholder papers) so this subject shows up in
+  // SMS immediately. Scholastic only — co_scholastic subjects use grades, not papers.
+  if (data.kind === 'scholastic') {
+    try {
+      const { data: subj } = await supabase()
+        .from('exam_subjects')
+        .select('id')
+        .eq('branch_id', branchId)
+        .eq('session_code', data.sessionCode)
+        .eq('class_name', data.className)
+        .eq('subject_name', data.subjectName)
+        .maybeSingle()
+      if (subj?.id) await ensurePapersForSubject(subj.id, branchId, data.sessionCode)
+    } catch (e) {
+      console.error(`syncExamSubjects: ensurePapers failed (${docId}):`, e.message)
+    }
+  }
 })
 
 
