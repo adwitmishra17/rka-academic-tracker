@@ -286,7 +286,11 @@ exports.syncExamSubjects = onDocumentWritten('examSubjects/{docId}', async event
 // Reference data — no source guard (the SMS office never edits the term list).
 //
 // Firestore doc ID format: `${branchCode}_${sessionCode}_${shortCode}`
-// Upsert conflict: tracker_doc_id
+// Upsert conflict: (branch_id, session_code, short_code)  ← natural key
+//   NOT tracker_doc_id: migration 075 made exam_terms.tracker_doc_id a PARTIAL
+//   unique index (WHERE tracker_doc_id IS NOT NULL), which PostgREST cannot use
+//   as an ON CONFLICT arbiter without a matching predicate. The natural-key
+//   index (migration 070) is full, so we conflict on that instead.
 // =============================================================================
 exports.syncExamTerms = onDocumentWritten('examTerms/{docId}', async event => {
   const docId = event.params.docId
@@ -302,9 +306,10 @@ exports.syncExamTerms = onDocumentWritten('examTerms/{docId}', async event => {
 
   // SMS exam_terms schema:
   //   id, branch_id, session_code, name, short_code, weight, sort_order,
-  //   starts_on, ends_on, result_date, is_finalized, tracker_doc_id UNIQUE
-  // Table has UNIQUE (branch_id, session_code, short_code), but we upsert on
-  // tracker_doc_id — it is deterministic and already encodes all three.
+  //   starts_on, ends_on, result_date, is_finalized, tracker_doc_id
+  // We still WRITE tracker_doc_id (it's 1:1 with the natural key and handy for
+  // tracing), but we conflict on (branch_id, session_code, short_code) — see the
+  // header note on why tracker_doc_id can't be the arbiter here.
   const row = {
     tracker_doc_id: docId,
     branch_id:      branchId,
@@ -320,7 +325,7 @@ exports.syncExamTerms = onDocumentWritten('examTerms/{docId}', async event => {
 
   const { error } = await supabase()
     .from('exam_terms')
-    .upsert(row, { onConflict: 'tracker_doc_id' })
+    .upsert(row, { onConflict: 'branch_id,session_code,short_code' })
 
   if (error) console.error(`syncExamTerms failed (${docId}):`, error.message)
   else       console.log(`syncExamTerms ok: ${docId} [${data.sessionCode} / ${data.shortCode}]`)
