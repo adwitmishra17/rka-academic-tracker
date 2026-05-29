@@ -215,7 +215,16 @@ function tsToIso(ts) {
 // never manually edits the subject catalogue.
 //
 // Firestore doc ID format: auto-generated (addDoc in ReportCardSetup.jsx)
-// Upsert conflict: tracker_doc_id
+// Upsert conflict: (branch_id, session_code, class_name, subject_name)  ← natural key
+//   NOT tracker_doc_id: every "Build from Timetable" run in the admin portal
+//   creates BRAND-NEW auto-ID examSubjects docs, so the same logical subject
+//   gets a fresh tracker_doc_id each time. Conflicting on tracker_doc_id would
+//   never match the existing Supabase row → INSERT → violates the FULL unique
+//   index exam_subjects_uniq (migration 070) → the row keeps its stale/NULL
+//   assigned_teacher_email and the teacher never sees the subject. Conflicting
+//   on the natural key updates the existing row in place (incl. the new teacher
+//   email). tracker_doc_id is also a PARTIAL unique index (migration 075), which
+//   PostgREST can't use as an arbiter anyway — same reason as syncExamTerms.
 // =============================================================================
 exports.syncExamSubjects = onDocumentWritten('examSubjects/{docId}', async event => {
   const docId = event.params.docId
@@ -266,7 +275,7 @@ exports.syncExamSubjects = onDocumentWritten('examSubjects/{docId}', async event
 
   const { error } = await supabase()
     .from('exam_subjects')
-    .upsert(row, { onConflict: 'tracker_doc_id' })
+    .upsert(row, { onConflict: 'branch_id,session_code,class_name,subject_name' })
 
   if (error) console.error(`syncExamSubjects failed (${docId}):`, error.message)
   else       console.log(`syncExamSubjects ok: ${docId} [${data.className} / ${data.subjectName}] teacher=${assignedTeacherEmail || '—'}`)
