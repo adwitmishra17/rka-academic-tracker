@@ -32,8 +32,7 @@ import StudentProfile from './pages/StudentProfile'
 import TeacherProfile from './pages/TeacherProfile'
 import LessonPlanFields from './pages/LessonPlanFields'
 import LessonPlans from './pages/LessonPlans'
-import SubjectSettings from './pages/SubjectSettings'
-import ClassSubjectSettings from './pages/ClassSubjectSettings'
+import ClassesAndSubjectsAssignment from './pages/ClassesAndSubjectsAssignment'
 import LessonPlanReschedule from './pages/LessonPlanReschedule'
 import TeacherArrangement from './pages/TeacherArrangement'
 import TestDetail from './pages/TestDetail'
@@ -220,8 +219,10 @@ export default function App() {
             <Route path="teacher-management/:teacherId" element={<TeacherProfile />} />
             <Route path="lesson-plan-fields" element={<LessonPlanFields />} />
             <Route path="lesson-plans" element={<LessonPlans />} />
-            <Route path="subject-settings" element={<SubjectSettings />} />
-            <Route path="class-subjects" element={<ClassSubjectSettings />} />
+            <Route path="classes-subjects-assignment" element={<ClassesAndSubjectsAssignment />} />
+            {/* Legacy paths → merged page */}
+            <Route path="subject-settings" element={<Navigate to="/classes-subjects-assignment" replace />} />
+            <Route path="class-subjects" element={<Navigate to="/classes-subjects-assignment" replace />} />
             <Route path="lesson-plan-reschedule" element={<LessonPlanReschedule />} />
             <Route path="arrangement" element={<TeacherArrangement />} />
             <Route path="tests/:testId" element={<TestDetail />} />
