@@ -369,6 +369,14 @@ export default function ReportCardSetup() {
   const [importRows,   setImportRows]   = useState([])
   const [importing,    setImporting]    = useState(false)
 
+  // "Build from Timetable" (session-wide) modal state. buildAllRows is the flat
+  // editable preview across ALL classes: each row =
+  // { className, subjectName, teacherId, teacherName, kind, include, exists }.
+  const [showBuildAll,   setShowBuildAll]   = useState(false)
+  const [buildAllRows,   setBuildAllRows]   = useState([])
+  const [buildingAll,    setBuildingAll]    = useState(false)
+  const [buildAllResult, setBuildAllResult] = useState(null)
+
   // Reset draft state when the admin switches session or class — pending
   // changes don't carry across contexts.
   useEffect(() => {
@@ -553,6 +561,94 @@ export default function ReportCardSetup() {
     setImporting(false)
   }
 
+  // ── Build from Timetable (all classes) ─────────────────────────────────
+  // Sweep the WHOLE branch timetable: enumerate every class, derive its
+  // subject → teacher list, and present one review list grouped by class.
+  // This is the primary way to populate subjects for a session — the admin
+  // no longer adds them class-by-class. Existing subjects are pre-skipped.
+  async function openBuildAll() {
+    if (!subjectsSession) return
+    setSubjError('')
+    setBuildAllResult(null)
+
+    // Distinct classes present in the timetable, ordered by the canonical list
+    const present = new Set()
+    timetableSlots.forEach(s => (s.classNames || []).forEach(c => present.add(c)))
+    const classes = CLASS_NAMES.filter(c => present.has(c))
+    ;[...present].filter(c => !CLASS_NAMES.includes(c)).sort().forEach(c => classes.push(c))
+
+    // Existing subjects for the whole session (all classes) → flag duplicates
+    let existing = []
+    try {
+      const snap = await getDocs(query(
+        collection(db, 'examSubjects'),
+        where('branchCode',  '==', subjectsSession.branchCode),
+        where('sessionCode', '==', subjectsSession.sessionCode),
+      ))
+      existing = snap.docs.map(d => d.data())
+    } catch (e) { console.error('openBuildAll existing:', e) }
+    const key = (cls, name, kind) => `${cls}__${kind}__${(name || '').toLowerCase()}`
+    const existingSet = new Set(existing.map(s => key(s.className, s.subjectName, s.kind)))
+
+    const rows = []
+    classes.forEach(cls => {
+      deriveSubjectsFromTimetable(timetableSlots, cls).forEach(d => {
+        const exists = existingSet.has(key(cls, d.subjectName, d.kind))
+        rows.push({ className: cls, ...d, exists, include: !exists })
+      })
+    })
+    setBuildAllRows(rows)
+    setShowBuildAll(true)
+  }
+
+  function updateBuildRow(idx, patch) {
+    setBuildAllRows(rows => rows.map((r, i) => i === idx ? { ...r, ...patch } : r))
+  }
+
+  function setClassInclude(className, include) {
+    setBuildAllRows(rows => rows.map(r =>
+      r.className === className && !r.exists ? { ...r, include } : r
+    ))
+  }
+
+  async function commitBuildAll() {
+    const toAdd = buildAllRows.filter(r => r.include && !r.exists)
+    if (toAdd.length === 0) { setShowBuildAll(false); return }
+    setBuildingAll(true)
+    try {
+      // Firestore writeBatch caps at 500 ops; the school has < 250 (class×subject) pairs.
+      const orderByClass = new Map()
+      const batch = writeBatch(db)
+      for (const r of toAdd) {
+        const next = (orderByClass.get(r.className) ?? 0) + 1
+        orderByClass.set(r.className, next)
+        const ref = doc(collection(db, 'examSubjects'))
+        batch.set(ref, {
+          branchCode:          subjectsSession.branchCode,
+          sessionCode:         subjectsSession.sessionCode,
+          className:           r.className,
+          subjectName:         r.subjectName,
+          subjectCode:         '',
+          kind:                r.kind,
+          isOptional:          false,
+          sortOrder:           next,
+          assignedTeacherId:   r.teacherId   || '',
+          assignedTeacherName: r.teacherName || '',
+          createdAt:           Timestamp.now(),
+          createdBy:           user?.email || '',
+        })
+      }
+      await batch.commit()
+      setBuildAllResult({ added: toAdd.length, classes: new Set(toAdd.map(r => r.className)).size })
+      setShowBuildAll(false)
+      await loadSubjects()
+    } catch (e) {
+      console.error('commitBuildAll:', e)
+      setSubjError('Failed to build subjects from timetable. Try again.')
+    }
+    setBuildingAll(false)
+  }
+
   async function addSubject() {
     const name = newSubj.name.trim()
     if (!name) { setSubjError('Subject name is required.'); return }
@@ -599,10 +695,10 @@ export default function ReportCardSetup() {
       {/* Header */}
       <div className="fade-up" style={{ marginBottom: 24 }}>
         <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 24, fontWeight: 600, color: 'var(--green-dark)', marginBottom: 4 }}>
-          Report Card Setup
+          Session &amp; Marks
         </h1>
         <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>
-          Configure academic sessions, exam terms, and subject mappings for report cards and HPC assessments.
+          Set the academic session and terms, then build subjects straight from the timetable. Teachers can enter marks as soon as a term is set up.
         </p>
       </div>
 
@@ -824,8 +920,46 @@ export default function ReportCardSetup() {
 
           ) : (
             <>
-              {/* Import from Timetable — derives subjects + teachers from the
-                  class's scheduled periods in one action */}
+              {/* Build from Timetable (session-wide) — the primary way to
+                  populate subjects: derives every class's subject + teacher
+                  from the branch timetable in one reviewed action. */}
+              <div style={{ background: 'var(--green-light)', border: '1px solid var(--green-muted)', borderRadius: 'var(--radius-lg)', padding: '16px 18px', marginBottom: 16 }}>
+                <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 14, flexWrap: 'wrap' }}>
+                  <div style={{ flex: 1, minWidth: 220 }}>
+                    <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--green-dark)', marginBottom: 5, display: 'flex', alignItems: 'center', gap: 7 }}>
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                      Build subjects from the timetable
+                    </div>
+                    <p style={{ fontSize: 12.5, color: 'var(--green-dark)', lineHeight: 1.55, opacity: 0.85 }}>
+                      Reads the {branchLabel(subjectsSession.branchCode)} timetable and proposes the subject &amp; teacher for <strong>every class at once</strong>. Review the list, then add — subjects you already mapped are kept untouched.
+                    </p>
+                  </div>
+                  <button
+                    onClick={openBuildAll}
+                    disabled={timetableSlots.length === 0}
+                    title={timetableSlots.length === 0 ? 'No timetable found for this branch' : 'Derive subjects and teachers for all classes from the timetable'}
+                    style={{
+                      padding: '10px 18px', borderRadius: 'var(--radius-sm)',
+                      background: timetableSlots.length === 0 ? 'var(--gray-200)' : 'var(--green)',
+                      color: timetableSlots.length === 0 ? 'var(--gray-400)' : 'white',
+                      border: 'none', fontSize: 13, fontWeight: 600, whiteSpace: 'nowrap',
+                      cursor: timetableSlots.length === 0 ? 'not-allowed' : 'pointer',
+                      display: 'inline-flex', alignItems: 'center', gap: 7,
+                    }}
+                  >
+                    {timetableSlots.length === 0 ? 'No timetable found' : 'Build from Timetable'}
+                  </button>
+                </div>
+              </div>
+
+              {buildAllResult && (
+                <div style={{ background: 'var(--green-light)', border: '1px solid var(--green-muted)', borderRadius: 'var(--radius-md)', padding: '10px 14px', marginBottom: 16, fontSize: 12.5, color: 'var(--green-dark)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 7 }}>
+                  <span style={{ fontSize: 14 }}>✓</span>
+                  Added {buildAllResult.added} subject{buildAllResult.added === 1 ? '' : 's'} across {buildAllResult.classes} class{buildAllResult.classes === 1 ? '' : 'es'}. Pick a class below to fine-tune.
+                </div>
+              )}
+
+              {/* Import a single class only (secondary) */}
               <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
                 <button
                   onClick={openImportFromTimetable}
@@ -844,7 +978,7 @@ export default function ReportCardSetup() {
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
                   </svg>
-                  Import from Timetable
+                  Import this class only
                 </button>
               </div>
 
@@ -1046,6 +1180,123 @@ export default function ReportCardSetup() {
           </div>
         </div>
       )}
+
+      {/* ── Build-from-Timetable (all classes) preview modal ─────────────── */}
+      {showBuildAll && (() => {
+        const newRows    = buildAllRows.filter(r => !r.exists)
+        const selected   = newRows.filter(r => r.include)
+        const classCount = new Set(selected.map(r => r.className)).size
+        // Group rows by class while preserving each row's flat index (for edits)
+        const groups = []
+        const seen = new Map()
+        buildAllRows.forEach((r, idx) => {
+          if (!seen.has(r.className)) { const arr = []; seen.set(r.className, arr); groups.push([r.className, arr]) }
+          seen.get(r.className).push({ r, idx })
+        })
+        const miniBtn = (disabled) => ({
+          padding: '3px 9px', borderRadius: 6, fontSize: 11, fontWeight: 600,
+          border: '1px solid var(--green-muted)', background: 'var(--white)',
+          color: disabled ? 'var(--gray-400)' : 'var(--green-dark)',
+          cursor: disabled ? 'not-allowed' : 'pointer',
+        })
+        return (
+          <div
+            onClick={() => !buildingAll && setShowBuildAll(false)}
+            style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 200, padding: 20 }}
+          >
+            <div
+              onClick={e => e.stopPropagation()}
+              className="fade-in"
+              style={{ background: 'var(--white)', borderRadius: 'var(--radius-lg)', width: '100%', maxWidth: 720, maxHeight: '88vh', display: 'flex', flexDirection: 'column', boxShadow: 'var(--shadow-lg)' }}
+            >
+              <div style={{ padding: '18px 22px', borderBottom: '1px solid var(--gray-100)' }}>
+                <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 18, fontWeight: 600, color: 'var(--green-dark)' }}>
+                  Build from Timetable — {branchLabel(subjectsSession.branchCode)} · {subjectsSession.sessionCode}
+                </h2>
+                <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4, lineHeight: 1.5 }}>
+                  Subjects and teachers derived from the timetable for every class. Uncheck anything not graded on the report card,
+                  flip the scholastic / co-scholastic guess if needed, then add. Already-mapped subjects are greyed out and skipped.
+                </p>
+              </div>
+
+              <div style={{ flex: 1, overflowY: 'auto' }}>
+                {groups.length === 0 ? (
+                  <div style={{ padding: '32px 22px', textAlign: 'center', color: 'var(--text-muted)', fontSize: 13 }}>
+                    No classes found in the timetable for <strong>{branchLabel(subjectsSession.branchCode)}</strong>. Add periods in the Timetable section first.
+                  </div>
+                ) : groups.map(([cls, items]) => {
+                  const clsNew = items.filter(({ r }) => !r.exists)
+                  const clsSel = clsNew.filter(({ r }) => r.include)
+                  return (
+                    <div key={cls}>
+                      <div style={{ position: 'sticky', top: 0, zIndex: 1, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '8px 22px', background: 'var(--gray-50)', borderTop: '1px solid var(--gray-100)', borderBottom: '1px solid var(--gray-100)' }}>
+                        <span style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--text)' }}>{cls}</span>
+                        <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{clsSel.length}/{clsNew.length} selected</span>
+                          <button onClick={() => setClassInclude(cls, true)}  disabled={clsNew.length === 0} style={miniBtn(clsNew.length === 0)}>All</button>
+                          <button onClick={() => setClassInclude(cls, false)} disabled={clsNew.length === 0} style={miniBtn(clsNew.length === 0)}>None</button>
+                        </span>
+                      </div>
+                      {items.map(({ r, idx }) => (
+                        <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '9px 22px', borderBottom: '1px solid var(--gray-50)', opacity: r.exists ? 0.5 : 1 }}>
+                          <input
+                            type="checkbox"
+                            checked={r.include}
+                            disabled={r.exists}
+                            onChange={e => updateBuildRow(idx, { include: e.target.checked })}
+                            style={{ flexShrink: 0, width: 16, height: 16, cursor: r.exists ? 'not-allowed' : 'pointer' }}
+                          />
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontSize: 13.5, fontWeight: 500, color: 'var(--text)' }}>
+                              {r.subjectName}
+                              {r.exists && <span style={{ fontSize: 10.5, color: 'var(--text-muted)', marginLeft: 8, fontWeight: 400 }}>· already mapped</span>}
+                            </div>
+                            <div style={{ fontSize: 11.5, color: 'var(--text-muted)' }}>
+                              {r.teacherName ? `Teacher: ${r.teacherName}` : 'No teacher in timetable'}
+                            </div>
+                          </div>
+                          <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+                            {['scholastic', 'co_scholastic'].map(k => (
+                              <button
+                                key={k}
+                                onClick={() => !r.exists && updateBuildRow(idx, { kind: k })}
+                                disabled={r.exists}
+                                style={{
+                                  padding: '4px 9px', borderRadius: 6, fontSize: 10.5, fontWeight: 600,
+                                  border: '1px solid ' + (r.kind === k ? 'var(--green)' : 'var(--gray-200)'),
+                                  background: r.kind === k ? 'var(--green-light)' : 'var(--white)',
+                                  color: r.kind === k ? 'var(--green-dark)' : 'var(--text-muted)',
+                                  cursor: r.exists ? 'not-allowed' : 'pointer',
+                                }}
+                              >
+                                {k === 'scholastic' ? 'Scholastic' : 'Co-Sch.'}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )
+                })}
+              </div>
+
+              <div style={{ padding: '14px 22px', borderTop: '1px solid var(--gray-100)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+                <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                  {selected.length} of {newRows.length} new subjects · {classCount} class{classCount === 1 ? '' : 'es'}
+                </span>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button onClick={() => setShowBuildAll(false)} disabled={buildingAll} style={{ padding: '8px 16px', borderRadius: 'var(--radius-sm)', background: 'var(--white)', color: 'var(--text-muted)', border: '1px solid var(--gray-200)', fontSize: 13, fontWeight: 500, cursor: buildingAll ? 'not-allowed' : 'pointer' }}>
+                    Cancel
+                  </button>
+                  <button onClick={commitBuildAll} disabled={buildingAll || selected.length === 0} style={btn('primary', buildingAll || selected.length === 0)}>
+                    {buildingAll ? 'Adding…' : `Add ${selected.length} subjects`}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
     </div>
   )
 }
