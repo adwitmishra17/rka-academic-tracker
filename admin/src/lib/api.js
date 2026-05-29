@@ -77,3 +77,11 @@ export async function fetchStudents({ branchCodes, className, isActive } = {}) {
   )
   return results.flatMap(r => r.students)
 }
+
+// ── Exam / report-card helpers (read SMS Supabase via the server) ──
+export const examApi = {
+  sessions:           ()                                  => apiGet('/api/exam/sessions'),
+  terms:              (branchCode, sessionCode)           => apiGet('/api/exam/terms', { branchCode, sessionCode }),
+  reportCardStudents: (branchCode, className, section)    => apiGet('/api/exam/report-card-students', { branchCode, className, section }),
+  reportCard:         (studentId, sessionCode)            => apiGet('/api/exam/report-card', { studentId, sessionCode }),
+}

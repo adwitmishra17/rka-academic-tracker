@@ -356,6 +356,162 @@ app.get('/api/health', (_req, res) => {
   })
 })
 
+// ─── Exam / Report-card routes (read SMS Supabase via service-role) ─────────
+// Mirrors the SMS report-card logic (src/lib/reportCards.js) server-side so the
+// Firebase-only admin app can show/print report cards without a browser Supabase
+// client. The service-role key never leaves the server.
+
+const CBSE_GRADES = [
+  { min: 91, grade: 'A1' }, { min: 81, grade: 'A2' }, { min: 71, grade: 'B1' },
+  { min: 61, grade: 'B2' }, { min: 51, grade: 'C1' }, { min: 41, grade: 'C2' },
+  { min: 33, grade: 'D' },  { min: 0,  grade: 'E' },
+]
+function gradeFor(pct) {
+  if (pct == null || isNaN(pct)) return null
+  for (const g of CBSE_GRADES) if (pct >= g.min) return g
+  return CBSE_GRADES[CBSE_GRADES.length - 1]
+}
+
+// Faithful server-side port of SMS getStudentReportCard({ studentId, sessionCode }).
+async function computeReportCard(studentId, sessionCode) {
+  const { data: student, error: stErr } = await supabase.from('students')
+    .select('id, full_name, admission_no, class_name, section, roll_number, date_of_birth, father_name, mother_name, photo_key, house, apaar_id, gender, branch_id, branches(code, name)')
+    .eq('id', studentId).single()
+  if (stErr) throw stErr
+
+  const { data: terms, error: tErr } = await supabase.from('exam_terms')
+    .select('id, name, short_code, weight, sort_order, starts_on, ends_on, result_date, is_finalized')
+    .eq('branch_id', student.branch_id).eq('session_code', sessionCode)
+    .order('sort_order').order('starts_on')
+  if (tErr) throw tErr
+
+  const { data: subjects, error: subErr } = await supabase.from('exam_subjects')
+    .select('id, subject_name, subject_code, kind, is_optional, sort_order')
+    .eq('branch_id', student.branch_id).eq('session_code', sessionCode).eq('class_name', student.class_name)
+    .order('sort_order').order('subject_name')
+  if (subErr) throw subErr
+  const scholastic   = (subjects ?? []).filter(s => (s.kind ?? 'scholastic') === 'scholastic')
+  const coScholastic = (subjects ?? []).filter(s => s.kind === 'co_scholastic')
+
+  const termIds = (terms || []).map(t => t.id)
+  let papers = []
+  if (termIds.length) {
+    const { data, error } = await supabase.from('exam_papers')
+      .select('id, term_id, subject_id, max_marks, passing_marks').in('term_id', termIds)
+    if (error) throw error
+    papers = (data || []).filter(p => scholastic.find(s => s.id === p.subject_id))
+  }
+
+  const paperIds = papers.map(p => p.id)
+  let marks = []
+  if (paperIds.length) {
+    const { data, error } = await supabase.from('exam_marks')
+      .select('paper_id, marks_obtained, is_absent').eq('student_id', studentId).in('paper_id', paperIds)
+    if (error) throw error
+    marks = data || []
+  }
+  const markByPaper = new Map(marks.map(m => [m.paper_id, m]))
+
+  const grid = scholastic.map(subj => {
+    const row = { subject: subj, byTerm: {}, total: { obtained: 0, max: 0, pct: null, grade: null } }
+    let cumO = 0, cumM = 0
+    for (const t of terms) {
+      const paper = papers.find(p => p.term_id === t.id && p.subject_id === subj.id)
+      if (!paper) { row.byTerm[t.id] = { paper: null }; continue }
+      const mk = markByPaper.get(paper.id)
+      const obtained = mk?.is_absent ? null : (mk?.marks_obtained ?? null)
+      const pct = (obtained != null && Number(paper.max_marks) > 0) ? (100 * obtained / Number(paper.max_marks)) : null
+      row.byTerm[t.id] = { marks: obtained, max: Number(paper.max_marks), passing: Number(paper.passing_marks), absent: !!mk?.is_absent, pct, grade: gradeFor(pct) }
+      if (obtained != null) { cumO += obtained; cumM += Number(paper.max_marks) }
+    }
+    row.total = { obtained: cumO, max: cumM, pct: cumM > 0 ? (100 * cumO / cumM) : null, grade: gradeFor(cumM > 0 ? (100 * cumO / cumM) : null) }
+    return row
+  })
+
+  let overallO = 0, overallM = 0
+  for (const row of grid) {
+    if (row.subject.is_optional && row.total.max === 0) continue
+    overallO += row.total.obtained; overallM += row.total.max
+  }
+  const overallPct = overallM > 0 ? (100 * overallO / overallM) : null
+
+  // Co-scholastic — most authoritative grade per subject (finalized term, else latest).
+  let coRows = []
+  if (coScholastic.length && termIds.length) {
+    const { data: grades } = await supabase.from('exam_coscholastic_grades')
+      .select('subject_id, term_id, grade, remarks, entered_at')
+      .in('subject_id', coScholastic.map(s => s.id)).in('term_id', termIds).eq('student_id', studentId)
+    const finalIds = new Set((terms || []).filter(t => t.is_finalized).map(t => t.id))
+    const bySubject = new Map()
+    for (const g of grades ?? []) {
+      const cur = bySubject.get(g.subject_id)
+      const isF = finalIds.has(g.term_id), isCurF = cur && finalIds.has(cur.term_id)
+      if (!cur || (isF && !isCurF) || (isF === isCurF && new Date(g.entered_at) > new Date(cur.entered_at))) bySubject.set(g.subject_id, g)
+    }
+    coRows = coScholastic.map(s => ({ name: s.subject_name, code: s.subject_code, grade: bySubject.get(s.id)?.grade ?? '—', remarks: bySubject.get(s.id)?.remarks ?? null }))
+  }
+
+  return {
+    student, sessionCode, terms, grid,
+    overall: { obtained: overallO, max: overallM, pct: overallPct, grade: gradeFor(overallPct) },
+    coScholastic: coRows,
+  }
+}
+
+// GET /api/exam/sessions — distinct session codes (for the picker).
+app.get('/api/exam/sessions', verifyAuth, async (_req, res) => {
+  try {
+    const { data, error } = await supabase.from('exam_terms').select('session_code')
+    if (error) throw error
+    const sessions = [...new Set((data || []).map(r => r.session_code).filter(Boolean))].sort().reverse()
+    res.json({ sessions })
+  } catch (e) { console.error('[admin] GET /api/exam/sessions:', e); res.status(500).json({ error: e.message }) }
+})
+
+// GET /api/exam/terms?branchCode=&sessionCode=
+app.get('/api/exam/terms', verifyAuth, async (req, res) => {
+  try {
+    let q = supabase.from('exam_terms')
+      .select('id, name, short_code, sort_order, session_code, is_finalized').order('sort_order')
+    if (req.query.sessionCode) q = q.eq('session_code', req.query.sessionCode)
+    if (req.query.branchCode) {
+      const bid = await branchIdForCode(req.query.branchCode)
+      if (!bid) return res.json({ terms: [] })
+      q = q.eq('branch_id', bid)
+    }
+    const { data, error } = await q
+    if (error) throw error
+    res.json({ terms: data })
+  } catch (e) { console.error('[admin] GET /api/exam/terms:', e); res.status(500).json({ error: e.message }) }
+})
+
+// GET /api/exam/report-card-students?branchCode=&className=&section=
+app.get('/api/exam/report-card-students', verifyAuth, async (req, res) => {
+  try {
+    const { branchCode, className, section } = req.query
+    if (!branchCode || !className) return res.json({ students: [] })
+    const bid = await branchIdForCode(branchCode)
+    if (!bid) return res.json({ students: [] })
+    let q = supabase.from('students')
+      .select('id, full_name, admission_no, class_name, section, roll_number, photo_key')
+      .eq('branch_id', bid).eq('class_name', className).eq('is_active', true).eq('deleted_in_sms', false)
+      .order('section').order('roll_number').order('full_name')
+    if (section) q = q.eq('section', section)
+    const { data, error } = await q
+    if (error) throw error
+    res.json({ students: data })
+  } catch (e) { console.error('[admin] GET /api/exam/report-card-students:', e); res.status(500).json({ error: e.message }) }
+})
+
+// GET /api/exam/report-card?studentId=&sessionCode=
+app.get('/api/exam/report-card', verifyAuth, async (req, res) => {
+  try {
+    const { studentId, sessionCode } = req.query
+    if (!studentId || !sessionCode) return res.status(400).json({ error: 'studentId and sessionCode required' })
+    res.json({ card: await computeReportCard(studentId, sessionCode) })
+  } catch (e) { console.error('[admin] GET /api/exam/report-card:', e); res.status(500).json({ error: e.message }) }
+})
+
 // ─── Static + SPA fallback (must come AFTER /api routes) ────────────────────
 app.use(express.static(distDir, {
   maxAge: '1y',
