@@ -40,6 +40,8 @@ import SyllabusUpload from './pages/SyllabusUpload'
 import ReportCardSetup from './pages/ReportCardSetup'
 import ReportCards from './pages/ReportCards'
 import ReportCardPrint from './pages/ReportCardPrint'
+import HpcCards from './pages/HpcCards'
+import HpcPrint from './pages/HpcPrint'
 import Impersonate from './pages/Impersonate'
 import Layout from './components/Layout'
 
@@ -201,6 +203,7 @@ export default function App() {
           <Route path="/login" element={!user ? <Login authError={authError} /> : <Navigate to="/" />} />
           {/* Standalone (no sidebar) — printable report card */}
           <Route path="/report-cards/print" element={user ? <ReportCardPrint /> : <Navigate to="/login" replace />} />
+          <Route path="/hpc/print" element={user ? <HpcPrint /> : <Navigate to="/login" replace />} />
           <Route path="/" element={user ? <Layout /> : <Navigate to="/login" />}>
             <Route index element={<Dashboard />} />
             <Route path="syllabus" element={<Syllabus />} />
@@ -233,6 +236,7 @@ export default function App() {
             <Route path="syllabus-upload" element={<SyllabusUpload />} />
             <Route path="report-card-setup" element={<ReportCardSetup />} />
             <Route path="report-cards" element={<ReportCards />} />
+            <Route path="hpc" element={<HpcCards />} />
             <Route path="impersonate" element={<Impersonate />} />
           </Route>
         </Routes>

@@ -86,3 +86,11 @@ export const examApi = {
   reportCard:         (studentId, sessionCode)            => apiGet('/api/exam/report-card', { studentId, sessionCode }),
   saveMarks:          (marks)                             => apiPost('/api/exam/marks', { marks }),
 }
+
+// ── HPC helpers ──
+export const hpcApi = {
+  list:     (branchCode, termId, className, section) => apiGet('/api/hpc', { branchCode, termId, className, section }),
+  get:      (id)                                      => apiGet(`/api/hpc/${id}`),
+  override: (id, domains, general_remarks)            => apiPost('/api/hpc/override', { id, domains, general_remarks }),
+  void:     (id, reason)                              => apiPost('/api/hpc/void', { id, reason }),
+}

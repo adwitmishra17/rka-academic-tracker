@@ -539,6 +539,63 @@ app.post('/api/exam/marks', verifyAuth, async (req, res) => {
   } catch (e) { console.error('[admin] POST /api/exam/marks:', e); res.status(500).json({ error: e.message }) }
 })
 
+// ─── HPC routes (Holistic Progress Card — read SMS Supabase, service-role) ──
+const HPC_SELECT = `id, branch_id, session_code, term_id, student_id, student_name, admission_no, class_name, section, roll_number, date_of_birth, father_name, mother_name, photo_key, domains, general_remarks, assessed_at, assessed_by, source, is_void, voided_at, voided_by, void_reason, branches(code, name), exam_terms(id, name, short_code, session_code)`
+
+// GET /api/hpc?branchCode=&termId=&className=&section=
+app.get('/api/hpc', verifyAuth, async (req, res) => {
+  try {
+    const { branchCode, termId, className, section } = req.query
+    let q = supabase.from('hpc_assessments').select(HPC_SELECT).eq('is_void', false).order('assessed_at', { ascending: false })
+    if (branchCode) { const bid = await branchIdForCode(branchCode); if (!bid) return res.json({ assessments: [] }); q = q.eq('branch_id', bid) }
+    if (termId)    q = q.eq('term_id', termId)
+    if (className) q = q.eq('class_name', className)
+    if (section)   q = q.eq('section', section)
+    const { data, error } = await q
+    if (error) throw error
+    res.json({ assessments: data })
+  } catch (e) { console.error('[admin] GET /api/hpc:', e); res.status(500).json({ error: e.message }) }
+})
+
+// GET /api/hpc/:id
+app.get('/api/hpc/:id', verifyAuth, async (req, res) => {
+  try {
+    const { data, error } = await supabase.from('hpc_assessments').select(HPC_SELECT).eq('id', req.params.id).single()
+    if (error) throw error
+    res.json({ assessment: data })
+  } catch (e) { console.error('[admin] GET /api/hpc/:id:', e); res.status(500).json({ error: e.message }) }
+})
+
+// POST /api/hpc/override  { id, domains, general_remarks } — source='manual', mirror-safe.
+app.post('/api/hpc/override', verifyAuth, async (req, res) => {
+  try {
+    const { id, domains, general_remarks } = req.body || {}
+    if (!id || !domains) return res.status(400).json({ error: 'id and domains required' })
+    const { data, error } = await supabase.from('hpc_assessments').update({
+      domains,
+      general_remarks: general_remarks?.trim() ? general_remarks.trim() : null,
+      source: 'manual',
+      updated_at: new Date().toISOString(),
+    }).eq('id', id).select(HPC_SELECT).single()
+    if (error) throw error
+    res.json({ assessment: data })
+  } catch (e) { console.error('[admin] POST /api/hpc/override:', e); res.status(500).json({ error: e.message }) }
+})
+
+// POST /api/hpc/void  { id, reason } — super admin only.
+app.post('/api/hpc/void', verifyAuth, async (req, res) => {
+  try {
+    if (req.user.email !== SUPER_ADMIN_EMAIL) return res.status(403).json({ error: 'Super admin only' })
+    const { id, reason } = req.body || {}
+    if (!id || !reason?.trim()) return res.status(400).json({ error: 'id and reason required' })
+    const { error } = await supabase.from('hpc_assessments').update({
+      is_void: true, voided_at: new Date().toISOString(), voided_by: req.user.email, void_reason: reason.trim(),
+    }).eq('id', id)
+    if (error) throw error
+    res.json({ ok: true })
+  } catch (e) { console.error('[admin] POST /api/hpc/void:', e); res.status(500).json({ error: e.message }) }
+})
+
 // ─── Static + SPA fallback (must come AFTER /api routes) ────────────────────
 app.use(express.static(distDir, {
   maxAge: '1y',
