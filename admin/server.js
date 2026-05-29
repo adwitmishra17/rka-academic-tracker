@@ -421,7 +421,7 @@ async function computeReportCard(studentId, sessionCode) {
       const mk = markByPaper.get(paper.id)
       const obtained = mk?.is_absent ? null : (mk?.marks_obtained ?? null)
       const pct = (obtained != null && Number(paper.max_marks) > 0) ? (100 * obtained / Number(paper.max_marks)) : null
-      row.byTerm[t.id] = { marks: obtained, max: Number(paper.max_marks), passing: Number(paper.passing_marks), absent: !!mk?.is_absent, pct, grade: gradeFor(pct) }
+      row.byTerm[t.id] = { paperId: paper.id, marks: obtained, max: Number(paper.max_marks), passing: Number(paper.passing_marks), absent: !!mk?.is_absent, pct, grade: gradeFor(pct) }
       if (obtained != null) { cumO += obtained; cumM += Number(paper.max_marks) }
     }
     row.total = { obtained: cumO, max: cumM, pct: cumM > 0 ? (100 * cumO / cumM) : null, grade: gradeFor(cumM > 0 ? (100 * cumO / cumM) : null) }
@@ -510,6 +510,33 @@ app.get('/api/exam/report-card', verifyAuth, async (req, res) => {
     if (!studentId || !sessionCode) return res.status(400).json({ error: 'studentId and sessionCode required' })
     res.json({ card: await computeReportCard(studentId, sessionCode) })
   } catch (e) { console.error('[admin] GET /api/exam/report-card:', e); res.status(500).json({ error: e.message }) }
+})
+
+// POST /api/exam/marks — admin override. Mirrors SMS saveMarks: upsert
+// exam_marks on (paper_id, student_id) with source='manual' so the
+// Firestore→Supabase mirror leaves the corrected value untouched.
+// Body: { marks: [{ paperId, studentId, marksObtained, isAbsent }] }
+app.post('/api/exam/marks', verifyAuth, async (req, res) => {
+  try {
+    const { marks } = req.body || {}
+    if (!Array.isArray(marks) || marks.length === 0) return res.status(400).json({ error: 'marks[] required' })
+    const now = new Date().toISOString()
+    const rows = marks
+      .filter(m => m.paperId && m.studentId)
+      .map(m => ({
+        paper_id:       m.paperId,
+        student_id:     m.studentId,
+        marks_obtained: m.isAbsent ? null : (m.marksObtained == null || m.marksObtained === '' ? null : Number(m.marksObtained)),
+        is_absent:      !!m.isAbsent,
+        source:         'manual',
+        entered_by:     req.user.email || req.user.uid,
+        entered_at:     now,
+      }))
+    if (!rows.length) return res.status(400).json({ error: 'no valid rows' })
+    const { error } = await supabase.from('exam_marks').upsert(rows, { onConflict: 'paper_id,student_id' })
+    if (error) throw error
+    res.json({ saved: rows.length })
+  } catch (e) { console.error('[admin] POST /api/exam/marks:', e); res.status(500).json({ error: e.message }) }
 })
 
 // ─── Static + SPA fallback (must come AFTER /api routes) ────────────────────

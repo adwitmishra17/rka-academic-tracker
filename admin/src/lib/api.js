@@ -84,4 +84,5 @@ export const examApi = {
   terms:              (branchCode, sessionCode)           => apiGet('/api/exam/terms', { branchCode, sessionCode }),
   reportCardStudents: (branchCode, className, section)    => apiGet('/api/exam/report-card-students', { branchCode, className, section }),
   reportCard:         (studentId, sessionCode)            => apiGet('/api/exam/report-card', { studentId, sessionCode }),
+  saveMarks:          (marks)                             => apiPost('/api/exam/marks', { marks }),
 }

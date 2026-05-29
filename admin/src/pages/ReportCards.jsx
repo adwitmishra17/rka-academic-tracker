@@ -16,6 +16,8 @@ const card = { background:'var(--white)', borderRadius:'var(--radius-lg)', borde
 const selStyle = { padding:'9px 12px', border:'1px solid var(--gray-200)', borderRadius:'var(--radius-md)', fontSize:13, fontFamily:'var(--font-body)', color:'var(--text)', background:'var(--white)', outline:'none', minWidth:140 }
 const th = { textAlign:'left', padding:'9px 10px', fontSize:11, fontWeight:600, color:'var(--text-muted)', textTransform:'uppercase', letterSpacing:'0.04em', borderBottom:'1px solid var(--gray-100)' }
 const td = { padding:'8px 10px', fontSize:13, borderBottom:'1px solid var(--gray-50)' }
+const btnGhost   = { padding:'7px 14px', background:'var(--white)', color:'var(--text)', border:'1px solid var(--gray-200)', borderRadius:'var(--radius-md)', fontSize:12.5, fontWeight:500, cursor:'pointer' }
+const btnPrimary = { padding:'7px 14px', background:'var(--green)', color:'white', border:'none', borderRadius:'var(--radius-md)', fontSize:12.5, fontWeight:500, cursor:'pointer' }
 
 export default function ReportCards() {
   const { allowedBranches = [], currentBranch } = useAuth()
@@ -31,6 +33,9 @@ export default function ReportCards() {
   const [loadingList, setLoadingList] = useState(false)
   const [loadingCard, setLoadingCard] = useState(false)
   const [error, setError]         = useState(null)
+  const [editMode, setEditMode]   = useState(false)
+  const [draft, setDraft]         = useState({})
+  const [savingMarks, setSaving]  = useState(false)
 
   useEffect(() => { if (!branchCode && (currentBranch || allowedBranches[0])) setBranch(currentBranch || allowedBranches[0]) }, [currentBranch, allowedBranches]) // eslint-disable-line
 
@@ -51,7 +56,7 @@ export default function ReportCards() {
   }, [branchCode, className])
 
   useEffect(() => {
-    setCardData(null)
+    setCardData(null); setEditMode(false)
     if (!selectedId || !sessionCode) return
     setLoadingCard(true); setError(null)
     examApi.reportCard(selectedId, sessionCode)
@@ -61,6 +66,32 @@ export default function ReportCards() {
   }, [selectedId, sessionCode])
 
   const terms = cardData?.terms || []
+
+  function startEdit() {
+    const d = {}
+    for (const row of (cardData?.grid || [])) {
+      for (const t of terms) {
+        const c = row.byTerm[t.id]
+        if (c?.paperId) d[`${row.subject.id}|${t.id}`] = { paperId: c.paperId, marks: c.marks == null ? '' : String(c.marks), absent: !!c.absent }
+      }
+    }
+    setDraft(d); setEditMode(true)
+  }
+  function setCell(key, patch) {
+    setDraft(prev => ({ ...prev, [key]: { ...prev[key], ...patch, dirty: true } }))
+  }
+  async function saveOverrides() {
+    const rows = Object.values(draft).filter(d => d.dirty)
+      .map(d => ({ paperId: d.paperId, studentId: selectedId, marksObtained: d.absent ? null : d.marks, isAbsent: !!d.absent }))
+    if (!rows.length) { setEditMode(false); return }
+    setSaving(true); setError(null)
+    try {
+      await examApi.saveMarks(rows)
+      const { card } = await examApi.reportCard(selectedId, sessionCode)
+      setCardData(card); setEditMode(false)
+    } catch (e) { setError(e.message) }
+    finally { setSaving(false) }
+  }
 
   return (
     <div style={{ padding:'24px 28px', maxWidth:1100 }}>
@@ -125,12 +156,29 @@ export default function ReportCards() {
             <div style={{ padding:40, textAlign:'center', color:'var(--text-muted)', fontSize:13 }}>No data.</div>
           ) : (
             <div style={{ padding:'16px 18px' }}>
-              <div style={{ marginBottom:14 }}>
-                <div style={{ fontSize:16, fontWeight:700, color:'var(--green-dark)', fontFamily:'var(--font-display)' }}>{cardData.student.full_name}</div>
-                <div style={{ fontSize:12, color:'var(--text-muted)' }}>
-                  {cardData.student.class_name}{cardData.student.section ? `-${cardData.student.section}` : ''} · {cardData.student.branches?.code} · Session {cardData.sessionCode}
+              <div style={{ marginBottom:14, display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:12 }}>
+                <div>
+                  <div style={{ fontSize:16, fontWeight:700, color:'var(--green-dark)', fontFamily:'var(--font-display)' }}>{cardData.student.full_name}</div>
+                  <div style={{ fontSize:12, color:'var(--text-muted)' }}>
+                    {cardData.student.class_name}{cardData.student.section ? `-${cardData.student.section}` : ''} · {cardData.student.branches?.code} · Session {cardData.sessionCode}
+                  </div>
+                </div>
+                <div style={{ display:'flex', gap:8, flexShrink:0 }}>
+                  {!editMode ? (
+                    <button onClick={startEdit} disabled={!cardData.grid.length} style={btnGhost}>Override marks</button>
+                  ) : (
+                    <>
+                      <button onClick={() => setEditMode(false)} style={btnGhost}>Cancel</button>
+                      <button onClick={saveOverrides} disabled={savingMarks} style={btnPrimary}>{savingMarks ? 'Saving…' : 'Save overrides'}</button>
+                    </>
+                  )}
                 </div>
               </div>
+              {editMode && (
+                <div style={{ fontSize:12, color:'var(--text-muted)', marginBottom:10 }}>
+                  Editing marks — changed cells are saved as a <strong>manual override</strong> and the mirror won't overwrite them. Tick <strong>A</strong> for absent.
+                </div>
+              )}
 
               <div style={{ overflowX:'auto' }}>
                 <table style={{ width:'100%', borderCollapse:'collapse', minWidth:480 }}>
@@ -150,12 +198,26 @@ export default function ReportCards() {
                         <td style={{ ...td, fontWeight:500 }}>{row.subject.subject_name}</td>
                         {terms.map(t => {
                           const c = row.byTerm[t.id]
+                          const key = `${row.subject.id}|${t.id}`
+                          const d = draft[key]
                           return (
                             <td key={t.id} style={{ ...td, textAlign:'center', color:'var(--text-muted)' }}>
-                              {!c || !('marks' in c) ? '—'
-                                : c.absent ? 'ABS'
-                                : c.marks == null ? '—'
-                                : <span><strong style={{ color:'var(--text)' }}>{c.marks}</strong>/{c.max}{c.grade ? <span style={{ color:'var(--green)', fontWeight:600 }}> {c.grade.grade}</span> : ''}</span>}
+                              {editMode && c?.paperId ? (
+                                <span style={{ display:'inline-flex', alignItems:'center', gap:4 }}>
+                                  <input type="number" min="0" value={d?.absent ? '' : (d?.marks ?? '')} disabled={d?.absent}
+                                    onChange={e => setCell(key, { marks: e.target.value })}
+                                    style={{ width:46, padding:'3px 4px', border:'1px solid var(--gray-200)', borderRadius:6, fontSize:12, textAlign:'center' }} />
+                                  <span style={{ fontSize:10 }}>/{c.max}</span>
+                                  <label title="Absent" style={{ fontSize:10, display:'inline-flex', alignItems:'center', gap:2 }}>
+                                    <input type="checkbox" checked={!!d?.absent} onChange={e => setCell(key, { absent: e.target.checked })} />A
+                                  </label>
+                                </span>
+                              ) : (
+                                !c || !('marks' in c) ? '—'
+                                  : c.absent ? 'ABS'
+                                  : c.marks == null ? '—'
+                                  : <span><strong style={{ color:'var(--text)' }}>{c.marks}</strong>/{c.max}{c.grade ? <span style={{ color:'var(--green)', fontWeight:600 }}> {c.grade.grade}</span> : ''}</span>
+                              )}
                             </td>
                           )
                         })}
