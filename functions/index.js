@@ -358,9 +358,11 @@ exports.syncExamPapers = onDocumentWritten('examPapers/{docId}', async event => 
 
   // SMS exam_papers schema:
   //   id, term_id, subject_id, paper_name, max_marks, passing_marks,
-  //   exam_date, exam_start_time, exam_end_time, venue, created_at,
-  //   updated_at, tracker_doc_id
+  //   exam_date, exam_start_time, exam_end_time, venue, has_practical,
+  //   theory_max, practical_max, created_at, updated_at, tracker_doc_id
   // No branch_id on this table — branch is reached via subject_id → exam_subjects.
+  // Practical split (migration 079): max_marks stays the TOTAL. When the teacher
+  // marks a paper as having a practical, theory_max + practical_max = max_marks.
   const row = {
     tracker_doc_id: docId,
     subject_id:     data.subjectId,
@@ -369,6 +371,9 @@ exports.syncExamPapers = onDocumentWritten('examPapers/{docId}', async event => 
     max_marks:      data.maxMarks,
     passing_marks:  data.passingMarks ?? 0,
     exam_date:      data.examDate     ?? null,
+    has_practical:  data.hasPractical ?? false,
+    theory_max:     data.theoryMax    ?? null,
+    practical_max:  data.practicalMax ?? 0,
   }
 
   const { error } = await supabase()
@@ -414,17 +419,22 @@ exports.syncExamMarks = onDocumentWritten('examMarks/{docId}', async event => {
   // SMS exam_marks schema (highly denormalized — reaches branch/subject/term
   // via paper_id → exam_papers → exam_subjects):
   //   id, paper_id, student_id, marks_obtained, is_absent, remarks, source,
-  //   entered_by, entered_at, updated_at, tracker_doc_id
+  //   entered_by, entered_at, updated_at, tracker_doc_id,
+  //   theory_obtained, practical_obtained
+  // Practical split (migration 079): marks_obtained stays the TOTAL
+  // (theory_obtained + practical_obtained when the paper has a practical).
   const row = {
-    tracker_doc_id: docId,
-    paper_id:       data.paperId,
-    student_id:     studentId,
-    marks_obtained: data.isAbsent ? null : (data.marksObtained ?? null),
-    is_absent:      data.isAbsent ?? false,
-    remarks:        data.remarks  ?? '',
-    source:         'teacher_pwa',
-    entered_by:     data.enteredBy ?? '',
-    entered_at:     tsToIso(data.enteredAt),
+    tracker_doc_id:     docId,
+    paper_id:           data.paperId,
+    student_id:         studentId,
+    marks_obtained:     data.isAbsent ? null : (data.marksObtained ?? null),
+    is_absent:          data.isAbsent ?? false,
+    remarks:            data.remarks  ?? '',
+    source:             'teacher_pwa',
+    entered_by:         data.enteredBy ?? '',
+    entered_at:         tsToIso(data.enteredAt),
+    theory_obtained:    data.isAbsent ? null : (data.theoryObtained    ?? null),
+    practical_obtained: data.isAbsent ? null : (data.practicalObtained ?? null),
   }
 
   const { error } = await supabase()
