@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useMemo } from 'react'
+import React, { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../App'
 import { useClasses } from '../hooks/useClasses'
 import { examApi } from '../lib/api'
@@ -20,6 +21,7 @@ const btnGhost   = { padding:'7px 14px', background:'var(--white)', color:'var(-
 const btnPrimary = { padding:'7px 14px', background:'var(--green)', color:'white', border:'none', borderRadius:'var(--radius-md)', fontSize:12.5, fontWeight:500, cursor:'pointer' }
 
 export default function ReportCards() {
+  const navigate = useNavigate()
   const { allowedBranches = [], currentBranch } = useAuth()
   const { classNames: CLASSES = [] } = useClasses()
 
@@ -165,7 +167,10 @@ export default function ReportCards() {
                 </div>
                 <div style={{ display:'flex', gap:8, flexShrink:0 }}>
                   {!editMode ? (
-                    <button onClick={startEdit} disabled={!cardData.grid.length} style={btnGhost}>Override marks</button>
+                    <>
+                      <button onClick={() => navigate(`/report-cards/print?studentId=${selectedId}&sessionCode=${encodeURIComponent(sessionCode)}`)} style={btnGhost}>Print card</button>
+                      <button onClick={startEdit} disabled={!cardData.grid.length} style={btnGhost}>Override marks</button>
+                    </>
                   ) : (
                     <>
                       <button onClick={() => setEditMode(false)} style={btnGhost}>Cancel</button>

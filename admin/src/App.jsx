@@ -39,6 +39,7 @@ import TestDetail from './pages/TestDetail'
 import SyllabusUpload from './pages/SyllabusUpload'
 import ReportCardSetup from './pages/ReportCardSetup'
 import ReportCards from './pages/ReportCards'
+import ReportCardPrint from './pages/ReportCardPrint'
 import Impersonate from './pages/Impersonate'
 import Layout from './components/Layout'
 
@@ -198,6 +199,8 @@ export default function App() {
       <BrowserRouter>
         <Routes>
           <Route path="/login" element={!user ? <Login authError={authError} /> : <Navigate to="/" />} />
+          {/* Standalone (no sidebar) — printable report card */}
+          <Route path="/report-cards/print" element={user ? <ReportCardPrint /> : <Navigate to="/login" replace />} />
           <Route path="/" element={user ? <Layout /> : <Navigate to="/login" />}>
             <Route index element={<Dashboard />} />
             <Route path="syllabus" element={<Syllabus />} />
