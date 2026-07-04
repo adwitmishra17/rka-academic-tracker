@@ -3,6 +3,7 @@ import { useSearchParams, useNavigate } from 'react-router-dom'
 import { hpcApi } from '../lib/api'
 import { DOMAINS, RATINGS } from '../lib/hpcConstants'
 import crest from '../assets/crest.png'
+import bannerLight from '../assets/banner-light.png'
 
 /* HPC — printable A4 (Tracker-native). Standalone route: /hpc/print?id= */
 
@@ -37,8 +38,9 @@ export default function HpcPrint() {
           <div style={{ display:'flex', alignItems:'center', gap:14, borderBottom:'2px solid #1a4a2e', paddingBottom:12, marginBottom:14 }}>
             <img src={crest} alt="" style={{ width:58, height:58, objectFit:'contain' }} />
             <div style={{ flex:1, textAlign:'center' }}>
-              <div style={{ fontSize:21, fontWeight:700, color:'#1a4a2e' }}>Radhakrishna Academy</div>
-              <div style={{ fontSize:12, color:'#555' }}>{a.branches?.name || a.branches?.code || ''}</div>
+              {/* Transparent black+red wordmark — sits directly on the paper, no box */}
+              <img src={bannerLight} alt="Radhakrishna Academy" style={{ display:'block', width:'100%', maxWidth:320, height:'auto', margin:'0 auto' }} />
+              <div style={{ fontSize:12, color:'#555', marginTop:4 }}>{a.branches?.name || a.branches?.code || ''}</div>
               <div style={{ fontSize:13, fontWeight:600, marginTop:4 }}>HOLISTIC PROGRESS CARD · {a.exam_terms?.name || ''} {a.session_code}</div>
             </div>
             <div style={{ width:58 }} />

@@ -3,6 +3,7 @@ import { useSearchParams, useNavigate } from 'react-router-dom'
 import { examApi } from '../lib/api'
 import { generateRemark, TONE_PRESETS } from '../lib/reportCardRemark'
 import crest from '../assets/crest.png'
+import bannerLight from '../assets/banner-light.png'
 
 /* ============================================================
    Report Card — printable A4 (Tracker-native).
@@ -73,8 +74,9 @@ export default function ReportCardPrint() {
           <div style={{ display: 'flex', alignItems: 'center', gap: 14, borderBottom: '2px solid #1a4a2e', paddingBottom: 12, marginBottom: 14 }}>
             <img src={crest} alt="" style={{ width: 60, height: 60, objectFit: 'contain' }} />
             <div style={{ flex: 1, textAlign: 'center' }}>
-              <div style={{ fontSize: 22, fontWeight: 700, color: '#1a4a2e', letterSpacing: 0.5 }}>Radhakrishna Academy</div>
-              <div style={{ fontSize: 12, color: '#555' }}>{s.branches?.name || s.branches?.code || ''}</div>
+              {/* Transparent black+red wordmark — sits directly on the paper, no box */}
+              <img src={bannerLight} alt="Radhakrishna Academy" style={{ display: 'block', width: '100%', maxWidth: 330, height: 'auto', margin: '0 auto' }} />
+              <div style={{ fontSize: 12, color: '#555', marginTop: 4 }}>{s.branches?.name || s.branches?.code || ''}</div>
               <div style={{ fontSize: 13, fontWeight: 600, marginTop: 4, color: '#222' }}>REPORT CARD · Session {card.sessionCode}</div>
             </div>
             <div style={{ width: 60 }} />
