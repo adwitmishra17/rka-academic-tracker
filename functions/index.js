@@ -647,3 +647,44 @@ exports.syncHpcAssessments = onDocumentWritten('hpcAssessments/{docId}', async e
   if (error) console.error(`syncHpcAssessments failed (${docId}):`, error.message)
   else       console.log(`syncHpcAssessments ok: ${docId} — ${data.studentName}`)
 })
+
+
+// =============================================================================
+// TRIGGER 7 — lessonPlans branch-stamp guard  (data-layer invariant)
+//
+// Every lessonPlans doc MUST carry branchCode: the admin app's lists filter by
+// it for branch-scoped admins, and Firestore cannot match a MISSING field —
+// so an unstamped plan is invisible to branch admins while the super admin
+// (unfiltered "All branches" view) still sees it.
+//
+// Current writers (teacher PWA ≥v91, admin Reschedule) stamp it themselves,
+// but a stale cached PWA build or any future writer could regress. This
+// trigger enforces the invariant at the database layer: if a written plan has
+// no branchCode, resolve it from the teacher's record and stamp it.
+//
+// Re-entrancy: the update fires this trigger again; the second pass sees
+// branchCode set and returns immediately.
+// =============================================================================
+exports.stampLessonPlanBranch = onDocumentWritten('lessonPlans/{docId}', async event => {
+  const after = event.data?.after
+  if (!after?.exists) return                    // deleted — nothing to stamp
+  const data = after.data()
+  if (data.branchCode) return                   // already stamped — the normal case
+
+  let branchCode = null
+  if (data.teacherId) {
+    try {
+      const t = await admin.firestore().doc(`teachers/${data.teacherId}`).get()
+      if (t.exists) {
+        const td = t.data()
+        branchCode = td.branchCodes?.[0] || td.branchCode || null
+      }
+    } catch (e) {
+      console.warn(`stampLessonPlanBranch: teacher lookup failed for ${data.teacherId}: ${e.message}`)
+    }
+  }
+  branchCode = branchCode || 'MAIN'             // matches the app's own fallback
+
+  await after.ref.update({ branchCode, branchCodeStampedBy: 'auto-trigger' })
+  console.log(`stampLessonPlanBranch: ${event.params.docId} → ${branchCode} (teacher ${data.teacherName || data.teacherId || '?'})`)
+})
