@@ -197,27 +197,38 @@ function toFrontendStudent(row, branches) {
  *                             server-side enforcement; relies on the SPA's
  *                             branch picker. Add RLS here later if needed.)
  *   className  = exact match (optional)
- *   isActive   = true|false  (optional; defaults to undefined = all)
+ *   isActive   = true|false|all (optional; DEFAULTS TO true — the SMS now
+ *                holds 795 withdrawn/TC'd students from the Sheshmani
+ *                backfill, which must not appear in Tracker lists)
  */
 app.get('/api/students', verifyAuth, async (req, res) => {
   try {
     const branches = await loadBranches()
-    let q = supabase.from('students').select('*')
-
+    let bid = null
     if (req.query.branchCode) {
-      const bid = await branchIdForCode(req.query.branchCode)
+      bid = await branchIdForCode(req.query.branchCode)
       if (!bid) return res.json({ students: [] })
-      q = q.eq('branch_id', bid)
     }
-    if (req.query.className) q = q.eq('class_name', req.query.className)
-    if (req.query.isActive === 'true')  q = q.eq('is_active', true)
-    if (req.query.isActive === 'false') q = q.eq('is_active', false)
 
-    // Default to active-only; Tracker UI explicitly toggles to show withdrawn.
-    // If neither was specified, leave the filter off so the toggle works.
-    const { data, error } = await q.order('class_name').order('roll_number')
-    if (error) throw error
-    res.json({ students: data.map(r => toFrontendStudent(r, branches)) })
+    const buildQuery = () => {
+      let q = supabase.from('students').select('*')
+      if (bid) q = q.eq('branch_id', bid)
+      if (req.query.className) q = q.eq('class_name', req.query.className)
+      if (req.query.isActive === 'false')    q = q.eq('is_active', false)
+      else if (req.query.isActive !== 'all') q = q.eq('is_active', true)
+      return q.order('class_name').order('roll_number')
+    }
+
+    // Page past PostgREST's 1000-row cap (a single request silently
+    // truncates at 1000 — that's how "1000 students" bugs are born).
+    const rows = []
+    for (let from = 0; ; from += 1000) {
+      const { data, error } = await buildQuery().range(from, from + 999)
+      if (error) throw error
+      rows.push(...data)
+      if (data.length < 1000) break
+    }
+    res.json({ students: rows.map(r => toFrontendStudent(r, branches)) })
   } catch (e) {
     console.error('[admin] GET /api/students:', e)
     res.status(500).json({ error: e.message || 'Internal error' })
