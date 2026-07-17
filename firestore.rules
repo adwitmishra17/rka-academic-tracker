@@ -79,12 +79,12 @@ service cloud.firestore {
       allow read, write: if isAnyTeacher();
     }
     match /students/{id} {
+      // SMS is the SINGLE SOURCE OF TRUTH for student data. The legacy
+      // Firestore copy is read-only for every client — no app may create,
+      // edit or delete students here. Server-side sync (Admin SDK)
+      // bypasses rules by design.
       allow read: if isAnyTeacher();
-      allow delete: if isSchoolUser();
-      allow create: if isSchoolUser()
-        || isMyClassStudent(request.resource.data.className, request.resource.data.branchCode);
-      allow update: if isSchoolUser()
-        || isMyClassStudent(resource.data.className, resource.data.branchCode);
+      allow create, update, delete: if false;
     }
     match /studentAudit/{id} {
       allow read: if isAnyTeacher();
