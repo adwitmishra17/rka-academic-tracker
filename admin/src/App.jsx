@@ -26,6 +26,7 @@ import StudentAuditLog from './pages/StudentAuditLog'
 import AttendanceOverview from './pages/AttendanceOverview'
 import AttendanceClass from './pages/AttendanceClass'
 import StudentPerformance from './pages/StudentPerformance'
+import Crosslist from './pages/Crosslist'
 import Timetable from './pages/Timetable'
 import PeriodSettings from './pages/PeriodSettings'
 import StudentProfile from './pages/StudentProfile'
@@ -213,6 +214,7 @@ export default function App() {
             <Route path="alerts" element={<Alerts />} />
             <Route path="absentees" element={<Absentees />} />
             <Route path="performance" element={<StudentPerformance />} />
+            <Route path="crosslist" element={<Crosslist />} />
             <Route path="teachers" element={<Teachers />} />
             <Route path="teacher-management" element={<TeacherManagement />} />
             <Route path="setup" element={<Setup />} />

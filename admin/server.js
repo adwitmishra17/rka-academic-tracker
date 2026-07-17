@@ -479,6 +479,99 @@ app.get('/api/exam/sessions', verifyAuth, async (_req, res) => {
   } catch (e) { console.error('[admin] GET /api/exam/sessions:', e); res.status(500).json({ error: e.message }) }
 })
 
+// GET /api/exam/crosslist?branchCode=&termId=&className=&section=
+// Consolidated class marks matrix for a term: students × subjects with
+// totals. Subjects/teachers flow from the Tracker sync; marks from the
+// teacher app. Mirrors the SMS Examinations → Crosslist screen.
+app.get('/api/exam/crosslist', verifyAuth, async (req, res) => {
+  try {
+    const { branchCode, termId, className, section } = req.query
+    if (!branchCode || !termId || !className) return res.status(400).json({ error: 'branchCode, termId, className required' })
+    const bid = await branchIdForCode(branchCode)
+    if (!bid) return res.status(400).json({ error: `Branch '${branchCode}' not found` })
+
+    const [{ data: term, error: tErr }, { data: subjects, error: sErr }] = await Promise.all([
+      supabase.from('exam_terms').select('id, name, session_code').eq('id', termId).single(),
+      supabase.from('exam_subjects').select('id, subject_name, sort_order')
+        .eq('branch_id', bid).eq('class_name', className)
+        .order('sort_order').order('subject_name'),
+    ])
+    if (tErr) throw tErr
+    if (sErr) throw sErr
+    if (!subjects?.length) return res.status(400).json({ error: `No subjects configured for ${className} — assign them in Classes & Subjects.` })
+
+    const { data: papers, error: pErr } = await supabase
+      .from('exam_papers').select('id, subject_id, max_marks')
+      .eq('term_id', termId).in('subject_id', subjects.map(s => s.id))
+    if (pErr) throw pErr
+    if (!papers?.length) return res.status(400).json({ error: `No papers for ${term.name} · ${className}.` })
+
+    const papersBySubject = new Map()
+    for (const p of papers) {
+      if (!papersBySubject.has(p.subject_id)) papersBySubject.set(p.subject_id, [])
+      papersBySubject.get(p.subject_id).push(p)
+    }
+    const cols = subjects.filter(s => papersBySubject.has(s.id)).map(s => ({
+      id: s.id, name: s.subject_name,
+      maxMarks: papersBySubject.get(s.id).reduce((x, p) => x + Number(p.max_marks || 0), 0),
+    }))
+
+    let stq = supabase.from('students')
+      .select('id, full_name, admission_no, roll_number, section')
+      .eq('branch_id', bid).eq('class_name', className)
+      .eq('is_active', true).eq('deleted_in_sms', false)
+      .order('section').order('roll_number').order('full_name')
+    if (section) stq = stq.eq('section', section)
+    const { data: students, error: stErr } = await stq
+    if (stErr) throw stErr
+
+    const paperIds = papers.map(p => p.id)
+    const marks = []
+    for (let from = 0; ; from += 1000) {
+      const { data, error } = await supabase.from('exam_marks')
+        .select('paper_id, student_id, marks_obtained, is_absent')
+        .in('paper_id', paperIds).range(from, from + 999)
+      if (error) throw error
+      marks.push(...(data ?? []))
+      if (!data || data.length < 1000) break
+    }
+    const subjectOfPaper = new Map(papers.map(p => [p.id, p.subject_id]))
+    const cellMap = new Map()
+    for (const m of marks) {
+      const key = `${m.student_id}|${subjectOfPaper.get(m.paper_id)}`
+      const cur = cellMap.get(key) || { obtained: 0, absent: false, entered: false }
+      cur.entered = true
+      if (m.is_absent) cur.absent = true
+      else cur.obtained += Number(m.marks_obtained || 0)
+      cellMap.set(key, cur)
+    }
+
+    const rows = (students || []).map(st => {
+      const per = {}
+      let total = 0, maxTotal = 0, any = false
+      for (const c of cols) {
+        const cell = cellMap.get(`${st.id}|${c.id}`) || null
+        per[c.id] = cell
+        if (cell?.entered) { any = true; maxTotal += c.maxMarks; if (!cell.absent) total += cell.obtained }
+      }
+      return {
+        id: st.id, name: st.full_name, admissionNo: st.admission_no,
+        rollNumber: st.roll_number, section: st.section,
+        marks: per, total, maxTotal,
+        percent: maxTotal > 0 ? (total / maxTotal) * 100 : null, hasAny: any,
+      }
+    })
+    const ranked = [...rows].filter(r => r.percent != null).sort((a, b) => b.percent - a.percent)
+    let lastPct = null, lastRank = 0
+    ranked.forEach((r, i) => {
+      if (lastPct === null || r.percent < lastPct - 1e-9) { lastRank = i + 1; lastPct = r.percent }
+      r.rank = lastRank
+    })
+
+    res.json({ term, subjects: cols, students: rows })
+  } catch (e) { console.error('[admin] GET /api/exam/crosslist:', e); res.status(500).json({ error: e.message }) }
+})
+
 // GET /api/exam/terms?branchCode=&sessionCode=
 app.get('/api/exam/terms', verifyAuth, async (req, res) => {
   try {
