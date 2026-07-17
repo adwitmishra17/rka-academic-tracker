@@ -688,3 +688,94 @@ exports.stampLessonPlanBranch = onDocumentWritten('lessonPlans/{docId}', async e
   await after.ref.update({ branchCode, branchCodeStampedBy: 'auto-trigger' })
   console.log(`stampLessonPlanBranch: ${event.params.docId} → ${branchCode} (teacher ${data.teacherName || data.teacherId || '?'})`)
 })
+
+// ─────────────────────────────────────────────────────────────────────────────
+// HRMS → Tracker employee sync (webhook target).
+//
+// A Postgres trigger on rka-attendance's employees table POSTs here whenever
+// is_active flips. We mirror the flag onto the Firestore teacher doc (matched
+// by email → personal email → phone) and, on deactivation, BLANK the teacher's
+// timetable (delete their slots) and clear any class-teacher assignment so
+// attendance/arrangement views show vacant periods immediately.
+//
+// Auth: shared secret in the x-hrms-secret header (Secret Manager).
+// ─────────────────────────────────────────────────────────────────────────────
+const { onRequest } = require('firebase-functions/v2/https')
+const { defineSecret } = require('firebase-functions/params')
+const HRMS_SYNC_SECRET = defineSecret('HRMS_SYNC_SECRET')
+
+exports.hrmsEmployeeSync = onRequest({ secrets: [HRMS_SYNC_SECRET] }, async (req, res) => {
+  try {
+    if (req.method !== 'POST') return res.status(405).json({ error: 'POST only' })
+    if ((req.headers['x-hrms-secret'] || '') !== HRMS_SYNC_SECRET.value()) {
+      return res.status(401).json({ error: 'bad secret' })
+    }
+
+    const rec = req.body?.record || {}
+    const old = req.body?.old_record || {}
+    if (typeof rec.is_active !== 'boolean' || rec.is_active === old.is_active) {
+      return res.json({ ok: true, skipped: 'no is_active change' })
+    }
+
+    const db = admin.firestore()
+    const clean = (s) => (s || '').toLowerCase().trim()
+    const last10 = (s) => (s || '').replace(/\D/g, '').slice(-10)
+
+    // Match the teacher doc: email → personalEmail → phone (last 10 digits).
+    let teacherSnap = null
+    for (const [field, value] of [
+      ['email', clean(rec.email)],
+      ['personalEmail', clean(rec.email)],
+      ['email', clean(rec.personal_email)],
+      ['personalEmail', clean(rec.personal_email)],
+    ]) {
+      if (!value) continue
+      const s = await db.collection('teachers').where(field, '==', value).limit(1).get()
+      if (!s.empty) { teacherSnap = s.docs[0]; break }
+    }
+    if (!teacherSnap && last10(rec.phone)) {
+      const all = await db.collection('teachers').get()
+      const hit = all.docs.find((d) => last10(d.data().phone) === last10(rec.phone))
+      if (hit) teacherSnap = hit
+    }
+    if (!teacherSnap) {
+      console.log(`hrmsEmployeeSync: no teacher doc for employee ${rec.full_name || rec.id} — nothing to sync`)
+      return res.json({ ok: true, matched: false })
+    }
+
+    const teacher = teacherSnap.data()
+    const updates = {
+      isActive: rec.is_active,
+      hrmsSyncedAt: admin.firestore.FieldValue.serverTimestamp(),
+      hrmsEmployeeId: rec.id || null,
+    }
+
+    let slotsCleared = 0
+    if (rec.is_active === false) {
+      // Blank the timetable: delete every slot assigned to this teacher.
+      const slots = await db.collection('timetable').where('teacherId', '==', teacherSnap.id).get()
+      let batch = db.batch(); let n = 0
+      for (const d of slots.docs) {
+        batch.delete(d.ref); n++
+        if (n % 400 === 0) { await batch.commit(); batch = db.batch() }
+      }
+      if (n % 400 !== 0 || (n > 0 && n < 400)) await batch.commit()
+      slotsCleared = slots.size
+
+      // Clear class-teacher assignment (doc + lookup collection).
+      if (teacher.classTeacherOf) updates.classTeacherOf = null
+      for (const key of [clean(teacher.email), clean(teacher.personalEmail)]) {
+        if (!key) continue
+        const ref = db.collection('classTeacherByEmail').doc(key)
+        if ((await ref.get()).exists) await ref.delete()
+      }
+    }
+
+    await teacherSnap.ref.update(updates)
+    console.log(`hrmsEmployeeSync: ${teacher.fullName || teacherSnap.id} → isActive=${rec.is_active}, timetable slots cleared: ${slotsCleared}`)
+    res.json({ ok: true, matched: true, teacherId: teacherSnap.id, isActive: rec.is_active, slotsCleared })
+  } catch (e) {
+    console.error('hrmsEmployeeSync:', e)
+    res.status(500).json({ error: e.message })
+  }
+})
