@@ -91,7 +91,7 @@ async function exportXLSX(data, meta) {
 
 export default function Crosslist() {
   const { effectiveBranches } = useAuth()
-  const { classes } = useClasses()
+  const { classNames } = useClasses()
   const branchCodes = effectiveBranches && effectiveBranches.length ? effectiveBranches : ['MAIN']
   const [branchCode, setBranchCode] = useState(branchCodes[0])
   const [terms, setTerms] = useState([])
@@ -141,7 +141,7 @@ export default function Crosslist() {
         <Picker label="Branch" value={branchCode} onChange={setBranchCode} options={branchCodes} />
         <Picker label="Term / test" value={termId} onChange={setTermId}
           options={terms.map((t) => ({ value: t.id, label: t.name }))} placeholder="— Pick —" />
-        <Picker label="Class" value={className} onChange={setClassName} options={(classes || []).map((c) => c.name || c)} placeholder="— Pick —" />
+        <Picker label="Class" value={className} onChange={setClassName} options={classNames || []} placeholder="— Pick —" />
         <Picker label="Section (optional)" value={section} onChange={setSection} options={['A', 'B', 'C', 'D']} placeholder="All" />
         <button onClick={build} disabled={loading || !termId || !className} style={{ ...btn, background: '#1a4a2e', color: '#fff' }}>
           {loading ? 'Building…' : 'Build crosslist'}
