@@ -317,6 +317,7 @@ exports.syncExamSubjects = onDocumentWritten('examSubjects/{docId}', async event
     class_name:             data.className,
     subject_name:           data.subjectName,
     kind:                   data.kind,            // 'scholastic' | 'co_scholastic'
+    is_optional:            data.isOptional === true,
     sort_order:             data.sortOrder ?? 0,
     assigned_teacher_email: assignedTeacherEmail, // null when no teacher assigned
   }

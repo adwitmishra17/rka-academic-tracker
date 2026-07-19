@@ -1489,6 +1489,22 @@ function SubjectRow({ subj, teachers, isLast, onSave, onDelete }) {
           {subj.kind === 'scholastic' ? 'Scholastic' : 'Co-Scholastic'}
         </span>
       </div>
+      {/* Optional-subject toggle — syncs to SMS in real time; Class 11
+          admission forms list the subjects flagged here. */}
+      <div style={{ width: 66 }}>
+        <button
+          onClick={() => onSave({ isOptional: !subj.isOptional })}
+          title="Toggle optional subject — flagged subjects appear as choices on Class 11 admission forms (SMS)"
+          style={{
+            fontSize: 11, padding: '3px 9px', borderRadius: 10, fontWeight: 500,
+            border: '1px solid ' + (subj.isOptional ? 'var(--gold-dark)' : 'var(--gray-200)'),
+            background: subj.isOptional ? 'var(--gold-light)' : 'var(--white)',
+            color: subj.isOptional ? 'var(--gold-dark)' : 'var(--text-muted)',
+            cursor: 'pointer',
+          }}>
+          {subj.isOptional ? 'Optional' : 'Core'}
+        </button>
+      </div>
       <div style={{ width: 170, minWidth: 0 }}>
         {editing ? (
           <select value={localTeacher} onChange={e => setLocalTeacher(e.target.value)}
