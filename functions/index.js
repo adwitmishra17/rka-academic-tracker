@@ -274,6 +274,74 @@ async function ensurePapersForSubject(subjectId, branchId, sessionCode) {
 //   email). tracker_doc_id is also a PARTIAL unique index (migration 075), which
 //   PostgREST can't use as an arbiter anyway — same reason as syncExamTerms.
 // =============================================================================
+
+// ─────────────────────────────────────────────────────────────────────
+// TRIGGER — studentAttendance → attendance_records (the SMS mirror).
+//
+// The teacher PWA writes one Firestore doc per student per day:
+//   studentAttendance/{YYYY-MM-DD}_{smsStudentId}
+//   { studentId, status: 'present'|'absent', isLate, className,
+//     branchCode, date, markedBy, markedAt, … }
+// This trigger mirrors each write into public.attendance_records in
+// the SMS Supabase (migration 071) so the SMS Attendance screen and
+// dashboard read live data. Rules:
+//   · absent → 'absent'; present+isLate → 'late'; else 'present'
+//   · SMS rows with source='manual' are office corrections — never
+//     overwritten or deleted by the mirror
+//   · docs keyed to unknown SMS student ids (pre-remigration history)
+//     are skipped silently
+//   · doc deletion (unmark) deletes the mirror row
+// ─────────────────────────────────────────────────────────────────────
+exports.syncStudentAttendance = onDocumentWritten('studentAttendance/{docId}', async (event) => {
+  const docId = event.params.docId
+  const m = docId.match(/^(\d{4}-\d{2}-\d{2})_(.+)$/)
+  if (!m) return
+  const [, date, studentId] = m
+
+  const after = event.data?.after?.exists ? event.data.after.data() : null
+
+  try {
+    if (!after) {
+      const { error } = await supabase().from('attendance_records')
+        .delete().eq('student_id', studentId).eq('date', date).neq('source', 'manual')
+      if (error) console.error(`syncStudentAttendance delete (${docId}):`, error.message)
+      return
+    }
+
+    const status = after.status === 'absent' ? 'absent' : (after.isLate ? 'late' : 'present')
+
+    // Snapshot class/branch from the live SMS student row — also
+    // validates the id (old-id docs skip).
+    const { data: student, error: sErr } = await supabase().from('students')
+      .select('id, branch_id, class_name, section').eq('id', studentId).maybeSingle()
+    if (sErr) { console.error(`syncStudentAttendance student (${docId}):`, sErr.message); return }
+    if (!student) { console.log(`syncStudentAttendance: unknown SMS student ${studentId} — skipped`); return }
+
+    const { data: existing, error: eErr } = await supabase().from('attendance_records')
+      .select('id, source').eq('student_id', studentId).eq('date', date).maybeSingle()
+    if (eErr) { console.error(`syncStudentAttendance existing (${docId}):`, eErr.message); return }
+    if (existing?.source === 'manual') return   // office correction wins
+
+    const row = {
+      branch_id:   student.branch_id,
+      student_id:  studentId,
+      date,
+      class_name:  after.className || student.class_name,
+      section:     student.section ?? null,
+      status,
+      source:      'teacher_pwa',
+      recorded_at: after.markedAt?.toDate?.()?.toISOString?.() ?? new Date().toISOString(),
+      recorded_by: after.markedBy || null,
+    }
+    const { error } = existing
+      ? await supabase().from('attendance_records').update(row).eq('id', existing.id)
+      : await supabase().from('attendance_records').insert(row)
+    if (error) console.error(`syncStudentAttendance write (${docId}):`, error.message)
+  } catch (e) {
+    console.error(`syncStudentAttendance (${docId}):`, e.message)
+  }
+})
+
 exports.syncExamSubjects = onDocumentWritten('examSubjects/{docId}', async event => {
   const docId = event.params.docId
   const data  = event.data?.after?.data()
