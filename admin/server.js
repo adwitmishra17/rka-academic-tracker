@@ -210,12 +210,20 @@ app.get('/api/students', verifyAuth, async (req, res) => {
       if (!bid) return res.json({ students: [] })
     }
 
+    // Students admitted FOR a future session (admission_session beyond the
+    // running April–March session) are not on this year's rosters —
+    // teachers must not see next year's admits in attendance/marks.
+    const now = new Date(Date.now() + 330 * 60000)   // IST
+    const y = now.getUTCMonth() + 1 >= 4 ? now.getUTCFullYear() : now.getUTCFullYear() - 1
+    const nowSession = `${y}-${String((y + 1) % 100).padStart(2, '0')}`
+
     const buildQuery = () => {
       let q = supabase.from('students').select('*')
       if (bid) q = q.eq('branch_id', bid)
       if (req.query.className) q = q.eq('class_name', req.query.className)
       if (req.query.isActive === 'false')    q = q.eq('is_active', false)
       else if (req.query.isActive !== 'all') q = q.eq('is_active', true)
+      q = q.or(`admission_session.is.null,admission_session.lte.${nowSession}`)
       return q.order('class_name').order('roll_number')
     }
 
