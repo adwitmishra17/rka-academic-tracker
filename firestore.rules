@@ -1,13 +1,22 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+    // token.email is ABSENT on phone-only admin sessions (custom-token
+    // sign-in, verify-otp). Dereferencing a missing key errors — it does
+    // not return false — so every email access goes through this guard.
+    function tokenEmail() {
+      return request.auth.token.get('email', '');
+    }
     function isSuperAdmin() {
-      return request.auth != null && request.auth.token.email.lower() == 'adwit@rkacademyballia.in';
+      return request.auth != null && tokenEmail().lower() == 'adwit@rkacademyballia.in';
     }
     function isAdmin() {
       return request.auth != null && (
         isSuperAdmin() ||
-        exists(/databases/$(database)/documents/admins/$(request.auth.token.email.lower()))
+        // Phone-only admins: their Firebase UID is their admins docId.
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid)) ||
+        (tokenEmail() != '' &&
+         exists(/databases/$(database)/documents/admins/$(tokenEmail().lower())))
       );
     }
     function isSchoolUser() {

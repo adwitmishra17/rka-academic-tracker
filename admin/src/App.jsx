@@ -97,10 +97,17 @@ export default function App() {
         return
       }
 
-      // Branch admin / front-desk — look up admin doc.
+      // Branch admin / front-desk — look up admin doc. Email sessions
+      // (Google or OTP-resolved) → admins/{email}; phone-only admins sign
+      // in via a custom token whose UID *is* their admins docId
+      // (verify-otp), so email-less sessions → admins/{uid}.
       try {
-        const adminDoc = await getDoc(doc(db, 'admins', email))
-        if (!adminDoc.exists()) {
+        let adminDoc = email ? await getDoc(doc(db, 'admins', email)) : null
+        if (!adminDoc?.exists() && u.uid) {
+          const byUid = await getDoc(doc(db, 'admins', u.uid))
+          if (byUid.exists()) adminDoc = byUid
+        }
+        if (!adminDoc?.exists()) {
           setAuthError('Not authorised. Contact Adwit Mishra.')
           await auth.signOut()
           setUser(null)
