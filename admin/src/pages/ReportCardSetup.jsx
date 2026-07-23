@@ -71,11 +71,23 @@ function suggestedSubjectsFor(className) {
   return { scholastic: [], co_scholastic: [] }
 }
 
+// Legacy timetable slots carry className as a STRING (sometimes a
+// 'A+B' compound); newer slots carry a classNames ARRAY. Every
+// timetable read here must cover both, or legacy periods (e.g. the
+// Class 11/12 Commerce Accountancy slots) silently vanish from the
+// build-from-timetable import.
+function slotCoversClass(slot, className) {
+  if (Array.isArray(slot.classNames) && slot.classNames.length) {
+    return slot.classNames.map(c => (c || '').trim()).includes(className)
+  }
+  return (slot.className || '').split('+').map(c => c.trim()).includes(className)
+}
+
 // Look up the timetable for "who teaches `subjectName` to `className`?"
 function lookupTeacherFromTimetable(slots, className, subjectName) {
   const subj = (subjectName || '').toLowerCase()
   const slot = (slots || []).find(s =>
-    (s.classNames || []).includes(className) &&
+    slotCoversClass(s, className) &&
     (s.subject || '').toLowerCase() === subj
   )
   return slot ? { teacherId: slot.teacherId, teacherName: slot.teacherName || '' } : null
@@ -100,7 +112,7 @@ function guessKindFromName(subjectName) {
 function deriveSubjectsFromTimetable(slots, className) {
   const bySubject = new Map()  // subject → Map(teacherId → { id, name, count })
   ;(slots || []).forEach(s => {
-    if (!(s.classNames || []).includes(className)) return
+    if (!slotCoversClass(s, className)) return
     const subject = (s.subject || '').trim()
     if (!subject) return
     if (!bySubject.has(subject)) bySubject.set(subject, new Map())
@@ -571,9 +583,17 @@ export default function ReportCardSetup() {
     setSubjError('')
     setBuildAllResult(null)
 
-    // Distinct classes present in the timetable, ordered by the canonical list
+    // Distinct classes present in the timetable, ordered by the canonical
+    // list. Cover BOTH slot shapes (classNames array + legacy className
+    // string), matching slotCoversClass — else legacy-only classes are
+    // skipped by the whole build.
     const present = new Set()
-    timetableSlots.forEach(s => (s.classNames || []).forEach(c => present.add(c)))
+    timetableSlots.forEach(s => {
+      const covered = (Array.isArray(s.classNames) && s.classNames.length)
+        ? s.classNames
+        : (s.className || '').split('+')
+      covered.map(c => (c || '').trim()).filter(Boolean).forEach(c => present.add(c))
+    })
     const classes = CLASS_NAMES.filter(c => present.has(c))
     ;[...present].filter(c => !CLASS_NAMES.includes(c)).sort().forEach(c => classes.push(c))
 
