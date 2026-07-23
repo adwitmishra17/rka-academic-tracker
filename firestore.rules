@@ -25,6 +25,14 @@ service cloud.firestore {
     function isAnyTeacher() {
       return request.auth != null;
     }
+    // A REAL staff teacher — not just any authenticated identity (the
+    // parent app also mints Firebase sessions). userBranches/{email} is
+    // maintained by HRMS's employee→Firestore sync for active teachers
+    // only, so membership doubles as the teacher check.
+    function isRealTeacher() {
+      return request.auth != null && tokenEmail() != ''
+        && exists(/databases/$(database)/documents/userBranches/$(tokenEmail().lower()));
+    }
     function getMyClassAssignment() {
       return get(/databases/$(database)/documents/classTeacherByEmail/$(request.auth.token.email.lower())).data;
     }
@@ -81,11 +89,19 @@ service cloud.firestore {
       allow read, write: if isAnyTeacher();
     }
     match /tests/{id} {
-      allow read: if isAnyTeacher();
-      allow write: if isSchoolUser();
+      allow read: if isSchoolUser() || isRealTeacher();
+      allow create, delete: if isSchoolUser();
+      // Teachers may flip ONLY the marksEntered flag when saving marks;
+      // everything else on a test stays admin-managed.
+      allow update: if isSchoolUser()
+        || (isRealTeacher()
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['marksEntered']));
     }
     match /testMarks/{id} {
-      allow read, write: if isAnyTeacher();
+      // Was isAnyTeacher() (= any signed-in identity, parents included).
+      // Marks are written by staff teachers and admins only; the parent
+      // app reads marks through its server (Admin SDK, rules-exempt).
+      allow read, write: if isSchoolUser() || isRealTeacher();
     }
     match /students/{id} {
       // SMS is the SINGLE SOURCE OF TRUTH for student data. The legacy
