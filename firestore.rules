@@ -97,6 +97,20 @@ service cloud.firestore {
         || (isRealTeacher()
             && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['marksEntered']));
     }
+    match /homework/{id} {
+      // Teacher-authored class-section broadcasts. Parents read through
+      // their server (Admin SDK) — never directly. Ownership is enforced
+      // here: a teacher can only write homework carrying their own email.
+      allow read: if isSchoolUser() || isRealTeacher();
+      allow create: if isSchoolUser()
+        || (isRealTeacher() && request.resource.data.teacherEmail == tokenEmail().lower());
+      allow update: if isSchoolUser()
+        || (isRealTeacher()
+            && resource.data.teacherEmail == tokenEmail().lower()
+            && request.resource.data.teacherEmail == resource.data.teacherEmail);
+      allow delete: if isSchoolUser()
+        || (isRealTeacher() && resource.data.teacherEmail == tokenEmail().lower());
+    }
     match /testMarks/{id} {
       // Was isAnyTeacher() (= any signed-in identity, parents included).
       // Marks are written by staff teachers and admins only; the parent

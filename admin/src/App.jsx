@@ -14,6 +14,7 @@ import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
 import Syllabus from './pages/Syllabus'
 import Lessons from './pages/Lessons'
+import Homework from './pages/Homework'
 import Tests from './pages/Tests'
 import Alerts from './pages/Alerts'
 import Absentees from './pages/Absentees'
@@ -217,6 +218,7 @@ export default function App() {
             <Route index element={<Dashboard />} />
             <Route path="syllabus" element={<Syllabus />} />
             <Route path="lessons" element={<Lessons />} />
+            <Route path="homework" element={<Homework />} />
             <Route path="tests" element={<Tests />} />
             <Route path="alerts" element={<Alerts />} />
             <Route path="absentees" element={<Absentees />} />
