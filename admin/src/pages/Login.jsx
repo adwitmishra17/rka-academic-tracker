@@ -113,7 +113,7 @@ export default function Login() {
           <img src={crest} alt="RKA Crest" style={{ width: 80, height: 80, objectFit: 'contain', display: 'block', margin: '0 auto 16px', borderRadius: '50%', border: '2px solid var(--gray-200)', background: 'var(--white)', padding: 4 }} />
           <img src={banner} alt="Radhakrishna Academy" style={{ width: '100%', maxWidth: 320, height: 'auto', objectFit: 'contain', display: 'block', margin: '0 auto 10px' }} />
           <div style={{ width: 36, height: 1.5, background: 'var(--green)', margin: '10px auto 8px', borderRadius: 1, opacity: 0.7 }} />
-          <p style={{ fontSize: 11, color: 'var(--text-muted)', letterSpacing: '0.1em', textTransform: 'uppercase' }}>Admin Portal</p>
+          <p style={{ fontSize: 11, color: 'var(--gray-800)', fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase' }}>Admin Portal</p>
         </div>
 
         {/* Login card */}
@@ -197,10 +197,10 @@ export default function Login() {
           )}
 
           {error && <p style={{ fontSize: 12, color: '#ffb3b3', textAlign: 'center', marginTop: 14, padding: '9px 12px', background: 'rgba(139,26,26,0.25)', borderRadius: 'var(--radius-sm)', border: '1px solid rgba(139,26,26,0.3)' }}>{error}</p>}
-          {info && !error && <p style={{ fontSize: 12, color: 'rgba(201,162,39,0.95)', textAlign: 'center', marginTop: 14, padding: '9px 12px', background: 'rgba(201,162,39,0.12)', borderRadius: 'var(--radius-sm)', border: '1px solid rgba(201,162,39,0.25)' }}>{info}</p>}
+          {info && !error && <p style={{ fontSize: 12, color: 'var(--gold-dark)', textAlign: 'center', marginTop: 14, padding: '9px 12px', background: 'var(--gold-light)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--gold)' }}>{info}</p>}
         </div>
 
-        <p style={{ fontSize: 11, color: 'var(--gray-200)', textAlign: 'center', marginTop: 18, lineHeight: 1.6 }}>
+        <p style={{ fontSize: 11, color: 'var(--gray-800)', textAlign: 'center', marginTop: 18, lineHeight: 1.6 }}>
           Access restricted to authorised admin accounts only.
         </p>
       </div>
