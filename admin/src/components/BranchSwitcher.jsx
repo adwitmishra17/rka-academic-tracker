@@ -15,8 +15,8 @@ import { BRANCHES, branchLabel } from '../lib/branch'
 //   Branch admin (single-branch access):
 //     Static read-only badge showing their branch. No dropdown.
 //
-// Visual: dark with gold accent on selection, matching the sidebar's
-// existing nav-link active state.
+// Visual: light card with house-green accent on selection, matching
+// the House Colours sidebar.
 // ============================================================================
 
 export default function BranchSwitcher() {
@@ -42,22 +42,22 @@ export default function BranchSwitcher() {
       <div style={{
         margin: '8px 12px',
         padding: '8px 12px',
-        background: 'rgba(201,162,39,0.08)',
-        border: '1px solid rgba(201,162,39,0.25)',
-        borderRadius: 6,
+        background: 'var(--green-light)',
+        border: '1px solid var(--green-muted)',
+        borderRadius: 10,
         display: 'flex',
         alignItems: 'center',
         gap: 8,
       }}>
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--gold, #c9a227)" strokeWidth="1.8">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--green)" strokeWidth="1.8">
           <path d="M3 21v-7l9-7 9 7v7"/>
           <path d="M9 21v-9h6v9"/>
         </svg>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 9, color: 'rgba(255,255,255,0.4)', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 1 }}>
+          <div style={{ fontSize: 9, color: 'var(--text-muted)', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 1 }}>
             Branch
           </div>
-          <div style={{ fontSize: 12, color: 'var(--gold, #c9a227)', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+          <div style={{ fontSize: 12, color: 'var(--green)', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
             {branchLabel(code)}
           </div>
         </div>
@@ -76,11 +76,11 @@ export default function BranchSwitcher() {
         style={{
           width: '100%',
           padding: '8px 12px',
-          background: open ? 'rgba(201,162,39,0.12)' : 'rgba(255,255,255,0.04)',
+          background: open ? 'var(--green-light)' : 'var(--gray-50)',
           border: '1px solid',
-          borderColor: open ? 'rgba(201,162,39,0.4)' : 'rgba(255,255,255,0.1)',
-          borderRadius: 6,
-          color: 'white',
+          borderColor: open ? 'var(--green-muted)' : 'var(--gray-200)',
+          borderRadius: 10,
+          color: 'var(--text)',
           cursor: 'pointer',
           display: 'flex',
           alignItems: 'center',
@@ -90,17 +90,17 @@ export default function BranchSwitcher() {
           transition: 'all 0.15s',
         }}
       >
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={isAll ? 'var(--gold, #c9a227)' : 'rgba(255,255,255,0.7)'} strokeWidth="1.8" style={{ flexShrink: 0 }}>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={isAll ? 'var(--green)' : 'var(--text-muted)'} strokeWidth="1.8" style={{ flexShrink: 0 }}>
           <path d="M3 21v-7l9-7 9 7v7"/>
           <path d="M9 21v-9h6v9"/>
         </svg>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 9, color: 'rgba(255,255,255,0.4)', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 1 }}>
+          <div style={{ fontSize: 9, color: 'var(--text-muted)', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 1 }}>
             Branch
           </div>
           <div style={{
             fontSize: 12,
-            color: isAll ? 'var(--gold, #c9a227)' : 'white',
+            color: isAll ? 'var(--green)' : 'var(--text)',
             fontWeight: 600,
             whiteSpace: 'nowrap',
             overflow: 'hidden',
@@ -109,7 +109,7 @@ export default function BranchSwitcher() {
             {currentLabel}
           </div>
         </div>
-        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.5)" strokeWidth="2.5" style={{ flexShrink: 0, transform: open ? 'rotate(180deg)' : 'rotate(0)', transition: 'transform 0.15s' }}>
+        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="var(--gray-400)" strokeWidth="2.5" style={{ flexShrink: 0, transform: open ? 'rotate(180deg)' : 'rotate(0)', transition: 'transform 0.15s' }}>
           <polyline points="6 9 12 15 18 9"/>
         </svg>
       </button>
@@ -120,10 +120,10 @@ export default function BranchSwitcher() {
           top: 'calc(100% + 4px)',
           left: 0,
           right: 0,
-          background: 'rgba(20,40,30,0.98)',
-          border: '1px solid rgba(255,255,255,0.1)',
-          borderRadius: 6,
-          boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
+          background: 'var(--white)',
+          border: '1px solid var(--gray-200)',
+          borderRadius: 10,
+          boxShadow: 'var(--shadow-lg)',
           zIndex: 200,
           overflow: 'hidden',
           backdropFilter: 'blur(6px)',
@@ -135,7 +135,7 @@ export default function BranchSwitcher() {
             isAll
             onClick={() => { setCurrentBranch(null); setOpen(false) }}
           />
-          <div style={{ height: 1, background: 'rgba(255,255,255,0.07)' }} />
+          <div style={{ height: 1, background: 'var(--gray-100)' }} />
           {BRANCHES.map((b, idx) => (
             <React.Fragment key={b.code}>
               <Option
@@ -145,7 +145,7 @@ export default function BranchSwitcher() {
                 onClick={() => { setCurrentBranch(b.code); setOpen(false) }}
               />
               {idx < BRANCHES.length - 1 && (
-                <div style={{ height: 1, background: 'rgba(255,255,255,0.07)' }} />
+                <div style={{ height: 1, background: 'var(--gray-100)' }} />
               )}
             </React.Fragment>
           ))}
@@ -156,17 +156,17 @@ export default function BranchSwitcher() {
 }
 
 function Option({ label, sub, isActive, isAll, onClick }) {
-  const accent = isAll ? 'var(--gold, #c9a227)' : 'var(--gold, #c9a227)'
+  const accent = isAll ? 'var(--green)' : 'var(--green)'
   return (
     <button
       onClick={onClick}
       style={{
         width: '100%',
         padding: '10px 12px',
-        background: isActive ? 'rgba(201,162,39,0.1)' : 'transparent',
+        background: isActive ? 'var(--green-light)' : 'transparent',
         border: 'none',
         borderLeft: isActive ? `2px solid ${accent}` : '2px solid transparent',
-        color: 'white',
+        color: 'var(--text)',
         cursor: 'pointer',
         display: 'flex',
         alignItems: 'center',
@@ -175,19 +175,19 @@ function Option({ label, sub, isActive, isAll, onClick }) {
         fontFamily: 'inherit',
         transition: 'background 0.1s',
       }}
-      onMouseEnter={e => { if (!isActive) e.currentTarget.style.background = 'rgba(255,255,255,0.04)' }}
+      onMouseEnter={e => { if (!isActive) e.currentTarget.style.background = 'var(--gray-50)' }}
       onMouseLeave={e => { if (!isActive) e.currentTarget.style.background = 'transparent' }}
     >
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{
           fontSize: 12,
-          color: isActive ? accent : 'white',
+          color: isActive ? accent : 'var(--text)',
           fontWeight: isActive ? 600 : 500,
           marginBottom: 1,
         }}>
           {label}
         </div>
-        <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.45)' }}>
+        <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>
           {sub}
         </div>
       </div>

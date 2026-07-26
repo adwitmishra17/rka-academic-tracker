@@ -1,34 +1,63 @@
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
+/* ============================================================
+   HOUSE COLOURS theme (2026-07 redesign, user-picked direction)
+   Quiet greige shell, white cards, ink text, one type family
+   (DM Sans — weight does the hierarchy), and the school's real
+   house system (Blue/Red/Green/Yellow) as the identity palette
+   wherever a house appears. House hues are CVD-validated on the
+   light ground; they are reserved for house identity — statuses
+   use the semantic green/gold/crimson set, never house chips.
+   Legacy var NAMES are kept so every page reskins untouched.
+   ============================================================ */
+
 :root {
-  --green:        #1a4a2e;
-  --green-dark:   #0f2d1b;
-  --green-mid:    #2a6b45;
-  --green-light:  #e8f2ec;
-  --green-muted:  #c8dfd0;
-  --crimson:      #8b1a1a;
-  --crimson-light:#fdf0f0;
-  --gold:         #c9a227;
-  --gold-light:   #fdf6e3;
-  --gold-dark:    #9e7d1a;
-  --white:        #ffffff;
-  --off-white:    #f8f7f4;
-  --gray-50:      #f5f4f1;
-  --gray-100:     #ede9e3;
-  --gray-200:     #d4cfc7;
-  --gray-400:     #9e9890;
-  --gray-600:     #6b6560;
-  --gray-800:     #3a3630;
-  --text:         #1e1b18;
-  --text-muted:   #6b6560;
-  --shadow-sm:    0 1px 3px rgba(0,0,0,0.08);
-  --shadow-md:    0 4px 16px rgba(0,0,0,0.10);
-  --shadow-lg:    0 8px 32px rgba(0,0,0,0.13);
-  --radius-sm:    6px;
-  --radius-md:    10px;
+  /* Accent (primary action / focus) — house green doubles as accent */
+  --green:        #3E8E5A;
+  --green-dark:   #2C4A38;
+  --green-mid:    #4FA36C;
+  --green-light:  #E4EFE8;
+  --green-muted:  #C9DFD1;
+
+  /* Semantic status (distinct from house identity) */
+  --crimson:      #B5372A;
+  --crimson-light:#F6E4E2;
+  --gold:         #A87E12;
+  --gold-light:   #F5EBD8;
+  --gold-dark:    #8A670E;
+
+  /* House identity — chips, tags, house points only */
+  --house-blue:         #3B6FB5;
+  --house-blue-light:   #E7EDF6;
+  --house-red:          #C24444;
+  --house-red-light:    #F6E4E4;
+  --house-green:        #3E8E5A;
+  --house-green-light:  #E4EFE8;
+  --house-yellow:       #A87E12;
+  --house-yellow-light: #F5EBD8;
+
+  /* Neutrals — greige ground, white cards, warm ink */
+  --white:        #FFFFFF;
+  --off-white:    #EFEFEA;
+  --gray-50:      #F5F5F0;
+  --gray-100:     #E9E8E0;
+  --gray-200:     #DBDAD0;
+  --gray-400:     #9C9B90;
+  --gray-600:     #75746B;
+  --gray-800:     #3B3A32;
+  --text:         #26251F;
+  --text-muted:   #75746B;
+
+  --shadow-sm:    0 1px 3px rgba(38,37,31,0.06);
+  --shadow-md:    0 6px 18px rgba(38,37,31,0.07);
+  --shadow-lg:    0 12px 36px rgba(38,37,31,0.10);
+  --radius-sm:    8px;
+  --radius-md:    12px;
   --radius-lg:    16px;
-  --sidebar-w:    260px;
-  --font-display: 'Playfair Display', Georgia, serif;
+  --sidebar-w:    232px;
+
+  /* One family, two voices — the display role is DM Sans heavier. */
+  --font-display: 'DM Sans', system-ui, sans-serif;
   --font-body:    'DM Sans', system-ui, sans-serif;
 }
 
@@ -39,12 +68,16 @@ body {
   color: var(--text);
   min-height: 100vh;
   -webkit-font-smoothing: antialiased;
+  font-variant-numeric: tabular-nums;
 }
+
+/* Headings carry weight, not a second family */
+h1, h2, h3 { letter-spacing: -0.015em; }
 
 /* Scrollbar */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: var(--gray-100); }
-::-webkit-scrollbar-thumb { background: var(--green-muted); border-radius: 3px; }
+::-webkit-scrollbar-thumb { background: var(--gray-200); border-radius: 3px; }
 
 /* Animations */
 @keyframes fadeIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }
@@ -55,55 +88,60 @@ body {
 .fade-in { animation: fadeIn 0.35s ease forwards; }
 .slide-in { animation: slideIn 0.3s ease forwards; }
 
+@media (prefers-reduced-motion: reduce) {
+  .fade-in, .slide-in { animation: none; }
+}
+
 /* ============================================================
-   DARK MODE — Firebase Console + Gemini inspired
-   Deep navy bg, Gemini multicolour accents on interactive elements
+   DARK — the House twin: same greige-and-ink logic on a warm
+   dark ground (not the old navy). House hues brighten one step.
    ============================================================ */
 
 [data-theme="dark"] {
-  /* Backgrounds — Firebase dark layering */
-  --off-white:    #0f0f14;
-  --white:        #1a1a24;
-  --gray-50:      #1e1e2c;
-  --gray-100:     #252534;
-  --gray-200:     #32324a;
-  --gray-400:     #6b6b8f;
-  --gray-600:     #9494b8;
-  --gray-800:     #c8c8e8;
+  --off-white:    #191A15;
+  --white:        #22231C;
+  --gray-50:      #262720;
+  --gray-100:     #2E2F27;
+  --gray-200:     #3A3B32;
+  --gray-400:     #7C7D72;
+  --gray-600:     #A0A196;
+  --gray-800:     #D6D5CB;
 
-  /* Text */
-  --text:         #e8e8f4;
-  --text-muted:   #8888aa;
+  --text:         #E9E8E0;
+  --text-muted:   #9A9B8F;
 
-  /* Brand colours shift for dark bg visibility */
-  --green:        #4ade80;
-  --green-dark:   #22c55e;
-  --green-mid:    #86efac;
-  --green-light:  #0a1f12;
-  --green-muted:  #14341e;
-  --crimson:      #f87171;
-  --crimson-light:#2d0e0e;
-  --gold:         #fbbf24;
-  --gold-light:   #211600;
-  --gold-dark:    #fcd34d;
+  --green:        #57A877;
+  --green-dark:   #6FBF8E;
+  --green-mid:    #7FCf9E;
+  --green-light:  #22301F;
+  --green-muted:  #2C4A38;
+  --crimson:      #D9695C;
+  --crimson-light:#33211E;
+  --gold:         #C9A03A;
+  --gold-light:   #302818;
+  --gold-dark:    #D9B45A;
 
-  /* Shadows deeper */
-  --shadow-sm:    0 1px 4px rgba(0,0,0,0.5);
-  --shadow-md:    0 4px 20px rgba(0,0,0,0.6);
-  --shadow-lg:    0 8px 40px rgba(0,0,0,0.7);
+  --house-blue:         #6C97D6;
+  --house-blue-light:   #1F2733;
+  --house-red:          #D96B6B;
+  --house-red-light:    #332020;
+  --house-green:        #57A877;
+  --house-green-light:  #22301F;
+  --house-yellow:       #C9A03A;
+  --house-yellow-light: #302818;
+
+  --shadow-sm:    0 1px 4px rgba(0,0,0,0.4);
+  --shadow-md:    0 6px 20px rgba(0,0,0,0.45);
+  --shadow-lg:    0 12px 40px rgba(0,0,0,0.55);
 }
 
-/* Body background */
-[data-theme="dark"] body {
-  background: #0f0f14;
-}
+[data-theme="dark"] body { background: #191A15; }
 
-/* Scrollbars */
-[data-theme="dark"] ::-webkit-scrollbar-track { background: #1a1a24; }
-[data-theme="dark"] ::-webkit-scrollbar-thumb { background: #32324a; border-radius: 3px; }
+[data-theme="dark"] ::-webkit-scrollbar-track { background: #22231C; }
+[data-theme="dark"] ::-webkit-scrollbar-thumb { background: #3A3B32; border-radius: 3px; }
 
-/* ---- Gemini gradient border utility (dark mode only) ---- */
-/* Subtle multicoloured border glow over existing border */
+/* ---- House gradient border utility (dark mode only) ----
+   The old Gemini glow, re-inked in the four house colours. */
 [data-theme="dark"] .gemini-border {
   position: relative;
   border-color: transparent !important;
@@ -114,7 +152,7 @@ body {
   inset: -1px;
   border-radius: inherit;
   padding: 1px;
-  background: linear-gradient(135deg, #4285f4 0%, #9b72cb 33%, #d96570 66%, #f29900 100%);
+  background: linear-gradient(135deg, #6C97D6 0%, #D96B6B 33%, #57A877 66%, #C9A03A 100%);
   -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
   mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
   -webkit-mask-composite: xor;
@@ -134,33 +172,34 @@ body {
 
 /* Dark mode topbar */
 [data-theme="dark"] .topbar {
-  background: #1a1a24 !important;
-  border-bottom: 1px solid #252534 !important;
+  background: #22231C !important;
+  border-bottom: 1px solid #2E2F27 !important;
 }
 
 /* Inputs in dark mode */
 [data-theme="dark"] input:not([type="checkbox"]):not([type="radio"]),
 [data-theme="dark"] select,
 [data-theme="dark"] textarea {
-  background: #1e1e2c !important;
-  color: #e8e8f4 !important;
-  border-color: #32324a !important;
+  background: #262720 !important;
+  color: #E9E8E0 !important;
+  border-color: #3A3B32 !important;
 }
 [data-theme="dark"] input::placeholder,
 [data-theme="dark"] textarea::placeholder {
-  color: #6b6b8f !important;
+  color: #7C7D72 !important;
 }
 
 /* Tables */
 [data-theme="dark"] table th {
-  background: #1e1e2c !important;
-  color: #8888aa !important;
+  background: #262720 !important;
+  color: #9A9B8F !important;
 }
 [data-theme="dark"] tr:hover {
-  background: #1e1e2c !important;
+  background: #262720 !important;
 }
 
-/* Sidebar stays dark regardless */
+/* Sidebar follows the card surface in both themes */
 [data-theme="dark"] aside {
-  background: #0a0a12 !important;
+  background: #1F201A !important;
+  border-right: 1px solid #2E2F27 !important;
 }

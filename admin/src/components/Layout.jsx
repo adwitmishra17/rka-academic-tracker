@@ -7,6 +7,7 @@ import { branchLabel } from '../lib/branch'
 import BranchSwitcher from './BranchSwitcher'
 import crest from '../assets/crest.png'
 import banner from '../assets/banner.png'
+import bannerLight from '../assets/banner-light.png'
 
 const NAV = [
   { to:'/', label:'Dashboard', end:true, icon:<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg> },
@@ -69,43 +70,45 @@ export default function Layout() {
 
   const SidebarContent = () => (
     <div style={{ display:'flex', flexDirection:'column', height:'100%' }}>
-      {/* Logo — clickable → home */}
-      <div onClick={() => navigate('/')} style={{ padding:'18px 16px 14px', borderBottom:'1px solid rgba(255,255,255,0.07)', display:'flex', flexDirection:'column', alignItems:'center', gap:10, cursor:'pointer' }}>
-        <img src={crest} alt="RKA" style={{ width:48, height:48, borderRadius:'50%', border:'1px solid rgba(201,162,39,0.4)', objectFit:'contain', background:'rgba(255,255,255,0.08)', padding:3 }} />
-        <img src={banner} alt="Radhakrishna Academy" style={{ width:'100%', maxWidth:190, height:'auto', objectFit:'contain' }} />
-        <div style={{ fontSize:9, color:'rgba(255,255,255,0.3)', letterSpacing:'0.12em', textTransform:'uppercase', fontFamily:'var(--font-body)' }}>Admin Portal</div>
+      {/* Logo — clickable → home. Sidebar is a light card now, so the
+          print-safe banner variant carries the wordmark in light mode. */}
+      <div onClick={() => navigate('/')} style={{ padding:'18px 16px 14px', borderBottom:'1px solid var(--gray-100)', display:'flex', flexDirection:'column', alignItems:'center', gap:10, cursor:'pointer' }}>
+        <img src={crest} alt="RKA" style={{ width:48, height:48, borderRadius:'50%', border:'1px solid var(--gray-200)', objectFit:'contain', background:'var(--gray-50)', padding:3 }} />
+        <img src={dark ? banner : bannerLight} alt="Radhakrishna Academy" style={{ width:'100%', maxWidth:190, height:'auto', objectFit:'contain' }} />
+        <div style={{ fontSize:9, color:'var(--text-muted)', letterSpacing:'0.12em', textTransform:'uppercase', fontFamily:'var(--font-body)' }}>Admin Portal</div>
       </div>
 
       {/* Branch switcher (super admin) or static badge (branch admin) */}
       <BranchSwitcher />
 
-      {/* Nav */}
-      <nav style={{ flex:1, padding:'10px 0', overflowY:'auto' }}>
+      {/* Nav — active item is an ink pill */}
+      <nav style={{ flex:1, padding:'10px 8px', overflowY:'auto' }}>
         {NAV.filter(n => !n.superAdminOnly || isSuperAdmin).map(n => (
           <NavLink key={n.to} to={n.to} end={n.end} style={({ isActive }) => ({
-            display:'flex', alignItems:'center', gap:10, padding:'9px 16px',
-            color: isActive ? 'var(--gold)' : 'rgba(255,255,255,0.65)',
-            textDecoration:'none', fontSize:13, fontWeight:500,
-            background: isActive ? 'rgba(201,162,39,0.1)' : 'transparent',
-            borderLeft: isActive ? '2px solid var(--gold)' : '2px solid transparent',
+            display:'flex', alignItems:'center', gap:10, padding:'8px 12px',
+            margin:'1px 0',
+            color: isActive ? 'var(--white)' : 'var(--text-muted)',
+            textDecoration:'none', fontSize:13, fontWeight: isActive ? 600 : 500,
+            background: isActive ? 'var(--text)' : 'transparent',
+            borderRadius: 99,
             transition:'all 0.15s', whiteSpace:'nowrap'
           })}>
-            <span style={{ flexShrink:0 }}>{n.icon}</span>
+            <span style={{ flexShrink:0, display:'flex' }}>{n.icon}</span>
             <span>{n.label}</span>
           </NavLink>
         ))}
       </nav>
 
       {/* User */}
-      <div style={{ borderTop:'1px solid rgba(255,255,255,0.07)', padding:'12px 16px' }}>
+      <div style={{ borderTop:'1px solid var(--gray-100)', padding:'12px 16px' }}>
         <div style={{ display:'flex', alignItems:'center', gap:9, marginBottom:10 }}>
-          <img src={user?.photoURL || ''} alt="" style={{ width:30, height:30, borderRadius:'50%', border:'1px solid rgba(201,162,39,0.4)', flexShrink:0 }} onError={e => e.target.style.display='none'} />
+          <img src={user?.photoURL || ''} alt="" style={{ width:30, height:30, borderRadius:'50%', border:'1px solid var(--gray-200)', flexShrink:0 }} onError={e => e.target.style.display='none'} />
           <div style={{ overflow:'hidden', flex:1 }}>
-            <div style={{ fontSize:12, color:'white', fontWeight:500, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{user?.displayName || 'Admin'}</div>
-            <div style={{ fontSize:10, color:'rgba(255,255,255,0.4)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{user?.email}</div>
+            <div style={{ fontSize:12, color:'var(--text)', fontWeight:600, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{user?.displayName || 'Admin'}</div>
+            <div style={{ fontSize:10, color:'var(--text-muted)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{user?.email}</div>
           </div>
         </div>
-        <button onClick={handleLogout} style={{ width:'100%', background:'rgba(139,26,26,0.2)', border:'none', borderRadius:6, padding:'7px', color:'rgba(255,180,180,0.8)', cursor:'pointer', fontSize:12 }}>
+        <button onClick={handleLogout} style={{ width:'100%', background:'var(--crimson-light)', border:'none', borderRadius:99, padding:'7px', color:'var(--crimson)', cursor:'pointer', fontSize:12, fontWeight:600 }}>
           Sign out
         </button>
       </div>
@@ -114,9 +117,9 @@ export default function Layout() {
 
   return (
     <div style={{ display:'flex', minHeight:'100vh' }}>
-      {/* Desktop sidebar */}
+      {/* Desktop sidebar — light card surface */}
       {!isMobile && (
-        <aside style={{ width:SIDEBAR_W, background:'var(--green-dark)', flexShrink:0, position:'sticky', top:0, height:'100vh', zIndex:100 }}>
+        <aside style={{ width:SIDEBAR_W, background:'var(--white)', borderRight:'1px solid var(--gray-100)', flexShrink:0, position:'sticky', top:0, height:'100vh', zIndex:100 }}>
           <SidebarContent />
         </aside>
       )}
@@ -125,7 +128,7 @@ export default function Layout() {
       {isMobile && mobileOpen && (
         <div style={{ position:'fixed', inset:0, zIndex:200 }}>
           <div onClick={() => setMobileOpen(false)} style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.5)' }} />
-          <aside style={{ position:'absolute', top:0, left:0, width:SIDEBAR_W, height:'100%', background:'var(--green-dark)', overflowY:'auto' }}>
+          <aside style={{ position:'absolute', top:0, left:0, width:SIDEBAR_W, height:'100%', background:'var(--white)', borderRight:'1px solid var(--gray-100)', overflowY:'auto' }}>
             <SidebarContent />
           </aside>
         </div>
@@ -135,17 +138,17 @@ export default function Layout() {
       <div style={{ flex:1, display:'flex', flexDirection:'column', minWidth:0 }}>
         {/* Mobile top bar */}
         {isMobile && (
-          <div style={{ background:'var(--green-dark)', padding:'11px 16px', display:'flex', alignItems:'center', justifyContent:'space-between', position:'sticky', top:0, zIndex:50 }}>
+          <div style={{ background:'var(--white)', borderBottom:'1px solid var(--gray-100)', padding:'11px 16px', display:'flex', alignItems:'center', justifyContent:'space-between', position:'sticky', top:0, zIndex:50 }}>
             <div onClick={() => navigate('/')} style={{ display:'flex', alignItems:'center', gap:9, cursor:'pointer' }}>
-              <img src={crest} alt="RKA" style={{ width:30, height:30, borderRadius:'50%', border:'1px solid rgba(201,162,39,0.4)', objectFit:'contain' }} />
-              <img src={banner} alt="Radhakrishna Academy" style={{ height:28, width:'auto', objectFit:'contain', maxWidth:160 }} />
+              <img src={crest} alt="RKA" style={{ width:30, height:30, borderRadius:'50%', border:'1px solid var(--gray-200)', objectFit:'contain' }} />
+              <img src={dark ? banner : bannerLight} alt="Radhakrishna Academy" style={{ height:28, width:'auto', objectFit:'contain', maxWidth:160 }} />
             </div>
             <div style={{ display:'flex', gap:8 }}>
-            <button onClick={() => setDark(d => !d)} style={{ background:'rgba(255,255,255,0.1)', border:'none', borderRadius:8, padding:'8px', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center' }}>
-              {dark ? <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg> : <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>}
+            <button onClick={() => setDark(d => !d)} style={{ background:'var(--gray-50)', border:'1px solid var(--gray-100)', borderRadius:99, padding:'8px', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', color:'var(--text-muted)' }}>
+              {dark ? <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg> : <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>}
             </button>
-            <button onClick={() => setMobileOpen(o => !o)} style={{ background:'rgba(255,255,255,0.1)', border:'none', borderRadius:8, padding:'8px', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center' }}>
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2">
+            <button onClick={() => setMobileOpen(o => !o)} style={{ background:'var(--gray-50)', border:'1px solid var(--gray-100)', borderRadius:99, padding:'8px', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', color:'var(--text)' }}>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 {mobileOpen ? <path d="M18 6L6 18M6 6l12 12"/> : <><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></>}
               </svg>
             </button>
@@ -163,15 +166,15 @@ export default function Layout() {
                 display:'flex', alignItems:'center', gap:7, padding:'6px 16px',
                 borderRadius:20,
                 border: dark ? 'none' : '1px solid var(--gray-200)',
-                background: dark ? 'rgba(66,133,244,0.08)' : 'var(--gray-50)',
-                color: dark ? '#a8c4ff' : 'var(--text-muted)',
+                background: 'var(--gray-50)',
+                color: 'var(--text-muted)',
                 cursor:'pointer', fontSize:12, fontWeight:500, transition:'all 0.2s',
                 position:'relative',
               }}
             >
               {dark ? (
                 <>
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#a8c4ff" strokeWidth="2"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
                   Light
                 </>
               ) : (
