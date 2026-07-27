@@ -15,19 +15,37 @@ const inp = { width:'100%', padding:'10px 12px', border:'1px solid var(--gray-20
 function timeToMinutes(t) { const [h,m] = t.split(':').map(Number); return h*60+m }
 function minutesToTime(m) { return `${String(Math.floor(m/60)).padStart(2,'0')}:${String(m%60).padStart(2,'0')}` }
 
+// Breaks in the Period Times format (multiple), with the legacy single
+// breakAfter/breakDuration fields as fallback for pre-upgrade docs.
+function breaksOf(settings) {
+  if (settings.breaks?.length) return settings.breaks
+  return settings.breakAfter
+    ? [{ afterPeriod: Number(settings.breakAfter), duration: Number(settings.breakDuration || 20) }]
+    : []
+}
+
 function buildSchedule(settings) {
-  const { startTime='09:20', duration=40, breakAfter=4, breakDuration=20, weekdayPeriods=8, saturdayPeriods=5 } = settings
+  const { startTime='09:20', weekdayPeriods=8, saturdayPeriods=5 } = settings
   const maxPeriods = Math.max(Number(weekdayPeriods), Number(saturdayPeriods))
+  // Per-period durations (Period Times' format); legacy docs carry one flat
+  // duration. Same reader as TeacherArrangement/Dashboard, so the timetable
+  // finally mirrors the configured schedule exactly.
+  const perList = settings.periods?.length
+    ? settings.periods
+    : Array.from({ length: maxPeriods }, () => ({ duration: settings.duration || 40 }))
+  const brkList = breaksOf(settings)
   let current = timeToMinutes(startTime)
   const periods = []
   for (let i = 1; i <= maxPeriods; i++) {
+    const dur = Number(perList[i - 1]?.duration ?? perList[perList.length - 1]?.duration ?? 40)
     const start = minutesToTime(current)
-    const end = minutesToTime(current + Number(duration))
+    const end = minutesToTime(current + dur)
     periods.push({ period: i, start, end, label: `${start}–${end}` })
-    current += Number(duration)
-    if (i === Number(breakAfter)) {
-      periods.push({ isBreak: true, after: i, start: end, end: minutesToTime(current + Number(breakDuration)), duration: Number(breakDuration) })
-      current += Number(breakDuration)
+    current += dur
+    const brk = brkList.find(b => Number(b.afterPeriod) === i)
+    if (brk) {
+      periods.push({ isBreak: true, after: i, start: end, end: minutesToTime(current + Number(brk.duration)), duration: Number(brk.duration) })
+      current += Number(brk.duration)
     }
   }
   return periods
@@ -136,7 +154,7 @@ export default function Timetable() {
           <h1 style={{ fontFamily:'var(--font-display)', fontSize:24, fontWeight:600, color:'var(--green-dark)', marginBottom:3 }}>Timetable</h1>
           <p style={{ fontSize:13, color:'var(--text-muted)' }}>
             Mon–Fri: {weekdayPeriods} periods · Saturday: {saturdayPeriods} periods
-            {settings.breakAfter && ` · Break after P${settings.breakAfter} (${settings.breakDuration} min)`}
+            {breaksOf(settings).map(b => ` · Break after P${b.afterPeriod} (${b.duration} min)`).join('')}
           </p>
           <div style={{ width:40, height:2, background:'linear-gradient(90deg, var(--gold), transparent)', marginTop:8, borderRadius:1 }} />
         </div>
@@ -419,9 +437,12 @@ export default function Timetable() {
               {form.period && (
                 <div style={{ background:'var(--green-light)', borderRadius:'var(--radius-sm)', padding:'8px 12px', marginBottom:16, fontSize:12, color:'var(--green-dark)' }}>
                   ⏰ This period runs {periodLabel(Number(form.period))}
-                  {Number(form.period) === Number(settings.breakAfter) && (
-                    <span style={{ marginLeft:8, color:'var(--gold-dark)' }}>· Followed by {settings.breakDuration}-min interval</span>
-                  )}
+                  {(() => {
+                    const brk = breaksOf(settings).find(b => Number(b.afterPeriod) === Number(form.period))
+                    return brk && (
+                      <span style={{ marginLeft:8, color:'var(--gold-dark)' }}>· Followed by {brk.duration}-min interval</span>
+                    )
+                  })()}
                 </div>
               )}
 
