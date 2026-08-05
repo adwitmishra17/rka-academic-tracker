@@ -111,7 +111,30 @@ const apiReady = firebaseReady && !!supabase
 // ─── Middleware ─────────────────────────────────────────────────────────────
 app.use(express.json({ limit: '1mb' }))
 
-// Auth middleware — verifies Firebase ID token, attaches { uid, email } to req.user.
+// Admin-membership check (mirrors the Firestore isAdmin() rule). This is the
+// ADMIN backend, but the Firebase project ALSO holds parent-app and teacher
+// sessions — so a merely-valid token is not proof of being an admin. Without
+// this, any such token could reach admin operations like POST /api/exam/marks
+// (which writes source='manual', the sentinel every corrector treats as
+// untouchable). Cached 5 min per identity to avoid a Firestore read per request.
+const adminCache = new Map()
+const ADMIN_TTL_MS = 5 * 60 * 1000
+async function isAdminUser({ uid, email }) {
+  if (email && email === SUPER_ADMIN_EMAIL) return true
+  const key = email || uid
+  const hit = adminCache.get(key)
+  if (hit && hit.exp > Date.now()) return hit.ok
+  const db = admin.firestore()
+  let ok = false
+  if (uid)   ok = (await db.collection('admins').doc(uid).get()).exists
+  if (!ok && email) ok = (await db.collection('admins').doc(email).get()).exists
+  adminCache.set(key, { ok, exp: Date.now() + ADMIN_TTL_MS })
+  return ok
+}
+
+// Auth middleware — verifies the Firebase ID token AND that the caller is an
+// admin, attaches { uid, email } to req.user. Every /api route here is an admin
+// operation; super-admin-only routes add their own stricter check on top.
 async function verifyAuth(req, res, next) {
   if (!apiReady) return res.status(503).json({ error: 'API not configured on server' })
   const header = req.headers.authorization || ''
@@ -120,9 +143,12 @@ async function verifyAuth(req, res, next) {
   try {
     const decoded = await admin.auth().verifyIdToken(token)
     req.user = { uid: decoded.uid, email: (decoded.email || '').toLowerCase() }
+    if (!(await isAdminUser(req.user))) {
+      return res.status(403).json({ error: 'Admin access required' })
+    }
     next()
   } catch (e) {
-    console.warn('[admin] token verify failed:', e.message)
+    console.warn('[admin] auth failed:', e.message)
     res.status(401).json({ error: 'Invalid or expired token' })
   }
 }

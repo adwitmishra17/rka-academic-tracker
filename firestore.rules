@@ -22,16 +22,23 @@ service cloud.firestore {
     function isSchoolUser() {
       return isAdmin();
     }
-    function isAnyTeacher() {
-      return request.auth != null;
-    }
     // A REAL staff teacher — not just any authenticated identity (the
-    // parent app also mints Firebase sessions). userBranches/{email} is
-    // maintained by HRMS's employee→Firestore sync for active teachers
-    // only, so membership doubles as the teacher check.
+    // parent app also mints Firebase sessions, and Email/Password self-signup
+    // exists). userBranches/{email} is maintained by HRMS's employee→Firestore
+    // sync for active teachers only, so membership doubles as the teacher check.
     function isRealTeacher() {
       return request.auth != null && tokenEmail() != ''
         && exists(/databases/$(database)/documents/userBranches/$(tokenEmail().lower()));
+    }
+    // SECURITY: was `request.auth != null` — "anyone signed in", which let
+    // self-registered strangers AND parent-app sessions (same Firebase project)
+    // read the entire student directory and forge exam marks. Now means a REAL
+    // staff member (active teacher OR admin). Enforcement lives HERE in the
+    // rules, not just in the app's UI sign-out. isRealTeacher/isSchoolUser use
+    // exists() on userBranches/admins, which run privileged (no read-rule needed
+    // on those collections), so there is no bootstrap deadlock.
+    function isAnyTeacher() {
+      return isRealTeacher() || isSchoolUser();
     }
     function getMyClassAssignment() {
       return get(/databases/$(database)/documents/classTeacherByEmail/$(request.auth.token.email.lower())).data;
@@ -54,17 +61,17 @@ service cloud.firestore {
       ]);
     }
     match /admins/{email} {
-      allow read: if request.auth != null;
+      allow read: if isAnyTeacher();
       allow write: if isSuperAdmin();
     }
     match /teachers/{id} {
-      allow read: if request.auth != null;
+      allow read: if isAnyTeacher();
       allow create: if false;
       allow delete: if false;
       allow update: if isSchoolUser() && diffsOnlyAcademicFields();
     }
     match /classTeacherByEmail/{email} {
-      allow read: if request.auth != null;
+      allow read: if isAnyTeacher();
       allow write: if isSchoolUser();
     }
     match /settings/{id} {
@@ -127,7 +134,7 @@ service cloud.firestore {
     }
     match /studentAudit/{id} {
       allow read: if isAnyTeacher();
-      allow create: if request.auth != null;
+      allow create: if isAnyTeacher();
       allow update, delete: if false;
     }
     // Student attendance: deterministic doc ID = '{date}_{studentId}'.
@@ -146,7 +153,7 @@ service cloud.firestore {
     // Attendance audit: append-only.
     match /attendanceAudit/{id} {
       allow read: if isAnyTeacher();
-      allow create: if request.auth != null;
+      allow create: if isAnyTeacher();
       allow update, delete: if false;
     }
     match /timetable/{id} {
@@ -184,20 +191,30 @@ service cloud.firestore {
       allow write: if isSchoolUser();
     }
 
-    // ── Report-card data entry (teacher-owned) ──────────────────────────────
-    // Paper metadata, marks, co-scholastic grades, and HPC assessments are
-    // written by teachers from the PWA. Same trust model as lessons/testMarks.
+    // ── Report-card data entry ──────────────────────────────────────────────
+    // SECURITY: writes are now DISABLED from all clients. The Teacher PWA
+    // writes marks/papers/grades/HPC exclusively through its API → Supabase;
+    // NOTHING legitimately writes these Firestore collections (grep-verified).
+    // They were a pure legacy side-channel: a client write here fires a
+    // service-role sync Cloud Function that upserts straight into the
+    // authoritative SMS exam_marks — bypassing the API's ownership check and
+    // the 10-minute lock, and forging attribution. `write: if false` closes
+    // that; the Admin-SDK sync path (if any) is rules-exempt and unaffected.
     match /examPapers/{id} {
-      allow read, write: if isAnyTeacher();
+      allow read:  if isAnyTeacher();
+      allow write: if false;
     }
     match /examMarks/{id} {
-      allow read, write: if isAnyTeacher();
+      allow read:  if isAnyTeacher();
+      allow write: if false;
     }
     match /examCoschGrades/{id} {
-      allow read, write: if isAnyTeacher();
+      allow read:  if isAnyTeacher();
+      allow write: if false;
     }
     match /hpcAssessments/{id} {
-      allow read, write: if isAnyTeacher();
+      allow read:  if isAnyTeacher();
+      allow write: if false;
     }
   }
 }
