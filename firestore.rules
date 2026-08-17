@@ -78,6 +78,12 @@ service cloud.firestore {
       allow read: if isAnyTeacher();
       allow write: if isSchoolUser();
     }
+    // School non-working days (holidays / off days for student attendance).
+    // Teachers read (to block marking on off-days); admins manage.
+    match /nonWorkingDays/{id} {
+      allow read: if isAnyTeacher();
+      allow write: if isSchoolUser();
+    }
     match /classes/{id} {
       allow read: if isAnyTeacher();
       allow write: if isSchoolUser();

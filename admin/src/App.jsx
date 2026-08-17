@@ -30,6 +30,7 @@ import StudentPerformance from './pages/StudentPerformance'
 import Crosslist from './pages/Crosslist'
 import Timetable from './pages/Timetable'
 import PeriodSettings from './pages/PeriodSettings'
+import NonWorkingDays from './pages/NonWorkingDays'
 import StudentProfile from './pages/StudentProfile'
 import TeacherProfile from './pages/TeacherProfile'
 import LessonPlanFields from './pages/LessonPlanFields'
@@ -234,6 +235,7 @@ export default function App() {
             <Route path="attendance/:className/:branchCode" element={<AttendanceClass />} />
             <Route path="timetable" element={<Timetable />} />
             <Route path="period-settings" element={<PeriodSettings />} />
+            <Route path="non-working-days" element={<NonWorkingDays />} />
             <Route path="students/:studentId" element={<StudentProfile />} />
             <Route path="teacher-management/:teacherId" element={<TeacherProfile />} />
             <Route path="lesson-plan-fields" element={<LessonPlanFields />} />

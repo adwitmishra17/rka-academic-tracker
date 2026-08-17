@@ -342,6 +342,37 @@ exports.syncStudentAttendance = onDocumentWritten('studentAttendance/{docId}', a
   }
 })
 
+
+// ── Non-working days ─────────────────────────────────────────────────────────
+// Firestore `nonWorkingDays/{id}` (authored in the Tracker admin) → SMS Supabase
+// `school_non_working_days`. The SMS consecutive-absence flag excludes these
+// days; the Teacher PWA reads Firestore directly to block marking on them.
+exports.syncNonWorkingDays = onDocumentWritten('nonWorkingDays/{docId}', async (event) => {
+  const docId = event.params.docId
+  const after = event.data?.after?.exists ? event.data.after.data() : null
+  try {
+    if (!after) {
+      const { error } = await supabase().from('school_non_working_days').delete().eq('id', docId)
+      if (error) console.error(`syncNonWorkingDays delete (${docId}):`, error.message)
+      return
+    }
+    const row = {
+      id:          docId,
+      date:        after.date,
+      label:       after.label || null,
+      branch_code: after.branchCode || null,   // null = all branches
+      class_name:  after.className || null,     // null = all classes
+      created_by:  after.createdBy || null,
+      updated_at:  new Date().toISOString(),
+    }
+    const { error } = await supabase().from('school_non_working_days')
+      .upsert(row, { onConflict: 'id' })
+    if (error) console.error(`syncNonWorkingDays write (${docId}):`, error.message)
+  } catch (e) {
+    console.error(`syncNonWorkingDays (${docId}):`, e.message)
+  }
+})
+
 exports.syncExamSubjects = onDocumentWritten('examSubjects/{docId}', async event => {
   const docId = event.params.docId
   const data  = event.data?.after?.data()
