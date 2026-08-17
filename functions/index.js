@@ -848,3 +848,13 @@ exports.hrmsEmployeeSync = onRequest({ secrets: [HRMS_SYNC_SECRET] }, async (req
     res.status(500).json({ error: e.message })
   }
 })
+
+// -----------------------------------------------------------------------------
+// admins → RKA Social access sync. Lives in its own module; re-exported here
+// because the functions codebase only loads exports from this entry point.
+// See socialAccessSync.js for why the relay is server-side rather than a
+// direct call from HRMS.
+// -----------------------------------------------------------------------------
+const socialAccess = require('./socialAccessSync')
+exports.syncSocialAccess       = socialAccess.syncSocialAccess
+exports.reconcileSocialAccess  = socialAccess.reconcileSocialAccess
