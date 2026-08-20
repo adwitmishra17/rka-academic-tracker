@@ -19,6 +19,13 @@ const sanitize = (s) => String(s || '').replace(/[^a-zA-Z0-9]+/g, '_').replace(/
 const fileKey = (className, subject) => `${sanitize(className)}__${sanitize(subject)}`
 const storagePathFor = (className, subject) => `syllabus/${sanitize(className)}/${sanitize(subject)}.pdf`
 
+// Class-wide upload: Nursery–Class 8 publish ONE syllabus PDF covering every
+// subject's topics and chapters. Stored as a pseudo-subject so the whole
+// pipeline (doc id, storage path, parent app listing) works unchanged.
+const CLASS_WIDE = 'Complete Syllabus'
+// Senior classes (9–12, incl. streams) stay subject-wise by default.
+const isJuniorClass = (c) => !/\b(9|10|11|12)\b/.test(String(c || ''))
+
 export default function SyllabusFiles() {
   const { classNames: CLASSES } = useClasses()
   const [classSubjectsMap, setClassSubjectsMap] = useState({})
@@ -52,7 +59,11 @@ export default function SyllabusFiles() {
   // Subjects for the chosen class: canonical per-class map, else the global
   // master list (so NO class ever has an empty subject dropdown).
   const subjectsForClass = (classSubjectsMap[selectedClass]?.length ? classSubjectsMap[selectedClass] : globalSubjects)
-  useEffect(() => { setSelectedSubject(subjectsForClass[0] || '') }, [selectedClass, classSubjectsMap, globalSubjects]) // eslint-disable-line
+  // Junior classes (Nursery–8) default to the single class-wide PDF; senior
+  // classes default to their first subject. Both can still pick either mode.
+  useEffect(() => {
+    setSelectedSubject(isJuniorClass(selectedClass) ? CLASS_WIDE : (subjectsForClass[0] || CLASS_WIDE))
+  }, [selectedClass, classSubjectsMap, globalSubjects]) // eslint-disable-line
 
   function pickFile(e) {
     const f = e.target.files?.[0]
@@ -83,6 +94,7 @@ export default function SyllabusFiles() {
         uploadedByRole: 'admin',
         uploadedByEmail: auth.currentUser?.email || null,
         uploadedAt: Timestamp.now(),
+        scope: selectedSubject === CLASS_WIDE ? 'class' : 'subject',
       })
       setOk(`Uploaded ${selectedClass} · ${selectedSubject}`)
       setPdf(null); setProgress('')
@@ -109,7 +121,7 @@ export default function SyllabusFiles() {
     <div style={{ padding: '24px 28px', maxWidth: 1050 }}>
       <div className="fade-in" style={{ marginBottom: 22 }}>
         <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 24, fontWeight: 600, color: 'var(--green-dark)', marginBottom: 3 }}>Syllabus PDF</h1>
-        <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>Upload a syllabus PDF for each class &amp; subject — parents see it class-wise in the parent app.</p>
+        <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>Upload a syllabus PDF per subject — or one Complete Class Syllabus (Nursery–8) covering every subject. Parents see it class-wise in the parent app.</p>
         <div style={{ width: 40, height: 2, background: 'linear-gradient(90deg, var(--gold), transparent)', marginTop: 8, borderRadius: 1 }} />
       </div>
 
@@ -124,10 +136,10 @@ export default function SyllabusFiles() {
               </select>
             </div>
             <div>
-              <label style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-muted)', display: 'block', marginBottom: 4 }}>Subject</label>
+              <label style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-muted)', display: 'block', marginBottom: 4 }}>Subject / scope</label>
               <select value={selectedSubject} onChange={(e) => setSelectedSubject(e.target.value)} style={inp}>
+                <option value={CLASS_WIDE}>📚 Complete Class Syllabus — one PDF, all subjects</option>
                 {subjectsForClass.map((s) => <option key={s}>{s}</option>)}
-                {subjectsForClass.length === 0 && <option value="">No subjects configured for this class</option>}
               </select>
             </div>
           </div>
@@ -167,7 +179,9 @@ export default function SyllabusFiles() {
               {files.map((f) => (
                 <div key={f.id} style={{ padding: '11px 16px', borderBottom: '1px solid var(--gray-50)', display: 'flex', alignItems: 'center', gap: 8 }}>
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text)' }}>{f.className} · {f.subject}</div>
+                    <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text)' }}>
+                      {f.className} · {f.subject === 'Complete Syllabus' ? <span style={{ color: 'var(--gold-dark)' }}>📚 Complete Syllabus</span> : f.subject}
+                    </div>
                     <div style={{ fontSize: 11, color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       {f.fileName}{f.uploadedByRole === 'teacher' ? ' · by teacher' : ''}
                     </div>
