@@ -1,19 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react'
-import { collection, getDocs, addDoc, Timestamp } from 'firebase/firestore'
+import { collection, getDocs, addDoc, doc, getDoc, Timestamp } from 'firebase/firestore'
 import { db } from '../firebase/config'
 import { useClasses } from '../hooks/useClasses'
 
-// CLASSES loaded via useClasses()
-const SUBJECTS = {
-  'Class 9': ['Science','Mathematics','English','Hindi','Social Science'],
-  'Class 10': ['Science','Mathematics','English','Hindi','Social Science'],
-  'Class 11 Science': ['Physics','Chemistry','Biology','Mathematics','English','Hindi','Physical Education','Computers'],
-  'Class 11 Commerce': ['Accountancy','Business Studies','Economics','English','Hindi','Physical Education','Computers'],
-  'Class 11 Humanities': ['History','Political Science','Geography','English','Hindi','Physical Education','Computers'],
-  'Class 12 Science': ['Physics','Chemistry','Biology','Mathematics','English','Hindi','Physical Education','Computers'],
-  'Class 12 Commerce': ['Accountancy','Business Studies','Economics','English','Hindi','Physical Education','Computers'],
-  'Class 12 Humanities': ['History','Political Science','Geography','English','Hindi','Physical Education','Computers'],
-}
+// CLASSES loaded via useClasses(); SUBJECTS per class come from the canonical
+// settings/classSubjects map (all classes), with settings/subjects as fallback
+// — the old hardcoded 8-class list left Nursery/LKG/UKG/Class 1–8 empty.
 const MONTHS = ['Apr 2025','May 2025','Jun 2025','Jul 2025','Aug 2025','Sep 2025','Oct 2025','Nov 2025','Dec 2025','Jan 2026','Feb 2026']
 const inp = { width:'100%', padding:'10px 12px', border:'1px solid var(--gray-200)', borderRadius:'var(--radius-sm)', fontSize:13, fontFamily:'var(--font-body)', color:'var(--text)', background:'var(--white)', outline:'none' }
 
@@ -159,7 +151,12 @@ export default function SyllabusUpload() {
   const [progress, setProgress] = useState('')
   const [savedCount, setSavedCount] = useState(0)
   const [modelUsed, setModelUsed] = useState('')
+  const [classSubjectsMap, setClassSubjectsMap] = useState({})
+  const [globalSubjects, setGlobalSubjects] = useState([])
   const fileRef = useRef()
+
+  // Per-class subjects: canonical map, else the global master (never empty).
+  const subjectsForClass = (classSubjectsMap[selectedClass]?.length ? classSubjectsMap[selectedClass] : globalSubjects)
 
   async function loadUploads() {
     try {
@@ -171,7 +168,14 @@ export default function SyllabusUpload() {
   useEffect(() => {
     loadUploads()
     getDocs(collection(db, 'classes')).then(snap => setClasses(snap.docs.map(d => ({ id:d.id, ...d.data() })))).catch(()=>{})
+    getDoc(doc(db, 'settings', 'classSubjects')).then(d => { if (d.exists() && d.data().map) setClassSubjectsMap(d.data().map) }).catch(()=>{})
+    getDoc(doc(db, 'settings', 'subjects')).then(d => { if (d.exists() && Array.isArray(d.data().list)) setGlobalSubjects(d.data().list) }).catch(()=>{})
   }, [])
+
+  // Keep the selected subject valid whenever the class or subject sources change.
+  useEffect(() => {
+    if (subjectsForClass.length && !subjectsForClass.includes(selectedSubject)) setSelectedSubject(subjectsForClass[0])
+  }, [selectedClass, classSubjectsMap, globalSubjects]) // eslint-disable-line
 
   function handleFileChange(e) {
     const f = e.target.files[0]
@@ -436,14 +440,15 @@ If no topics are missing, return an empty array: []`
               <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12, marginBottom:18 }}>
                 <div>
                   <label style={{ fontSize:12, fontWeight:500, color:'var(--text-muted)', display:'block', marginBottom:4 }}>Class</label>
-                  <select value={selectedClass} onChange={e=>{setSelectedClass(e.target.value);setSelectedSubject(SUBJECTS[e.target.value]?.[0]||'')}} style={inp}>
+                  <select value={selectedClass} onChange={e=>{const c=e.target.value; setSelectedClass(c); const subs=(classSubjectsMap[c]?.length?classSubjectsMap[c]:globalSubjects); setSelectedSubject(subs[0]||'')}} style={inp}>
                     {CLASSES.map(c=><option key={c}>{c}</option>)}
                   </select>
                 </div>
                 <div>
                   <label style={{ fontSize:12, fontWeight:500, color:'var(--text-muted)', display:'block', marginBottom:4 }}>Subject</label>
                   <select value={selectedSubject} onChange={e=>setSelectedSubject(e.target.value)} style={inp}>
-                    {(SUBJECTS[selectedClass]||[]).map(s=><option key={s}>{s}</option>)}
+                    {subjectsForClass.map(s=><option key={s}>{s}</option>)}
+                    {subjectsForClass.length===0 && <option value="">No subjects configured for this class</option>}
                   </select>
                 </div>
               </div>

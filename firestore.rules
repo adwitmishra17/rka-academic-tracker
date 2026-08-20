@@ -95,6 +95,15 @@ service cloud.firestore {
     match /syllabusDocuments/{id} {
       allow read, write: if isSchoolUser();
     }
+    // Syllabus PDF catalogue — one doc per class+subject (deterministic id),
+    // surfaced to parents class-wise. Any staff member reads (Tracker + Teacher
+    // PWA list them); admins write from the Tracker browser. Teacher uploads go
+    // through the Teacher-PWA server (Admin SDK, rules-exempt), which enforces
+    // subject ownership against Supabase exam_subjects before writing.
+    match /syllabusFiles/{id} {
+      allow read: if isAnyTeacher();
+      allow write: if isSchoolUser();
+    }
     match /lessons/{id} {
       allow read, write: if isAnyTeacher();
     }
