@@ -889,3 +889,11 @@ exports.hrmsEmployeeSync = onRequest({ secrets: [HRMS_SYNC_SECRET] }, async (req
 const socialAccess = require('./socialAccessSync')
 exports.syncSocialAccess       = socialAccess.syncSocialAccess
 exports.reconcileSocialAccess  = socialAccess.reconcileSocialAccess
+
+// -----------------------------------------------------------------------------
+// Live HRMS staff attendance for Tracker screens (Lesson Log heatmap badges).
+// See hrmsAttendance.js — absence is derived (no attendance_daily row), so it
+// must be queried live rather than synced.
+// -----------------------------------------------------------------------------
+const hrmsAttendance = require('./hrmsAttendance')
+exports.getHrmsDayAttendance = hrmsAttendance.getHrmsDayAttendance

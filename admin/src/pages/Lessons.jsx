@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react'
 import { collection, getDocs, query, where, orderBy, doc, updateDoc, deleteDoc, Timestamp } from 'firebase/firestore'
 import { db } from '../firebase/config'
+import { getApp } from 'firebase/app'
+import { getFunctions, httpsCallable } from 'firebase/functions'
 import { useClasses } from '../hooks/useClasses'
 import { useAuth } from '../App'
 import { branchConstraints, branchConstraintsArray } from '../lib/branchQuery'
@@ -9,6 +11,12 @@ import { format, parseISO, endOfMonth, getDay } from 'date-fns'
 // CLASSES loaded via useClasses({ includeAll: true })
 const DAYS_OF_WEEK = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
 const PERIODS = [1, 2, 3, 4, 5, 6, 7, 8]
+
+// '09:07:23' / ISO → 'HH:MM' for the tiny HRMS arrival label.
+function fmtInTime(v) {
+  const m = String(v || '').match(/(\d{1,2}):(\d{2})/)
+  return m ? `${m[1].padStart(2, '0')}:${m[2]}` : ''
+}
 
 export default function Lessons() {
   const { classNames: CLASSES } = useClasses({ includeAll: true })
@@ -37,6 +45,9 @@ export default function Lessons() {
   const [hmArrangements, setHmArrangements] = useState([])
   const [hmLoading, setHmLoading] = useState(false)
   const [hmDetail, setHmDetail] = useState(null)
+  // Live HRMS attendance for hmDate (getHrmsDayAttendance callable). null =
+  // unavailable (function down / no access) — the heatmap degrades gracefully.
+  const [hmHrms, setHmHrms] = useState(null)
 
   // Load teachers once (filtered by branch)
   useEffect(() => {
@@ -137,6 +148,20 @@ export default function Lessons() {
     }
     loadHm()
   }, [view, hmDate, effectiveBranches])
+
+  // Live HRMS attendance for the selected date — joins to teachers via
+  // teacher.hrmsEmployeeId. Failure just means no badges (heatmap unaffected).
+  useEffect(() => {
+    if (view !== 'heatmap') return
+    let cancelled = false
+    setHmHrms(null)
+    // Functions codebase pins region asia-south2 (setGlobalOptions) — the
+    // client default is us-central1, so the region must be explicit here.
+    httpsCallable(getFunctions(getApp(), 'asia-south2'), 'getHrmsDayAttendance')({ date: hmDate })
+      .then(res => { if (!cancelled) setHmHrms(res.data) })
+      .catch(err => { console.warn('HRMS attendance unavailable:', err?.message || err) })
+    return () => { cancelled = true }
+  }, [view, hmDate])
 
   function openEdit(l) {
     setEditLesson(l)
@@ -257,13 +282,40 @@ export default function Lessons() {
       return { status: 'logged', slot, lesson: matchingLesson }
     }
 
+    // HRMS overlay (getHrmsDayAttendance): absence per the biometric record.
+    // Only trusted when the day shows real staff activity (staffDayActive),
+    // so staff holidays flag nobody. For TODAY before 11 AM a missing punch
+    // is still ambiguous — soft "no punch yet" label, cells stay accusatory.
+    const hrmsMap = (hmHrms && hmHrms.date === hmDate && hmHrms.staffDayActive)
+      ? hmHrms.byEmployee : null
+    const softMorning = hmDate === format(new Date(), 'yyyy-MM-dd') && new Date().getHours() < 11
+
     const rows = allRelevantTeachers.map(t => {
-      const cells = PERIODS.map(p => ({ period: p, ...computeStatus(t.id, p) }))
+      let cells = PERIODS.map(p => ({ period: p, ...computeStatus(t.id, p) }))
+
+      const hrms = (hrmsMap && t.hrmsEmployeeId) ? hrmsMap[t.hrmsEmployeeId] : null
+      let hrmsBadge = null
+      if (hrms) {
+        if (hrms.status === 'leave') hrmsBadge = { kind: 'leave', text: 'On leave · HRMS' }
+        else if (hrms.status === 'no_punch') {
+          hrmsBadge = softMorning
+            ? { kind: 'nopunch', text: 'No punch yet · HRMS' }
+            : { kind: 'absent', text: 'Absent · HRMS' }
+        } else if (hrms.status === 'present' && hrms.in) {
+          hrmsBadge = { kind: 'present', text: `in ${fmtInTime(hrms.in)}` }
+        }
+      }
+      // A confirmed absence excuses the gaps: missing cells render as absent
+      // (grey 'A', out of the missing counts) exactly like arrangement-absent.
+      if (hrmsBadge && (hrmsBadge.kind === 'absent' || hrmsBadge.kind === 'leave')) {
+        cells = cells.map(c => c.status === 'missing' ? { ...c, status: 'absent', hrmsAbsent: true } : c)
+      }
+
       const scheduledCount = cells.filter(c => c.status !== 'free' && c.status !== 'absent').length
       const loggedCount = cells.filter(c => c.status === 'logged' || c.status === 'late').length
       const missingCount = cells.filter(c => c.status === 'missing').length
       const lateCount = cells.filter(c => c.status === 'late').length
-      return { teacher: t, cells, scheduledCount, loggedCount, missingCount, lateCount }
+      return { teacher: t, cells, scheduledCount, loggedCount, missingCount, lateCount, hrmsBadge }
     }).sort((a, b) => {
       if (a.missingCount !== b.missingCount) return b.missingCount - a.missingCount
       return a.teacher.fullName.localeCompare(b.teacher.fullName)
@@ -286,8 +338,10 @@ export default function Lessons() {
       if (periodMissing[p] > mostMissedCount) { mostMissedCount = periodMissing[p]; mostMissedPeriod = p }
     })
 
-    return { dayName, rows, totalScheduled, totalLogged, totalLate, compliance, mostMissedPeriod, mostMissedCount }
-  }, [view, hmDate, hmTimetable, hmDayLessons, hmArrangements, teachers])
+    const hrmsAbsentCount = rows.filter(r => r.hrmsBadge?.kind === 'absent').length
+    const hrmsLeaveCount = rows.filter(r => r.hrmsBadge?.kind === 'leave').length
+    return { dayName, rows, totalScheduled, totalLogged, totalLate, compliance, mostMissedPeriod, mostMissedCount, hrmsAbsentCount, hrmsLeaveCount }
+  }, [view, hmDate, hmTimetable, hmDayLessons, hmArrangements, teachers, hmHrms])
 
   const visibleRows = heatmap
     ? (hmShowOnlyMissing ? heatmap.rows.filter(r => r.missingCount > 0) : heatmap.rows)
@@ -608,7 +662,17 @@ export default function Lessons() {
               <span style={{ display:'flex', alignItems:'center', gap:5 }}><span style={{ width:12, height:12, background:'var(--gold)', borderRadius:3, display:'inline-block' }} /> Logged after 6 PM</span>
               <span style={{ display:'flex', alignItems:'center', gap:5 }}><span style={{ width:12, height:12, background:'var(--crimson-light)', border:'1px dashed var(--crimson)', borderRadius:3, display:'inline-block' }} /> Missing</span>
               <span style={{ display:'flex', alignItems:'center', gap:5 }}><span style={{ width:12, height:12, background:'var(--gray-100)', borderRadius:3, display:'inline-block' }} /> No period scheduled</span>
+              <span style={{ display:'flex', alignItems:'center', gap:5 }}><span style={{ width:12, height:12, background:'var(--gray-100)', color:'var(--text-muted)', borderRadius:3, display:'inline-flex', alignItems:'center', justifyContent:'center', fontSize:9, fontWeight:700 }}>A</span> Absent (HRMS / arrangement)</span>
             </div>
+
+            {/* HRMS day summary — only when the overlay found someone away */}
+            {(heatmap.hrmsAbsentCount > 0 || heatmap.hrmsLeaveCount > 0) && (
+              <div style={{ marginBottom:14, padding:'8px 14px', background:'var(--crimson-light)', borderRadius:'var(--radius-sm)', fontSize:12, color:'var(--crimson)', fontWeight:500 }}>
+                Per HRMS biometric records: {heatmap.hrmsAbsentCount > 0 && `${heatmap.hrmsAbsentCount} teacher${heatmap.hrmsAbsentCount > 1 ? 's' : ''} absent`}
+                {heatmap.hrmsAbsentCount > 0 && heatmap.hrmsLeaveCount > 0 && ' · '}
+                {heatmap.hrmsLeaveCount > 0 && `${heatmap.hrmsLeaveCount} on leave`} — their unlogged periods are excused above.
+              </div>
+            )}
 
             {/* Heatmap grid */}
             <div style={{ background:'var(--white)', borderRadius:'var(--radius-md)', border:'1px solid var(--gray-100)', overflow:'auto' }}>
@@ -629,6 +693,15 @@ export default function Lessons() {
                         <div style={{ display:'flex', alignItems:'center', gap:8 }}>
                           <div style={{ width:24, height:24, borderRadius:'50%', background: row.missingCount > 0 ? 'var(--crimson-light)' : 'var(--green-light)', color: row.missingCount > 0 ? 'var(--crimson)' : 'var(--green)', fontSize:10, fontWeight:700, display:'flex', alignItems:'center', justifyContent:'center' }}>{(row.teacher.fullName||'?')[0]}</div>
                           <span>{row.teacher.fullName}</span>
+                          {row.hrmsBadge && (row.hrmsBadge.kind === 'present' ? (
+                            <span style={{ fontSize:10, color:'var(--text-muted)', fontWeight:400, whiteSpace:'nowrap' }}>{row.hrmsBadge.text}</span>
+                          ) : (
+                            <span style={{
+                              fontSize:9.5, fontWeight:600, whiteSpace:'nowrap', padding:'2px 7px', borderRadius:8,
+                              background: row.hrmsBadge.kind === 'absent' ? 'var(--crimson-light)' : row.hrmsBadge.kind === 'leave' ? 'var(--gold-light, #fdf3d8)' : 'var(--gray-100)',
+                              color: row.hrmsBadge.kind === 'absent' ? 'var(--crimson)' : row.hrmsBadge.kind === 'leave' ? 'var(--gold-dark)' : 'var(--text-muted)',
+                            }}>{row.hrmsBadge.text}</span>
+                          ))}
                         </div>
                       </td>
                       {row.cells.map(cell => {
@@ -642,7 +715,7 @@ export default function Lessons() {
                             <button
                               onClick={() => cell.status !== 'free' && cell.status !== 'absent' && setHmDetail({ teacher: row.teacher, period: cell.period, slot: cell.slot, lesson: cell.lesson, status: cell.status })}
                               disabled={cell.status === 'free' || cell.status === 'absent'}
-                              title={cell.slot ? `${cell.slot.className || ''} · ${cell.slot.subject || ''}` : 'No period'}
+                              title={cell.slot ? `${cell.slot.className || ''} · ${cell.slot.subject || ''}${cell.hrmsAbsent ? ' · Absent per HRMS' : ''}` : 'No period'}
                               style={{ width:'100%', height:32, background: bg, color, border, borderRadius:5, fontSize:12, fontWeight:700, cursor, display:'flex', alignItems:'center', justifyContent:'center', fontFamily:'var(--font-body)' }}
                             >{label}</button>
                           </td>
