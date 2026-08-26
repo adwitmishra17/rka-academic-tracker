@@ -112,7 +112,15 @@ service cloud.firestore {
     }
     match /tests/{id} {
       allow read: if isSchoolUser() || isRealTeacher();
-      allow create, delete: if isSchoolUser();
+      allow delete: if isSchoolUser();
+      // Admins create any test. Teachers may create ONLY auto-materialized
+      // MONTHLY test docs (deterministic MT_* doc id, kind='monthly') — the
+      // regime replaces admin scheduling: the doc springs into existence on
+      // the teacher's first marks save. Ad-hoc tests stay admin-created.
+      allow create: if isSchoolUser()
+        || (isRealTeacher()
+            && id.matches('MT_.*')
+            && request.resource.data.kind == 'monthly');
       // Teachers may flip ONLY the marksEntered flag when saving marks;
       // everything else on a test stays admin-managed.
       allow update: if isSchoolUser()

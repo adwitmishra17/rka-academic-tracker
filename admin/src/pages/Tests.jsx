@@ -7,6 +7,7 @@ import { useClasses } from '../hooks/useClasses'
 import { useAuth } from '../App'
 import { branchConstraints, branchConstraintsArray } from '../lib/branchQuery'
 import { branchLabel } from '../lib/branch'
+import MonthlyTestsPanel from '../components/MonthlyTestsPanel'
 
 // CLASSES now loaded from Firestore via useClasses() hook below
 const inp = { width:'100%', padding:'10px 12px', border:'1px solid var(--gray-200)', borderRadius:'var(--radius-sm)', fontSize:13, fontFamily:'var(--font-body)', color:'var(--text)', background:'var(--white)', outline:'none' }
@@ -23,6 +24,8 @@ export default function Tests() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentBranch])
   const showBranchPicker = !currentBranch && canSwitchBranches && allowedBranches.length > 1
+  // 'monthly' = regime-driven auto tests (default) · 'scheduled' = ad-hoc admin-created
+  const [tab, setTab] = useState('monthly')
   const [tests, setTests] = useState([])
   const [marks, setMarks] = useState([])
   const [selectedClass, setSelectedClass] = useState('Class 9')
@@ -145,20 +148,36 @@ export default function Tests() {
       <div className="fade-in" style={{ marginBottom:24, display:'flex', alignItems:'flex-start', justifyContent:'space-between', flexWrap:'wrap', gap:14 }}>
         <div>
           <h1 style={{ fontFamily:'var(--font-display)', fontSize:24, fontWeight:600, color:'var(--green-dark)', marginBottom:3 }}>Tests & Performance</h1>
-          <p style={{ fontSize:13, color:'var(--text-muted)' }}>Schedule tests and track student performance</p>
+          <p style={{ fontSize:13, color:'var(--text-muted)' }}>Monthly tests run themselves — track completeness here; schedule extra tests when needed</p>
           <div style={{ width:40, height:2, background:'linear-gradient(90deg, var(--gold), transparent)', marginTop:8, borderRadius:1 }} />
         </div>
-        <div style={{ display:'flex', gap:10, flexShrink:0 }}>
-          <button onClick={cleanupOrphans} style={{ padding:'10px 14px', background:'var(--gold-light)', color:'var(--gold-dark)', border:'1px solid rgba(201,162,39,0.3)', borderRadius:'var(--radius-md)', fontSize:12, fontWeight:500, cursor:'pointer' }} title="Remove orphaned test marks left over from deleted tests">
-            Clean orphans
-          </button>
-          <button onClick={() => { setShowForm(s => !s); setError('') }} style={{ padding:'10px 18px', background:'var(--green)', color:'white', border:'none', borderRadius:'var(--radius-md)', fontSize:14, fontWeight:500, cursor:'pointer', display:'flex', alignItems:'center', gap:7, boxShadow:'0 2px 8px rgba(26,74,46,0.25)' }}>
-            <span style={{ fontSize:18, lineHeight:1 }}>{showForm ? '×' : '+'}</span>
-            {showForm ? 'Cancel' : 'Schedule Test'}
-          </button>
-        </div>
+        {tab === 'scheduled' && (
+          <div style={{ display:'flex', gap:10, flexShrink:0 }}>
+            <button onClick={cleanupOrphans} style={{ padding:'10px 14px', background:'var(--gold-light)', color:'var(--gold-dark)', border:'1px solid rgba(201,162,39,0.3)', borderRadius:'var(--radius-md)', fontSize:12, fontWeight:500, cursor:'pointer' }} title="Remove orphaned test marks left over from deleted tests">
+              Clean orphans
+            </button>
+            <button onClick={() => { setShowForm(s => !s); setError('') }} style={{ padding:'10px 18px', background:'var(--green)', color:'white', border:'none', borderRadius:'var(--radius-md)', fontSize:14, fontWeight:500, cursor:'pointer', display:'flex', alignItems:'center', gap:7, boxShadow:'0 2px 8px rgba(26,74,46,0.25)' }}>
+              <span style={{ fontSize:18, lineHeight:1 }}>{showForm ? '×' : '+'}</span>
+              {showForm ? 'Cancel' : 'Schedule Test'}
+            </button>
+          </div>
+        )}
       </div>
 
+      {/* Tabs */}
+      <div className="fade-in" style={{ display:'flex', gap:8, marginBottom:20 }}>
+        {[['monthly','Monthly Tests'],['scheduled','Scheduled Tests']].map(([k, label]) => (
+          <button key={k} onClick={() => setTab(k)} style={{ padding:'8px 18px', borderRadius:'var(--radius-md)', border:'1px solid', borderColor: tab===k ? 'var(--green)' : 'var(--gray-200)', background: tab===k ? 'var(--green)' : 'var(--white)', color: tab===k ? 'white' : 'var(--text-muted)', fontSize:13, fontWeight: tab===k ? 600 : 400, cursor:'pointer' }}>
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {tab === 'monthly' && (
+        <MonthlyTestsPanel classDocs={classDocs} allowedBranches={allowedBranches} currentBranch={currentBranch} />
+      )}
+
+      {tab === 'scheduled' && (<>
       {/* Schedule form */}
       {showForm && (
         <div className="fade-in" style={{ background:'var(--white)', borderRadius:'var(--radius-lg)', border:'1px solid var(--green-muted)', padding:'22px', marginBottom:22, boxShadow:'var(--shadow-md)' }}>
@@ -389,6 +408,7 @@ export default function Tests() {
           )}
         </>
       )}
+      </>)}
     </div>
   )
 }
