@@ -849,6 +849,74 @@ app.delete('/api/loc/:id', verifyAuth, async (req, res) => {
   catch (e) { console.error('[admin] DELETE /api/loc/:id:', e); res.status(500).json({ error: e.message }) }
 })
 
+// ─── Report-card templates (Phase 1 of the report-card rework) ──────────────
+// The template is the card's single source of truth (rows, schemes, scales,
+// entry owners, renderer family). Tables live in SMS Supabase, service-role
+// only — these endpoints are the ONLY write path, and every caller is a
+// verified Tracker admin.
+
+// GET /api/report-templates?sessionCode= → templates + class→template map
+app.get('/api/report-templates', verifyAuth, async (req, res) => {
+  try {
+    const sessionCode = String(req.query.sessionCode || '').trim()
+    if (!sessionCode) return res.status(400).json({ error: 'sessionCode required' })
+    const [tpl, map] = await Promise.all([
+      supabase.from('report_card_templates')
+        .select('id, session_code, family, name, definition, is_active, updated_at, updated_by')
+        .eq('session_code', sessionCode).order('name'),
+      supabase.from('report_card_template_classes')
+        .select('class_name, template_id')
+        .eq('session_code', sessionCode),
+    ])
+    if (tpl.error) throw tpl.error
+    if (map.error) throw map.error
+    const classMap = {}
+    for (const r of map.data ?? []) classMap[r.class_name] = r.template_id
+    res.json({ templates: tpl.data ?? [], classMap })
+  } catch (e) { console.error('[admin] GET /api/report-templates:', e); res.status(500).json({ error: e.message }) }
+})
+
+// PUT /api/report-templates/:id { definition?, name?, is_active? }
+app.put('/api/report-templates/:id', verifyAuth, async (req, res) => {
+  try {
+    const patch = { updated_at: new Date().toISOString(), updated_by: req.user?.email || req.user?.uid || null }
+    if (req.body?.definition !== undefined) {
+      if (typeof req.body.definition !== 'object' || req.body.definition === null || Array.isArray(req.body.definition)) {
+        return res.status(400).json({ error: 'definition must be a JSON object' })
+      }
+      patch.definition = req.body.definition
+    }
+    if (req.body?.name !== undefined)      patch.name = String(req.body.name).trim()
+    if (req.body?.is_active !== undefined) patch.is_active = !!req.body.is_active
+    const { data, error } = await supabase.from('report_card_templates')
+      .update(patch).eq('id', req.params.id)
+      .select('id, session_code, family, name, definition, is_active, updated_at, updated_by')
+      .single()
+    if (error) throw error
+    res.json({ template: data })
+  } catch (e) { console.error('[admin] PUT /api/report-templates/:id:', e); res.status(500).json({ error: e.message }) }
+})
+
+// POST /api/report-templates/assign { sessionCode, className, templateId|null }
+// Upserts one class→template binding; null templateId unmaps the class.
+app.post('/api/report-templates/assign', verifyAuth, async (req, res) => {
+  try {
+    const { sessionCode, className, templateId } = req.body || {}
+    if (!sessionCode || !className) return res.status(400).json({ error: 'sessionCode and className required' })
+    if (!templateId) {
+      const { error } = await supabase.from('report_card_template_classes')
+        .delete().eq('session_code', sessionCode).eq('class_name', className)
+      if (error) throw error
+      return res.json({ ok: true, removed: true })
+    }
+    const { error } = await supabase.from('report_card_template_classes')
+      .upsert({ session_code: sessionCode, class_name: className, template_id: templateId },
+        { onConflict: 'session_code,class_name' })
+    if (error) throw error
+    res.json({ ok: true })
+  } catch (e) { console.error('[admin] POST /api/report-templates/assign:', e); res.status(500).json({ error: e.message }) }
+})
+
 // ─── Static + SPA fallback (must come AFTER /api routes) ────────────────────
 app.use(express.static(distDir, {
   maxAge: '1y',

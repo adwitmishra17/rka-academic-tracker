@@ -42,6 +42,7 @@ import TestDetail from './pages/TestDetail'
 import SyllabusUpload from './pages/SyllabusUpload'
 import SyllabusFiles from './pages/SyllabusFiles'
 import ReportCardSetup from './pages/ReportCardSetup'
+import ReportCardTemplates from './pages/ReportCardTemplates'
 import ReportCards from './pages/ReportCards'
 import ReportCardPrint from './pages/ReportCardPrint'
 import HpcCards from './pages/HpcCards'
@@ -251,6 +252,7 @@ export default function App() {
             <Route path="syllabus-upload" element={<SyllabusUpload />} />
             <Route path="syllabus-pdf" element={<SyllabusFiles />} />
             <Route path="report-card-setup" element={<ReportCardSetup />} />
+            <Route path="report-card-templates" element={<ReportCardTemplates />} />
             <Route path="report-cards" element={<ReportCards />} />
             <Route path="hpc" element={<HpcCards />} />
             <Route path="board-candidates" element={<LoC />} />

@@ -102,6 +102,22 @@ export const examApi = {
   saveMarks:          (marks)                             => apiPost('/api/exam/marks', { marks }),
 }
 
+export async function apiPut(path, body) {
+  const res = await fetch(path, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...(await authHeader()) },
+    body: JSON.stringify(body ?? {}),
+  })
+  return parseOrThrow(res)
+}
+
+// ── Report-card template helpers ──
+export const reportTemplateApi = {
+  list:   (sessionCode)                        => apiGet('/api/report-templates', { sessionCode }),
+  save:   (id, patch)                          => apiPut(`/api/report-templates/${id}`, patch),
+  assign: (sessionCode, className, templateId) => apiPost('/api/report-templates/assign', { sessionCode, className, templateId }),
+}
+
 // ── HPC helpers ──
 export const hpcApi = {
   list:     (branchCode, termId, className, section) => apiGet('/api/hpc', { branchCode, termId, className, section }),
