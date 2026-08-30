@@ -21,7 +21,6 @@ import Absentees from './pages/Absentees'
 import Teachers from './pages/Teachers'
 import TeacherManagement from './pages/TeacherManagement'
 import Setup from './pages/Setup'
-import AdminUsers from './pages/AdminUsers'
 import Students from './pages/Students'
 import StudentAuditLog from './pages/StudentAuditLog'
 import AttendanceOverview from './pages/AttendanceOverview'
@@ -232,7 +231,6 @@ export default function App() {
             <Route path="teachers" element={<Teachers />} />
             <Route path="teacher-management" element={<TeacherManagement />} />
             <Route path="setup" element={<Setup />} />
-            <Route path="admin-users" element={<AdminUsers />} />
             <Route path="students" element={<Students />} />
             <Route path="students-audit" element={<StudentAuditLog />} />
             <Route path="attendance" element={<AttendanceOverview />} />
