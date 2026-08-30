@@ -7,20 +7,25 @@ import { examApi } from '../lib/api'
 /* ============================================================
    Marks Entry — office-side exam marks entry (Tracker admin).
 
-   Mirrors the teacher PWA flow (branch → session → class → term
-   → subject → paper → roster) but without teacher-assignment
-   gating: the office can enter or correct ANY subject. Writes go
-   through POST /api/exam/marks which stamps source='manual' —
-   the sentinel the Firestore mirror never overwrites, so office
-   entries always win over teacher-app resyncs.
+   ALL of the subject-term's papers render as side-by-side
+   columns (Main /80 · Portfolio /5 · Notebook /5 …) with one
+   row per student and a live total — a single pass per student
+   instead of switching papers.
 
-   The paper header is editable inline (max/passing marks,
-   theory-practical split) — fixes mis-seeded /100 papers without
-   leaving the page.
+   Cell values: a number (clamped to that paper's max) or AB
+   (absent for that paper). The row's Absent checkbox is a
+   shortcut that fills AB into the row's empty cells — so a
+   child absent for the exam can still carry Portfolio marks.
+
+   Writes go through POST /api/exam/marks (source='manual', the
+   sentinel the teacher-app mirror never overwrites).
    ============================================================ */
 
 const inp = { padding: '8px 10px', border: '1px solid var(--gray-200)', borderRadius: 'var(--radius-sm)', fontSize: 13, fontFamily: 'var(--font-body)', color: 'var(--text)', background: 'var(--white)', outline: 'none' }
 const lbl = { fontSize: 11, color: 'var(--text-muted)', display: 'block', marginBottom: 4, fontWeight: 500 }
+
+const isAB = (v) => String(v).trim().toUpperCase() === 'AB' || String(v).trim().toUpperCase() === 'A'
+const numOrNull = (v) => (v === '' || v == null || isAB(v) ? null : Number(v))
 
 export default function MarksEntry() {
   const { classes: classDocs } = useClasses()
@@ -37,13 +42,12 @@ export default function MarksEntry() {
   const [subjects, setSubjects] = useState([])
   const [subjectId, setSubjectId] = useState('')
   const [papers, setPapers] = useState([])
-  const [paperId, setPaperId] = useState('')
-  const [editPaper, setEditPaper] = useState(false)
+  const [editingPaper, setEditingPaper] = useState(null)   // paper being edited (object)
   const [paperForm, setPaperForm] = useState(null)
   const [newPaperOpen, setNewPaperOpen] = useState(false)
   const [newPaper, setNewPaper] = useState({ paperName: '', maxMarks: 5, passingMarks: '' })
-  const [rows, setRows] = useState([])            // roster merged with marks
-  const [dirty, setDirty] = useState(new Set())   // studentIds changed
+  const [rows, setRows] = useState([])                     // roster with per-paper values
+  const [dirty, setDirty] = useState(new Set())
   const [loadingRoster, setLoadingRoster] = useState(false)
   const [saving, setSaving] = useState(false)
   const [savedFlash, setSavedFlash] = useState('')
@@ -60,19 +64,14 @@ export default function MarksEntry() {
     }).catch(() => setSessionCode('2026-27'))
   }, [])
 
-  // terms per branch+session
   useEffect(() => {
     if (!branch || !sessionCode) return
     setTerms([]); setTermId('')
     examApi.terms(branch, sessionCode)
-      .then(({ terms: t }) => {
-        const list = t || []
-        setTerms(list)
-        if (list.length) setTermId(list[0].id)
-      }).catch(e => setError(e.message))
+      .then(({ terms: t }) => { setTerms(t || []); if ((t || []).length) setTermId(t[0].id) })
+      .catch(e => setError(e.message))
   }, [branch, sessionCode])
 
-  // subjects per class
   useEffect(() => {
     setSubjects([]); setSubjectId('')
     if (!branch || !sessionCode || !className) return
@@ -81,76 +80,102 @@ export default function MarksEntry() {
       .catch(e => setError(e.message))
   }, [branch, sessionCode, className])
 
-  // papers per subject+term
   useEffect(() => {
-    setPapers([]); setPaperId(''); setEditPaper(false)
+    setPapers([]); setEditingPaper(null)
     if (!subjectId || !termId) return
     examApi.papers(subjectId, termId)
-      .then(({ papers: p }) => {
-        setPapers(p || [])
-        if ((p || []).length) setPaperId(p[0].id)
-      }).catch(e => setError(e.message))
+      .then(({ papers: p }) => setPapers(p || []))
+      .catch(e => setError(e.message))
   }, [subjectId, termId])
 
-  const paper = papers.find(p => p.id === paperId) || null
-
-  // roster + existing marks
+  // ── roster + existing marks for ALL papers ──
+  const papersKey = papers.map(p => p.id).join(',')
   useEffect(() => {
     setRows([]); setDirty(new Set())
-    if (!paper || !className) return
+    if (!papers.length || !className) return
     setLoadingRoster(true)
     Promise.all([
       examApi.reportCardStudents(branch, className, section || undefined),
-      examApi.paperMarks(paper.id),
-    ]).then(([{ students }, { marks }]) => {
-      const byStudent = new Map((marks || []).map(m => [m.student_id, m]))
+      ...papers.map(p => examApi.paperMarks(p.id).then(({ marks }) => [p.id, marks || []])),
+    ]).then(([{ students }, ...markSets]) => {
+      const byPaper = new Map(markSets.map(([pid, marks]) => [pid, new Map(marks.map(m => [m.student_id, m]))]))
       setRows((students || []).map(s => {
-        const m = byStudent.get(s.id)
-        return {
-          studentId: s.id,
-          roll: s.roll_number || '',
-          name: s.full_name,
-          section: s.section || '',
-          marks: m?.marks_obtained == null ? '' : String(m.marks_obtained),
-          theory: m?.theory_obtained == null ? '' : String(m.theory_obtained),
-          practical: m?.practical_obtained == null ? '' : String(m.practical_obtained),
-          isAbsent: !!m?.is_absent,
-          source: m?.source || null,
+        const vals = {}, th = {}, pr = {}, sources = {}
+        for (const p of papers) {
+          const m = byPaper.get(p.id)?.get(s.id)
+          if (p.has_practical) {
+            th[p.id] = m?.is_absent ? 'AB' : (m?.theory_obtained == null ? '' : String(m.theory_obtained))
+            pr[p.id] = m?.is_absent ? '' : (m?.practical_obtained == null ? '' : String(m.practical_obtained))
+          } else {
+            vals[p.id] = m?.is_absent ? 'AB' : (m?.marks_obtained == null ? '' : String(m.marks_obtained))
+          }
+          if (m?.source) sources[p.id] = m.source
         }
+        return { studentId: s.id, roll: s.roll_number || '', name: s.full_name, section: s.section || '', vals, th, pr, sources }
       }))
       setLoadingRoster(false)
-    }).catch(e => { setError(e.message); setLoadingRoster(false) })
+    }).catch(e => { setError(e.message || String(e)); setLoadingRoster(false) })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [paperId, section, className, branch])
+  }, [papersKey, section, className, branch])
 
-  const clamp = (v, max) => {
-    if (v === '') return ''
+  const clampCell = (v, max) => {
+    if (v === '' || isAB(v)) return isAB(v) ? 'AB' : ''
     const n = Number(v)
     if (Number.isNaN(n)) return ''
     return String(Math.min(Math.max(n, 0), max > 0 ? max : Infinity))
   }
 
-  function updRow(id, patch) {
+  function upd(id, patch) {
     setRows(rs => rs.map(r => r.studentId === id ? { ...r, ...patch } : r))
     setDirty(d => new Set([...d, id]))
   }
 
+  // Absent shortcut: fill AB into the row's EMPTY cells / clear ABs on untick.
+  function rowAllAbsent(r) {
+    return papers.length > 0 && papers.every(p => p.has_practical ? isAB(r.th[p.id]) : isAB(r.vals[p.id]))
+  }
+  function toggleAbsent(r, on) {
+    const vals = { ...r.vals }, th = { ...r.th }, pr = { ...r.pr }
+    for (const p of papers) {
+      if (p.has_practical) {
+        if (on && th[p.id] === '') th[p.id] = 'AB'
+        if (!on && isAB(th[p.id])) th[p.id] = ''
+      } else {
+        if (on && vals[p.id] === '') vals[p.id] = 'AB'
+        if (!on && isAB(vals[p.id])) vals[p.id] = ''
+      }
+    }
+    upd(r.studentId, { vals, th, pr })
+  }
+
   async function saveAll() {
-    if (!paper || dirty.size === 0) return
+    if (dirty.size === 0) return
     setSaving(true); setError('')
     try {
-      const payload = rows.filter(r => dirty.has(r.studentId)).map(r => ({
-        paperId: paper.id,
-        studentId: r.studentId,
-        isAbsent: r.isAbsent,
-        ...(paper.has_practical
-          ? { theoryObtained: r.theory === '' ? null : Number(r.theory), practicalObtained: r.practical === '' ? null : Number(r.practical) }
-          : { marksObtained: r.marks === '' ? null : Number(r.marks) }),
-      }))
+      const payload = []
+      for (const r of rows.filter(r => dirty.has(r.studentId))) {
+        for (const p of papers) {
+          if (p.has_practical) {
+            payload.push({
+              paperId: p.id, studentId: r.studentId,
+              isAbsent: isAB(r.th[p.id]),
+              theoryObtained: numOrNull(r.th[p.id]),
+              practicalObtained: numOrNull(r.pr[p.id]),
+            })
+          } else {
+            payload.push({
+              paperId: p.id, studentId: r.studentId,
+              isAbsent: isAB(r.vals[p.id]),
+              marksObtained: numOrNull(r.vals[p.id]),
+            })
+          }
+        }
+      }
       const { saved } = await examApi.saveMarks(payload)
+      setRows(rs => rs.map(r => dirty.has(r.studentId)
+        ? { ...r, sources: Object.fromEntries(papers.map(p => [p.id, 'manual'])) } : r))
       setDirty(new Set())
-      setRows(rs => rs.map(r => payload.some(p => p.studentId === r.studentId) ? { ...r, source: 'manual' } : r))
-      setSavedFlash(`✓ Saved ${saved}`)
+      setSavedFlash(`✓ Saved ${saved} entries`)
       setTimeout(() => setSavedFlash(''), 2500)
     } catch (e) { setError('Save failed: ' + (e.message || e)) }
     setSaving(false)
@@ -158,18 +183,28 @@ export default function MarksEntry() {
 
   async function savePaperEdit() {
     try {
-      const { paper: updated } = await examApi.savePaper(paper.id, paperForm)
+      const { paper: updated } = await examApi.savePaper(editingPaper.id, paperForm)
       setPapers(ps => ps.map(p => p.id === updated.id ? updated : p))
-      setEditPaper(false)
+      setEditingPaper(null)
     } catch (e) { alert('Paper save failed: ' + (e.message || e)) }
   }
 
-  const entered = rows.filter(r => !r.isAbsent && (paper?.has_practical ? (r.theory !== '' || r.practical !== '') : r.marks !== '')).length
-  const absent = rows.filter(r => r.isAbsent).length
+  const termMax = papers.reduce((s, p) => s + Number(p.max_marks || 0), 0)
+  const rowTotal = (r) => papers.reduce((s, p) => s + (p.has_practical
+    ? (numOrNull(r.th[p.id]) ?? 0) + (numOrNull(r.pr[p.id]) ?? 0)
+    : (numOrNull(r.vals[p.id]) ?? 0)), 0)
+  const rowHasEntry = (r) => papers.some(p => p.has_practical
+    ? r.th[p.id] !== '' : r.vals[p.id] !== '')
+  const entered = rows.filter(r => rowHasEntry(r) && !rowAllAbsent(r)).length
+  const absent = rows.filter(rowAllAbsent).length
   const sections = useMemo(() => [...new Set(rows.map(r => r.section).filter(Boolean))].sort(), [rows])
+  const rowSource = (r) => {
+    const ss = Object.values(r.sources)
+    return ss.includes('manual') ? 'manual' : ss.length ? 'teacher' : null
+  }
 
   return (
-    <div style={{ padding: '24px 28px', maxWidth: 1000 }}>
+    <div style={{ padding: '24px 28px', maxWidth: 1100 }}>
       <div className="fade-in" style={{ marginBottom: 20 }}>
         <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 24, fontWeight: 600, color: 'var(--green-dark)', marginBottom: 3 }}>Marks Entry</h1>
         <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>Office-side exam marks — any subject, no teacher gating. Saved as manual entries the teacher-app sync never overwrites.</p>
@@ -177,7 +212,7 @@ export default function MarksEntry() {
       </div>
 
       {/* Pickers */}
-      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 16, alignItems: 'flex-end' }}>
+      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 14, alignItems: 'flex-end' }}>
         {allowedBranches.length > 1 && !currentBranch && (
           <div><span style={lbl}>Branch</span>
             <select value={branch} onChange={e => { setBranch(e.target.value); setClassName('') }} style={inp}>
@@ -202,12 +237,6 @@ export default function MarksEntry() {
             <option value="">Select…</option>
             {subjects.map(s => <option key={s.id} value={s.id}>{s.subject_name}</option>)}
           </select></div>
-        {papers.length > 1 && (
-          <div><span style={lbl}>Paper</span>
-            <select value={paperId} onChange={e => setPaperId(e.target.value)} style={inp}>
-              {papers.map(p => <option key={p.id} value={p.id}>{p.paper_name}</option>)}
-            </select></div>
-        )}
         {sections.length > 1 && (
           <div><span style={lbl}>Section</span>
             <select value={section} onChange={e => setSection(e.target.value)} style={inp}>
@@ -219,92 +248,82 @@ export default function MarksEntry() {
 
       {error && <div style={{ color: 'var(--crimson)', fontSize: 12.5, marginBottom: 12 }}>{error}</div>}
 
-      {subjectId && termId && papers.length === 0 && (
-        <div style={{ background: 'var(--gold-light)', border: '1px solid rgba(201,162,39,0.3)', borderRadius: 'var(--radius-md)', padding: '14px 16px', fontSize: 13, color: 'var(--gold-dark)', marginBottom: 12 }}>
-          No paper exists for this subject in this term yet — create one below.
-        </div>
-      )}
-
-      {/* New paper — extra assessments (Portfolio /5, Notebook /5) live as
-          small papers beside the Main exam; the card build reads them as
-          IA components. */}
+      {/* Paper chips: every paper of the term shows as a column; edit each here */}
       {subjectId && termId && (
-        <div style={{ marginBottom: 14 }}>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginBottom: 14 }}>
+          {papers.map(p => (
+            <button key={p.id}
+              onClick={() => { setEditingPaper(editingPaper?.id === p.id ? null : p); setPaperForm({ maxMarks: Number(p.max_marks), passingMarks: p.passing_marks == null ? '' : Number(p.passing_marks), hasPractical: !!p.has_practical, theoryMax: p.theory_max == null ? '' : Number(p.theory_max), practicalMax: p.practical_max == null ? '' : Number(p.practical_max), examDate: p.exam_date || '' }) }}
+              style={{ padding: '7px 13px', borderRadius: 'var(--radius-md)', fontSize: 12.5, border: '1px solid ' + (editingPaper?.id === p.id ? 'var(--green)' : 'var(--green-muted)'), background: editingPaper?.id === p.id ? 'var(--green)' : 'var(--green-light)', color: editingPaper?.id === p.id ? 'white' : 'var(--green-dark)', cursor: 'pointer' }}>
+              <b>{p.paper_name}</b> /{Number(p.max_marks)} ✎
+            </button>
+          ))}
           {!newPaperOpen ? (
             <button onClick={() => { setNewPaperOpen(true); setNewPaper({ paperName: '', maxMarks: 5, passingMarks: '' }) }}
-              style={{ padding: '7px 14px', background: 'var(--white)', color: 'var(--green-dark)', border: '1px dashed var(--green-muted)', borderRadius: 'var(--radius-sm)', fontSize: 12.5, cursor: 'pointer' }}>
+              style={{ padding: '7px 14px', background: 'var(--white)', color: 'var(--green-dark)', border: '1px dashed var(--green-muted)', borderRadius: 'var(--radius-md)', fontSize: 12.5, cursor: 'pointer' }}>
               ＋ New paper (Portfolio, Notebook…)
             </button>
-          ) : (
-            <div style={{ background: 'var(--white)', border: '1px solid var(--green-muted)', borderRadius: 'var(--radius-md)', padding: '12px 16px', display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-end' }}>
-              <div>
-                <span style={lbl}>Paper name</span>
-                <input value={newPaper.paperName} onChange={e => setNewPaper(f => ({ ...f, paperName: e.target.value }))} placeholder="e.g. Portfolio" style={{ ...inp, width: 160 }} />
-                <div style={{ display: 'flex', gap: 5, marginTop: 6 }}>
-                  {['Portfolio', 'Notebook', 'Sub. Enrichment'].map(n => (
-                    <button key={n} onClick={() => setNewPaper(f => ({ ...f, paperName: n, maxMarks: 5 }))}
-                      style={{ fontSize: 10.5, padding: '2px 8px', borderRadius: 9, background: 'var(--green-light)', color: 'var(--green-dark)', border: '1px solid var(--green-muted)', cursor: 'pointer' }}>{n}</button>
-                  ))}
-                </div>
-              </div>
-              <div><span style={lbl}>Max marks</span><input type="number" value={newPaper.maxMarks} onChange={e => setNewPaper(f => ({ ...f, maxMarks: e.target.value }))} style={{ ...inp, width: 80 }} /></div>
-              <div><span style={lbl}>Pass (opt.)</span><input type="number" value={newPaper.passingMarks} onChange={e => setNewPaper(f => ({ ...f, passingMarks: e.target.value }))} style={{ ...inp, width: 80 }} /></div>
-              <button onClick={async () => {
-                try {
-                  const { paper: created } = await examApi.createPaper({ subjectId, termId, paperName: newPaper.paperName, maxMarks: Number(newPaper.maxMarks), passingMarks: newPaper.passingMarks })
-                  setPapers(ps => [...ps, created]); setPaperId(created.id); setNewPaperOpen(false)
-                } catch (e) { alert(e.message || e) }
-              }} disabled={!newPaper.paperName.trim() || !(Number(newPaper.maxMarks) > 0)}
-                style={{ padding: '8px 16px', background: 'var(--green)', color: 'white', border: 'none', borderRadius: 'var(--radius-sm)', fontSize: 12.5, fontWeight: 600, cursor: 'pointer' }}>
-                Create paper
-              </button>
-              <button onClick={() => setNewPaperOpen(false)} style={{ padding: '8px 12px', background: 'var(--white)', color: 'var(--text-muted)', border: '1px solid var(--gray-200)', borderRadius: 'var(--radius-sm)', fontSize: 12.5, cursor: 'pointer' }}>Cancel</button>
-            </div>
-          )}
+          ) : null}
         </div>
       )}
 
-      {/* Paper header + inline editor */}
-      {paper && (
-        <div style={{ background: 'var(--green-light)', border: '1px solid var(--green-muted)', borderRadius: 'var(--radius-md)', padding: '12px 16px', marginBottom: 14 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-            <div style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--green-dark)' }}>
-              {subjects.find(s => s.id === subjectId)?.subject_name} · {paper.paper_name}
+      {/* New paper form */}
+      {newPaperOpen && subjectId && termId && (
+        <div style={{ background: 'var(--white)', border: '1px solid var(--green-muted)', borderRadius: 'var(--radius-md)', padding: '12px 16px', display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-end', marginBottom: 14 }}>
+          <div>
+            <span style={lbl}>Paper name</span>
+            <input value={newPaper.paperName} onChange={e => setNewPaper(f => ({ ...f, paperName: e.target.value }))} placeholder="e.g. Portfolio" style={{ ...inp, width: 160 }} />
+            <div style={{ display: 'flex', gap: 5, marginTop: 6 }}>
+              {['Portfolio', 'Notebook', 'Sub. Enrichment'].map(n => (
+                <button key={n} onClick={() => setNewPaper(f => ({ ...f, paperName: n, maxMarks: 5 }))}
+                  style={{ fontSize: 10.5, padding: '2px 8px', borderRadius: 9, background: 'var(--green-light)', color: 'var(--green-dark)', border: '1px solid var(--green-muted)', cursor: 'pointer' }}>{n}</button>
+              ))}
             </div>
-            <div style={{ fontSize: 12, color: 'var(--green-mid)' }}>
-              {paper.has_practical
-                ? <>Theory /{Number(paper.theory_max)} + Practical /{Number(paper.practical_max)} = <b>/{Number(paper.max_marks)}</b></>
-                : <>Max <b>/{Number(paper.max_marks)}</b></>}
-              {paper.passing_marks != null && <> · pass {Number(paper.passing_marks)}</>}
-              {paper.exam_date && <> · {paper.exam_date}</>}
-            </div>
-            <button onClick={() => { setEditPaper(o => !o); setPaperForm({ maxMarks: Number(paper.max_marks), passingMarks: paper.passing_marks == null ? '' : Number(paper.passing_marks), hasPractical: !!paper.has_practical, theoryMax: paper.theory_max == null ? '' : Number(paper.theory_max), practicalMax: paper.practical_max == null ? '' : Number(paper.practical_max), examDate: paper.exam_date || '' }) }}
-              style={{ marginLeft: 'auto', padding: '5px 12px', background: 'var(--white)', color: 'var(--green-dark)', border: '1px solid var(--green-muted)', borderRadius: 'var(--radius-sm)', fontSize: 12, cursor: 'pointer' }}>
-              {editPaper ? 'Close' : 'Edit paper'}
-            </button>
           </div>
-          {editPaper && paperForm && (
-            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-end', marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--green-muted)' }}>
-              <label style={{ fontSize: 11.5, color: 'var(--green-dark)' }}>
-                <input type="checkbox" checked={paperForm.hasPractical} onChange={e => setPaperForm(f => ({ ...f, hasPractical: e.target.checked }))} style={{ marginRight: 5 }} />
-                Theory/Practical split
-              </label>
-              {paperForm.hasPractical ? (<>
-                <div><span style={lbl}>Theory max</span><input type="number" value={paperForm.theoryMax} onChange={e => setPaperForm(f => ({ ...f, theoryMax: e.target.value }))} style={{ ...inp, width: 80 }} /></div>
-                <div><span style={lbl}>Practical max</span><input type="number" value={paperForm.practicalMax} onChange={e => setPaperForm(f => ({ ...f, practicalMax: e.target.value }))} style={{ ...inp, width: 80 }} /></div>
-              </>) : (
-                <div><span style={lbl}>Max marks</span><input type="number" value={paperForm.maxMarks} onChange={e => setPaperForm(f => ({ ...f, maxMarks: e.target.value }))} style={{ ...inp, width: 80 }} /></div>
-              )}
-              <div><span style={lbl}>Pass marks</span><input type="number" value={paperForm.passingMarks} onChange={e => setPaperForm(f => ({ ...f, passingMarks: e.target.value }))} style={{ ...inp, width: 80 }} /></div>
-              <div><span style={lbl}>Exam date</span><input type="date" value={paperForm.examDate} onChange={e => setPaperForm(f => ({ ...f, examDate: e.target.value }))} style={inp} /></div>
-              <button onClick={savePaperEdit} style={{ padding: '8px 16px', background: 'var(--green)', color: 'white', border: 'none', borderRadius: 'var(--radius-sm)', fontSize: 12.5, fontWeight: 600, cursor: 'pointer' }}>Save paper</button>
-            </div>
-          )}
+          <div><span style={lbl}>Max marks</span><input type="number" value={newPaper.maxMarks} onChange={e => setNewPaper(f => ({ ...f, maxMarks: e.target.value }))} style={{ ...inp, width: 80 }} /></div>
+          <div><span style={lbl}>Pass (opt.)</span><input type="number" value={newPaper.passingMarks} onChange={e => setNewPaper(f => ({ ...f, passingMarks: e.target.value }))} style={{ ...inp, width: 80 }} /></div>
+          <button onClick={async () => {
+            try {
+              const { paper: created } = await examApi.createPaper({ subjectId, termId, paperName: newPaper.paperName, maxMarks: Number(newPaper.maxMarks), passingMarks: newPaper.passingMarks })
+              setPapers(ps => [...ps, created]); setNewPaperOpen(false)
+            } catch (e) { alert(e.message || e) }
+          }} disabled={!newPaper.paperName.trim() || !(Number(newPaper.maxMarks) > 0)}
+            style={{ padding: '8px 16px', background: 'var(--green)', color: 'white', border: 'none', borderRadius: 'var(--radius-sm)', fontSize: 12.5, fontWeight: 600, cursor: 'pointer' }}>
+            Create paper
+          </button>
+          <button onClick={() => setNewPaperOpen(false)} style={{ padding: '8px 12px', background: 'var(--white)', color: 'var(--text-muted)', border: '1px solid var(--gray-200)', borderRadius: 'var(--radius-sm)', fontSize: 12.5, cursor: 'pointer' }}>Cancel</button>
         </div>
       )}
 
-      {/* Roster */}
-      {paper && (loadingRoster ? (
+      {/* Paper editor */}
+      {editingPaper && paperForm && (
+        <div style={{ background: 'var(--green-light)', border: '1px solid var(--green-muted)', borderRadius: 'var(--radius-md)', padding: '12px 16px', marginBottom: 14, display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+          <b style={{ fontSize: 13, color: 'var(--green-dark)', marginRight: 4 }}>{editingPaper.paper_name}</b>
+          <label style={{ fontSize: 11.5, color: 'var(--green-dark)' }}>
+            <input type="checkbox" checked={paperForm.hasPractical} onChange={e => setPaperForm(f => ({ ...f, hasPractical: e.target.checked }))} style={{ marginRight: 5 }} />
+            Theory/Practical split
+          </label>
+          {paperForm.hasPractical ? (<>
+            <div><span style={lbl}>Theory max</span><input type="number" value={paperForm.theoryMax} onChange={e => setPaperForm(f => ({ ...f, theoryMax: e.target.value }))} style={{ ...inp, width: 80 }} /></div>
+            <div><span style={lbl}>Practical max</span><input type="number" value={paperForm.practicalMax} onChange={e => setPaperForm(f => ({ ...f, practicalMax: e.target.value }))} style={{ ...inp, width: 80 }} /></div>
+          </>) : (
+            <div><span style={lbl}>Max marks</span><input type="number" value={paperForm.maxMarks} onChange={e => setPaperForm(f => ({ ...f, maxMarks: e.target.value }))} style={{ ...inp, width: 80 }} /></div>
+          )}
+          <div><span style={lbl}>Pass marks</span><input type="number" value={paperForm.passingMarks} onChange={e => setPaperForm(f => ({ ...f, passingMarks: e.target.value }))} style={{ ...inp, width: 80 }} /></div>
+          <div><span style={lbl}>Exam date</span><input type="date" value={paperForm.examDate} onChange={e => setPaperForm(f => ({ ...f, examDate: e.target.value }))} style={inp} /></div>
+          <button onClick={savePaperEdit} style={{ padding: '8px 16px', background: 'var(--green)', color: 'white', border: 'none', borderRadius: 'var(--radius-sm)', fontSize: 12.5, fontWeight: 600, cursor: 'pointer' }}>Save paper</button>
+          <button onClick={() => setEditingPaper(null)} style={{ padding: '8px 12px', background: 'var(--white)', color: 'var(--text-muted)', border: '1px solid var(--gray-200)', borderRadius: 'var(--radius-sm)', fontSize: 12.5, cursor: 'pointer' }}>Close</button>
+        </div>
+      )}
+
+      {subjectId && termId && papers.length === 0 && !loadingRoster && (
+        <div style={{ background: 'var(--gold-light)', border: '1px solid rgba(201,162,39,0.3)', borderRadius: 'var(--radius-md)', padding: '14px 16px', fontSize: 13, color: 'var(--gold-dark)' }}>
+          No paper exists for this subject in this term yet — create one above.
+        </div>
+      )}
+
+      {/* Roster grid: one column per paper */}
+      {papers.length > 0 && (loadingRoster ? (
         <div style={{ textAlign: 'center', padding: 40 }}><div style={{ width: 26, height: 26, border: '2px solid var(--green-muted)', borderTopColor: 'var(--green)', borderRadius: '50%', animation: 'spin 0.8s linear infinite', margin: '0 auto' }} /></div>
       ) : rows.length === 0 ? (
         <div style={{ padding: 24, textAlign: 'center', color: 'var(--text-muted)', fontSize: 13 }}>No active students for this class{section ? ` · section ${section}` : ''}.</div>
@@ -316,45 +335,72 @@ export default function MarksEntry() {
             <span style={{ color: 'var(--crimson)' }}>{absent} absent</span>
             <span>{rows.length - entered - absent} blank</span>
           </div>
-          <div style={{ background: 'var(--white)', border: '1px solid var(--gray-100)', borderRadius: 'var(--radius-lg)', overflow: 'hidden', marginBottom: 16 }}>
-            <div style={{ display: 'flex', gap: 10, padding: '9px 16px', background: 'var(--gray-50)', borderBottom: '1px solid var(--gray-100)', fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-              <span style={{ width: 44 }}>Roll</span>
-              <span style={{ flex: 1 }}>Student</span>
-              {paper.has_practical ? (<>
-                <span style={{ width: 90, textAlign: 'center' }}>Theory /{Number(paper.theory_max)}</span>
-                <span style={{ width: 90, textAlign: 'center' }}>Prac /{Number(paper.practical_max)}</span>
-              </>) : (
-                <span style={{ width: 100, textAlign: 'center' }}>Marks /{Number(paper.max_marks)}</span>
-              )}
-              <span style={{ width: 64, textAlign: 'center' }}>Absent</span>
-              <span style={{ width: 70, textAlign: 'right' }}>Source</span>
-            </div>
-            {rows.map((r, i) => (
-              <div key={r.studentId} style={{ display: 'flex', gap: 10, alignItems: 'center', padding: '7px 16px', borderBottom: i === rows.length - 1 ? 'none' : '1px solid var(--gray-50)', background: r.isAbsent ? 'var(--crimson-light)' : dirty.has(r.studentId) ? 'var(--gold-light)' : 'var(--white)' }}>
-                <span style={{ width: 44, fontSize: 12, color: 'var(--text-muted)' }}>{r.roll}</span>
-                <span style={{ flex: 1, fontSize: 13, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.name}{sections.length > 1 && !section && r.section ? <span style={{ color: 'var(--text-muted)', fontSize: 11 }}> · {r.section}</span> : null}</span>
-                {paper.has_practical ? (<>
-                  <input type="number" disabled={r.isAbsent} value={r.isAbsent ? '' : r.theory} onChange={e => updRow(r.studentId, { theory: clamp(e.target.value, Number(paper.theory_max)) })} style={{ ...inp, width: 90, textAlign: 'center', padding: '6px 8px' }} />
-                  <input type="number" disabled={r.isAbsent} value={r.isAbsent ? '' : r.practical} onChange={e => updRow(r.studentId, { practical: clamp(e.target.value, Number(paper.practical_max)) })} style={{ ...inp, width: 90, textAlign: 'center', padding: '6px 8px' }} />
-                </>) : (
-                  <input type="number" disabled={r.isAbsent} value={r.isAbsent ? '' : r.marks} onChange={e => updRow(r.studentId, { marks: clamp(e.target.value, Number(paper.max_marks)) })} style={{ ...inp, width: 100, textAlign: 'center', padding: '6px 8px' }} />
-                )}
-                <span style={{ width: 64, textAlign: 'center' }}>
-                  <input type="checkbox" checked={r.isAbsent} onChange={e => updRow(r.studentId, { isAbsent: e.target.checked })} style={{ accentColor: 'var(--crimson)' }} />
-                </span>
-                <span style={{ width: 70, textAlign: 'right', fontSize: 10.5, color: r.source === 'manual' ? 'var(--gold-dark)' : 'var(--text-muted)' }}>
-                  {r.source === 'manual' ? 'manual' : r.source ? 'teacher' : '—'}
-                </span>
-              </div>
-            ))}
+          <div style={{ background: 'var(--white)', border: '1px solid var(--gray-100)', borderRadius: 'var(--radius-lg)', overflowX: 'auto', marginBottom: 16 }}>
+            <table style={{ borderCollapse: 'collapse', width: '100%', minWidth: 560 + papers.length * 110 }}>
+              <thead>
+                <tr style={{ background: 'var(--gray-50)' }}>
+                  <th style={{ padding: '9px 12px', fontSize: 10.5, fontWeight: 600, color: 'var(--text-muted)', textAlign: 'left', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Roll · Student</th>
+                  {papers.map(p => (
+                    <th key={p.id} style={{ padding: '9px 6px', fontSize: 10.5, fontWeight: 600, color: 'var(--text-muted)', textAlign: 'center', textTransform: 'uppercase', letterSpacing: '0.03em' }}>
+                      {p.paper_name}<br /><span style={{ fontWeight: 500 }}>{p.has_practical ? `Th /${Number(p.theory_max)} + Pr /${Number(p.practical_max)}` : `/${Number(p.max_marks)}`}</span>
+                    </th>
+                  ))}
+                  <th style={{ padding: '9px 6px', fontSize: 10.5, fontWeight: 600, color: 'var(--green-dark)', textAlign: 'center' }}>TOTAL<br /><span style={{ fontWeight: 500 }}>/{termMax}</span></th>
+                  <th style={{ padding: '9px 6px', fontSize: 10.5, fontWeight: 600, color: 'var(--text-muted)', textAlign: 'center' }}>ABSENT</th>
+                  <th style={{ padding: '9px 10px', fontSize: 10.5, fontWeight: 600, color: 'var(--text-muted)', textAlign: 'right' }}>SOURCE</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((r, i) => {
+                  const allAbs = rowAllAbsent(r)
+                  return (
+                    <tr key={r.studentId} style={{ borderTop: '1px solid var(--gray-50)', background: allAbs ? 'var(--crimson-light)' : dirty.has(r.studentId) ? 'var(--gold-light)' : i % 2 ? 'var(--gray-50)' : 'var(--white)' }}>
+                      <td style={{ padding: '6px 12px', fontSize: 13, whiteSpace: 'nowrap' }}>
+                        <span style={{ color: 'var(--text-muted)', fontSize: 11, marginRight: 7 }}>{r.roll}</span>{r.name}
+                        {sections.length > 1 && !section && r.section ? <span style={{ color: 'var(--text-muted)', fontSize: 11 }}> · {r.section}</span> : null}
+                      </td>
+                      {papers.map(p => (
+                        <td key={p.id} style={{ padding: '4px 6px', textAlign: 'center' }}>
+                          {p.has_practical ? (
+                            <span style={{ display: 'inline-flex', gap: 4 }}>
+                              <input value={r.th[p.id]} placeholder="Th"
+                                onChange={e => upd(r.studentId, { th: { ...r.th, [p.id]: clampCell(e.target.value, Number(p.theory_max)) } })}
+                                style={{ ...inp, width: 52, textAlign: 'center', padding: '6px 4px', fontWeight: isAB(r.th[p.id]) ? 700 : 400, color: isAB(r.th[p.id]) ? 'var(--crimson)' : 'var(--text)' }} />
+                              <input value={r.pr[p.id]} placeholder="Pr" disabled={isAB(r.th[p.id])}
+                                onChange={e => upd(r.studentId, { pr: { ...r.pr, [p.id]: clampCell(e.target.value, Number(p.practical_max)) } })}
+                                style={{ ...inp, width: 52, textAlign: 'center', padding: '6px 4px' }} />
+                            </span>
+                          ) : (
+                            <input value={r.vals[p.id]}
+                              onChange={e => upd(r.studentId, { vals: { ...r.vals, [p.id]: clampCell(e.target.value, Number(p.max_marks)) } })}
+                              style={{ ...inp, width: 74, textAlign: 'center', padding: '6px 6px', fontWeight: isAB(r.vals[p.id]) ? 700 : 400, color: isAB(r.vals[p.id]) ? 'var(--crimson)' : 'var(--text)' }} />
+                          )}
+                        </td>
+                      ))}
+                      <td style={{ padding: '4px 6px', textAlign: 'center', fontSize: 13, fontWeight: 700, color: rowHasEntry(r) ? 'var(--green-dark)' : 'var(--gray-400)' }}>
+                        {rowHasEntry(r) && !allAbs ? rowTotal(r) : '—'}
+                      </td>
+                      <td style={{ padding: '4px 6px', textAlign: 'center' }}>
+                        <input type="checkbox" checked={allAbs} onChange={e => toggleAbsent(r, e.target.checked)} style={{ accentColor: 'var(--crimson)' }} title="Fills AB into the empty boxes — cells with marks are kept" />
+                      </td>
+                      <td style={{ padding: '4px 10px', textAlign: 'right', fontSize: 10.5, color: rowSource(r) === 'manual' ? 'var(--gold-dark)' : 'var(--text-muted)' }}>
+                        {rowSource(r) || '—'}
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
             <button onClick={saveAll} disabled={saving || dirty.size === 0}
               style={{ padding: '12px 26px', background: (saving || dirty.size === 0) ? 'var(--gray-200)' : 'var(--green)', color: (saving || dirty.size === 0) ? 'var(--gray-400)' : 'white', border: 'none', borderRadius: 'var(--radius-md)', fontSize: 14, fontWeight: 600, cursor: (saving || dirty.size === 0) ? 'default' : 'pointer', boxShadow: (saving || dirty.size === 0) ? 'none' : '0 4px 14px rgba(26,74,46,0.25)' }}>
-              {saving ? 'Saving…' : `Save ${dirty.size} change${dirty.size === 1 ? '' : 's'}`}
+              {saving ? 'Saving…' : `Save ${dirty.size} student${dirty.size === 1 ? '' : 's'}`}
             </button>
             {savedFlash && <span style={{ fontSize: 13, color: 'var(--green)', fontWeight: 600 }}>{savedFlash}</span>}
-            <span style={{ marginLeft: 'auto', fontSize: 11.5, color: 'var(--text-muted)' }}>Only changed rows are saved · entries are marked <b>manual</b> (teacher-app sync never overwrites them)</span>
+            <span style={{ marginLeft: 'auto', fontSize: 11.5, color: 'var(--text-muted)' }}>
+              Type <b>AB</b> in a box for absent-in-that-paper · Absent ✓ fills AB into the empty boxes only · saved as <b>manual</b>
+            </span>
           </div>
         </>
       ))}
