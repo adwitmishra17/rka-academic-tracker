@@ -100,6 +100,10 @@ export const examApi = {
   crosslist:          (branchCode, termId, className, section) => apiGet('/api/exam/crosslist', { branchCode, termId, className, section }),
   reportCard:         (studentId, sessionCode)            => apiGet('/api/exam/report-card', { studentId, sessionCode }),
   saveMarks:          (marks)                             => apiPost('/api/exam/marks', { marks }),
+  subjects:           (branchCode, sessionCode, className) => apiGet('/api/exam/subjects', { branchCode, sessionCode, className }),
+  papers:             (subjectId, termId)                 => apiGet('/api/exam/papers', { subjectId, termId }),
+  savePaper:          (id, patch)                         => apiPatch(`/api/exam/papers/${id}`, patch),
+  paperMarks:         (paperId)                           => apiGet('/api/exam/paper-marks', { paperId }),
 }
 
 export async function apiPut(path, body) {

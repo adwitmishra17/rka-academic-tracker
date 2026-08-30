@@ -43,6 +43,7 @@ import SyllabusUpload from './pages/SyllabusUpload'
 import SyllabusFiles from './pages/SyllabusFiles'
 import ReportCardSetup from './pages/ReportCardSetup'
 import ReportCardTemplates from './pages/ReportCardTemplates'
+import MarksEntry from './pages/MarksEntry'
 import ReportCards from './pages/ReportCards'
 import ReportCardPrint from './pages/ReportCardPrint'
 import HpcCards from './pages/HpcCards'
@@ -253,6 +254,7 @@ export default function App() {
             <Route path="syllabus-pdf" element={<SyllabusFiles />} />
             <Route path="report-card-setup" element={<ReportCardSetup />} />
             <Route path="report-card-templates" element={<ReportCardTemplates />} />
+            <Route path="marks-entry" element={<MarksEntry />} />
             <Route path="report-cards" element={<ReportCards />} />
             <Route path="hpc" element={<HpcCards />} />
             <Route path="board-candidates" element={<LoC />} />

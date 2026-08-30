@@ -659,22 +659,110 @@ app.post('/api/exam/marks', verifyAuth, async (req, res) => {
     const { marks } = req.body || {}
     if (!Array.isArray(marks) || marks.length === 0) return res.status(400).json({ error: 'marks[] required' })
     const now = new Date().toISOString()
+    const num = (v) => (v == null || v === '' ? null : Number(v))
     const rows = marks
       .filter(m => m.paperId && m.studentId)
-      .map(m => ({
-        paper_id:       m.paperId,
-        student_id:     m.studentId,
-        marks_obtained: m.isAbsent ? null : (m.marksObtained == null || m.marksObtained === '' ? null : Number(m.marksObtained)),
-        is_absent:      !!m.isAbsent,
-        source:         'manual',
-        entered_by:     req.user.email || req.user.uid,
-        entered_at:     now,
-      }))
+      .map(m => {
+        // Theory/practical split papers: components arrive separately and the
+        // total is derived; single-score papers send marksObtained directly.
+        const th = num(m.theoryObtained)
+        const pr = num(m.practicalObtained)
+        const split = th != null || pr != null
+        const total = split ? (th ?? 0) + (pr ?? 0) : num(m.marksObtained)
+        return {
+          paper_id:           m.paperId,
+          student_id:         m.studentId,
+          marks_obtained:     m.isAbsent ? null : total,
+          theory_obtained:    m.isAbsent ? null : th,
+          practical_obtained: m.isAbsent ? null : pr,
+          is_absent:          !!m.isAbsent,
+          source:             'manual',
+          entered_by:         req.user.email || req.user.uid,
+          entered_at:         now,
+        }
+      })
     if (!rows.length) return res.status(400).json({ error: 'no valid rows' })
     const { error } = await supabase.from('exam_marks').upsert(rows, { onConflict: 'paper_id,student_id' })
     if (error) throw error
     res.json({ saved: rows.length })
   } catch (e) { console.error('[admin] POST /api/exam/marks:', e); res.status(500).json({ error: e.message }) }
+})
+
+// ─── Marks Entry (admin-side, subject-wise — mirrors the teacher PWA flow) ──
+
+// GET /api/exam/subjects?branchCode=&sessionCode=&className=
+app.get('/api/exam/subjects', verifyAuth, async (req, res) => {
+  try {
+    const { branchCode, sessionCode, className } = req.query
+    if (!branchCode || !sessionCode || !className) return res.json({ subjects: [] })
+    const bid = await branchIdForCode(branchCode)
+    if (!bid) return res.json({ subjects: [] })
+    const { data, error } = await supabase.from('exam_subjects')
+      .select('id, subject_name, kind, sort_order, assigned_teacher_email')
+      .eq('branch_id', bid).eq('session_code', sessionCode).eq('class_name', className)
+      .order('sort_order').order('subject_name')
+    if (error) throw error
+    res.json({ subjects: data ?? [] })
+  } catch (e) { console.error('[admin] GET /api/exam/subjects:', e); res.status(500).json({ error: e.message }) }
+})
+
+// GET /api/exam/papers?subjectId=&termId=
+app.get('/api/exam/papers', verifyAuth, async (req, res) => {
+  try {
+    const { subjectId, termId } = req.query
+    if (!subjectId) return res.json({ papers: [] })
+    let q = supabase.from('exam_papers')
+      .select('id, term_id, paper_name, max_marks, passing_marks, exam_date, has_practical, theory_max, practical_max')
+      .eq('subject_id', subjectId).order('created_at')
+    if (termId) q = q.eq('term_id', termId)
+    const { data, error } = await q
+    if (error) throw error
+    res.json({ papers: data ?? [] })
+  } catch (e) { console.error('[admin] GET /api/exam/papers:', e); res.status(500).json({ error: e.message }) }
+})
+
+// PATCH /api/exam/papers/:id — fix paper config (max/passing marks, split).
+// max_marks stays the TOTAL when a theory/practical split is set.
+app.patch('/api/exam/papers/:id', verifyAuth, async (req, res) => {
+  try {
+    const b = req.body || {}
+    const patch = { updated_at: new Date().toISOString() }
+    if (b.paperName !== undefined)    patch.paper_name = String(b.paperName).trim() || 'Main'
+    if (b.examDate !== undefined)     patch.exam_date = b.examDate || null
+    if (b.passingMarks !== undefined) patch.passing_marks = b.passingMarks == null || b.passingMarks === '' ? null : Number(b.passingMarks)
+    const hp = !!b.hasPractical
+    if (b.hasPractical !== undefined) {
+      patch.has_practical = hp
+      if (hp) {
+        const th = Number(b.theoryMax || 0), pr = Number(b.practicalMax || 0)
+        if (!(th > 0) || !(pr > 0)) return res.status(400).json({ error: 'theoryMax and practicalMax required for a split paper' })
+        patch.theory_max = th; patch.practical_max = pr; patch.max_marks = th + pr
+      } else {
+        if (b.maxMarks === undefined || !(Number(b.maxMarks) > 0)) return res.status(400).json({ error: 'maxMarks required' })
+        patch.theory_max = null; patch.practical_max = 0; patch.max_marks = Number(b.maxMarks)
+      }
+    } else if (b.maxMarks !== undefined) {
+      if (!(Number(b.maxMarks) > 0)) return res.status(400).json({ error: 'maxMarks must be > 0' })
+      patch.max_marks = Number(b.maxMarks)
+    }
+    const { data, error } = await supabase.from('exam_papers').update(patch).eq('id', req.params.id)
+      .select('id, term_id, paper_name, max_marks, passing_marks, exam_date, has_practical, theory_max, practical_max').single()
+    if (error) throw error
+    res.json({ paper: data })
+  } catch (e) { console.error('[admin] PATCH /api/exam/papers/:id:', e); res.status(500).json({ error: e.message }) }
+})
+
+// GET /api/exam/paper-marks?paperId= — existing marks for the roster merge.
+app.get('/api/exam/paper-marks', verifyAuth, async (req, res) => {
+  try {
+    const { paperId } = req.query
+    if (!paperId) return res.json({ marks: [] })
+    const { data, error } = await supabase.from('exam_marks')
+      .select('student_id, marks_obtained, theory_obtained, practical_obtained, is_absent, source, entered_by, entered_at')
+      .eq('paper_id', paperId)
+    if (error) throw error
+    res.json({ marks: data ?? [] })
+  } catch (e) { console.error('[admin] GET /api/exam/paper-marks:', e); res.status(500).json({ error: e.message }) }
 })
 
 // ─── HPC routes (Holistic Progress Card — read SMS Supabase, service-role) ──
