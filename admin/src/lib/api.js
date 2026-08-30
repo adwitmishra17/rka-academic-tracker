@@ -102,6 +102,7 @@ export const examApi = {
   saveMarks:          (marks)                             => apiPost('/api/exam/marks', { marks }),
   subjects:           (branchCode, sessionCode, className) => apiGet('/api/exam/subjects', { branchCode, sessionCode, className }),
   papers:             (subjectId, termId)                 => apiGet('/api/exam/papers', { subjectId, termId }),
+  createPaper:        (body)                              => apiPost('/api/exam/papers', body),
   savePaper:          (id, patch)                         => apiPatch(`/api/exam/papers/${id}`, patch),
   paperMarks:         (paperId)                           => apiGet('/api/exam/paper-marks', { paperId }),
 }

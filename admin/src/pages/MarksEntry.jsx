@@ -40,6 +40,8 @@ export default function MarksEntry() {
   const [paperId, setPaperId] = useState('')
   const [editPaper, setEditPaper] = useState(false)
   const [paperForm, setPaperForm] = useState(null)
+  const [newPaperOpen, setNewPaperOpen] = useState(false)
+  const [newPaper, setNewPaper] = useState({ paperName: '', maxMarks: 5, passingMarks: '' })
   const [rows, setRows] = useState([])            // roster merged with marks
   const [dirty, setDirty] = useState(new Set())   // studentIds changed
   const [loadingRoster, setLoadingRoster] = useState(false)
@@ -218,8 +220,47 @@ export default function MarksEntry() {
       {error && <div style={{ color: 'var(--crimson)', fontSize: 12.5, marginBottom: 12 }}>{error}</div>}
 
       {subjectId && termId && papers.length === 0 && (
-        <div style={{ background: 'var(--gold-light)', border: '1px solid rgba(201,162,39,0.3)', borderRadius: 'var(--radius-md)', padding: '14px 16px', fontSize: 13, color: 'var(--gold-dark)' }}>
-          No paper exists for this subject in this term — papers are auto-created by Session &amp; Marks setup.
+        <div style={{ background: 'var(--gold-light)', border: '1px solid rgba(201,162,39,0.3)', borderRadius: 'var(--radius-md)', padding: '14px 16px', fontSize: 13, color: 'var(--gold-dark)', marginBottom: 12 }}>
+          No paper exists for this subject in this term yet — create one below.
+        </div>
+      )}
+
+      {/* New paper — extra assessments (Portfolio /5, Notebook /5) live as
+          small papers beside the Main exam; the card build reads them as
+          IA components. */}
+      {subjectId && termId && (
+        <div style={{ marginBottom: 14 }}>
+          {!newPaperOpen ? (
+            <button onClick={() => { setNewPaperOpen(true); setNewPaper({ paperName: '', maxMarks: 5, passingMarks: '' }) }}
+              style={{ padding: '7px 14px', background: 'var(--white)', color: 'var(--green-dark)', border: '1px dashed var(--green-muted)', borderRadius: 'var(--radius-sm)', fontSize: 12.5, cursor: 'pointer' }}>
+              ＋ New paper (Portfolio, Notebook…)
+            </button>
+          ) : (
+            <div style={{ background: 'var(--white)', border: '1px solid var(--green-muted)', borderRadius: 'var(--radius-md)', padding: '12px 16px', display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+              <div>
+                <span style={lbl}>Paper name</span>
+                <input value={newPaper.paperName} onChange={e => setNewPaper(f => ({ ...f, paperName: e.target.value }))} placeholder="e.g. Portfolio" style={{ ...inp, width: 160 }} />
+                <div style={{ display: 'flex', gap: 5, marginTop: 6 }}>
+                  {['Portfolio', 'Notebook', 'Sub. Enrichment'].map(n => (
+                    <button key={n} onClick={() => setNewPaper(f => ({ ...f, paperName: n, maxMarks: 5 }))}
+                      style={{ fontSize: 10.5, padding: '2px 8px', borderRadius: 9, background: 'var(--green-light)', color: 'var(--green-dark)', border: '1px solid var(--green-muted)', cursor: 'pointer' }}>{n}</button>
+                  ))}
+                </div>
+              </div>
+              <div><span style={lbl}>Max marks</span><input type="number" value={newPaper.maxMarks} onChange={e => setNewPaper(f => ({ ...f, maxMarks: e.target.value }))} style={{ ...inp, width: 80 }} /></div>
+              <div><span style={lbl}>Pass (opt.)</span><input type="number" value={newPaper.passingMarks} onChange={e => setNewPaper(f => ({ ...f, passingMarks: e.target.value }))} style={{ ...inp, width: 80 }} /></div>
+              <button onClick={async () => {
+                try {
+                  const { paper: created } = await examApi.createPaper({ subjectId, termId, paperName: newPaper.paperName, maxMarks: Number(newPaper.maxMarks), passingMarks: newPaper.passingMarks })
+                  setPapers(ps => [...ps, created]); setPaperId(created.id); setNewPaperOpen(false)
+                } catch (e) { alert(e.message || e) }
+              }} disabled={!newPaper.paperName.trim() || !(Number(newPaper.maxMarks) > 0)}
+                style={{ padding: '8px 16px', background: 'var(--green)', color: 'white', border: 'none', borderRadius: 'var(--radius-sm)', fontSize: 12.5, fontWeight: 600, cursor: 'pointer' }}>
+                Create paper
+              </button>
+              <button onClick={() => setNewPaperOpen(false)} style={{ padding: '8px 12px', background: 'var(--white)', color: 'var(--text-muted)', border: '1px solid var(--gray-200)', borderRadius: 'var(--radius-sm)', fontSize: 12.5, cursor: 'pointer' }}>Cancel</button>
+            </div>
+          )}
         </div>
       )}
 

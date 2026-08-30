@@ -721,6 +721,40 @@ app.get('/api/exam/papers', verifyAuth, async (req, res) => {
   } catch (e) { console.error('[admin] GET /api/exam/papers:', e); res.status(500).json({ error: e.message }) }
 })
 
+// POST /api/exam/papers — create an extra paper under a subject+term
+// (e.g. "Portfolio" /5, "Notebook" /5 beside the "Main" exam). The
+// ensurePapers mirror only fills terms with NO paper at all, so added
+// papers never collide with it.
+app.post('/api/exam/papers', verifyAuth, async (req, res) => {
+  try {
+    const b = req.body || {}
+    if (!b.subjectId || !b.termId) return res.status(400).json({ error: 'subjectId and termId required' })
+    const name = String(b.paperName || '').trim()
+    if (!name) return res.status(400).json({ error: 'paperName required' })
+    const max = Number(b.maxMarks)
+    if (!(max > 0)) return res.status(400).json({ error: 'maxMarks must be > 0' })
+    const { data: dup } = await supabase.from('exam_papers')
+      .select('id').eq('subject_id', b.subjectId).eq('term_id', b.termId).eq('paper_name', name).maybeSingle()
+    if (dup) return res.status(409).json({ error: `A paper named "${name}" already exists for this subject & term` })
+    const { data, error } = await supabase.from('exam_papers')
+      .insert({
+        subject_id:    b.subjectId,
+        term_id:       b.termId,
+        paper_name:    name,
+        max_marks:     max,
+        passing_marks: b.passingMarks == null || b.passingMarks === '' ? null : Number(b.passingMarks),
+        exam_date:     b.examDate || null,
+        has_practical: false,
+        theory_max:    null,
+        practical_max: 0,
+      })
+      .select('id, term_id, paper_name, max_marks, passing_marks, exam_date, has_practical, theory_max, practical_max')
+      .single()
+    if (error) throw error
+    res.json({ paper: data })
+  } catch (e) { console.error('[admin] POST /api/exam/papers:', e); res.status(500).json({ error: e.message }) }
+})
+
 // PATCH /api/exam/papers/:id — fix paper config (max/passing marks, split).
 // max_marks stays the TOTAL when a theory/practical split is set.
 app.patch('/api/exam/papers/:id', verifyAuth, async (req, res) => {
