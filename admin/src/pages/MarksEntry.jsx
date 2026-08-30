@@ -47,6 +47,7 @@ export default function MarksEntry() {
   const [newPaperOpen, setNewPaperOpen] = useState(false)
   const [newPaper, setNewPaper] = useState({ paperName: '', maxMarks: 5, passingMarks: '' })
   const [rows, setRows] = useState([])                     // roster with per-paper values
+  const [ptCol, setPtCol] = useState(null)                 // read-only Periodic column {label, max, by:Map}
   const [dirty, setDirty] = useState(new Set())
   const [loadingRoster, setLoadingRoster] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -88,16 +89,47 @@ export default function MarksEntry() {
       .catch(e => setError(e.message))
   }, [subjectId, termId])
 
-  // ── roster + existing marks for ALL papers ──
+  // The exam term whose entered marks show read-only beside this term's
+  // boxes: the card pairs Periodic Test 1 (Term 1) with Half Yearly, and
+  // PT2 (Term 2) with Annual — together they make the /100.
+  const ptTerm = useMemo(() => {
+    const cur = terms.find(t => t.id === termId)
+    if (!cur) return null
+    const label = `${cur.short_code || ''} ${cur.name || ''}`.toUpperCase()
+    const want = /HY|HALF/.test(label) ? /(^|\s)T1(\s|$)|TERM 1/ : (/(^|\s)AN(\s|$)|ANNUAL/.test(label) ? /(^|\s)T2(\s|$)|TERM 2/ : null)
+    if (!want) return null
+    return terms.find(t => t.id !== cur.id && want.test(`${t.short_code || ''} ${t.name || ''}`.toUpperCase())) || null
+  }, [terms, termId])
+
+  // ── roster + existing marks for ALL papers (+ the paired PT term, read-only) ──
   const papersKey = papers.map(p => p.id).join(',')
   useEffect(() => {
-    setRows([]); setDirty(new Set())
+    setRows([]); setPtCol(null); setDirty(new Set())
     if (!papers.length || !className) return
     setLoadingRoster(true)
+    const ptPromise = ptTerm
+      ? examApi.papers(subjectId, ptTerm.id).then(async ({ papers: pp }) => {
+          const sets = await Promise.all((pp || []).map(p => examApi.paperMarks(p.id).then(({ marks }) => [p, marks || []])))
+          const by = new Map()
+          let max = 0
+          for (const [p, marks] of sets) {
+            max += Number(p.max_marks || 0)
+            for (const m of marks) {
+              const cur = by.get(m.student_id) || { sum: 0, has: false, absent: false }
+              if (m.is_absent) cur.absent = true
+              else if (m.marks_obtained != null) { cur.sum += Number(m.marks_obtained); cur.has = true }
+              by.set(m.student_id, cur)
+            }
+          }
+          return (pp || []).length ? { label: ptTerm.name || 'Periodic', max, by } : null
+        }).catch(() => null)
+      : Promise.resolve(null)
     Promise.all([
       examApi.reportCardStudents(branch, className, section || undefined),
+      ptPromise,
       ...papers.map(p => examApi.paperMarks(p.id).then(({ marks }) => [p.id, marks || []])),
-    ]).then(([{ students }, ...markSets]) => {
+    ]).then(([{ students }, pt, ...markSets]) => {
+      setPtCol(pt)
       const byPaper = new Map(markSets.map(([pid, marks]) => [pid, new Map(marks.map(m => [m.student_id, m]))]))
       setRows((students || []).map(s => {
         const vals = {}, th = {}, pr = {}, sources = {}
@@ -116,7 +148,7 @@ export default function MarksEntry() {
       setLoadingRoster(false)
     }).catch(e => { setError(e.message || String(e)); setLoadingRoster(false) })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [papersKey, section, className, branch])
+  }, [papersKey, section, className, branch, ptTerm?.id, subjectId])
 
   const clampCell = (v, max) => {
     if (v === '' || isAB(v)) return isAB(v) ? 'AB' : ''
@@ -190,9 +222,11 @@ export default function MarksEntry() {
   }
 
   const termMax = papers.reduce((s, p) => s + Number(p.max_marks || 0), 0)
+  const grandMax = termMax + (ptCol?.max || 0)
+  const ptOf = (r) => ptCol?.by.get(r.studentId) || null
   const rowTotal = (r) => papers.reduce((s, p) => s + (p.has_practical
     ? (numOrNull(r.th[p.id]) ?? 0) + (numOrNull(r.pr[p.id]) ?? 0)
-    : (numOrNull(r.vals[p.id]) ?? 0)), 0)
+    : (numOrNull(r.vals[p.id]) ?? 0)), 0) + (ptOf(r)?.has ? ptOf(r).sum : 0)
   const rowHasEntry = (r) => papers.some(p => p.has_practical
     ? r.th[p.id] !== '' : r.vals[p.id] !== '')
   const entered = rows.filter(r => rowHasEntry(r) && !rowAllAbsent(r)).length
@@ -340,12 +374,18 @@ export default function MarksEntry() {
               <thead>
                 <tr style={{ background: 'var(--gray-50)' }}>
                   <th style={{ padding: '9px 12px', fontSize: 10.5, fontWeight: 600, color: 'var(--text-muted)', textAlign: 'left', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Roll · Student</th>
+                  {ptCol && (
+                    <th style={{ padding: '9px 6px', fontSize: 10.5, fontWeight: 600, color: 'var(--text-muted)', textAlign: 'center', textTransform: 'uppercase', letterSpacing: '0.03em', borderRight: '1px solid var(--gray-100)' }}
+                        title={`Entered under ${ptCol.label} — read-only here`}>
+                      Periodic<br /><span style={{ fontWeight: 500 }}>/{ptCol.max} · {ptCol.label}</span>
+                    </th>
+                  )}
                   {papers.map(p => (
                     <th key={p.id} style={{ padding: '9px 6px', fontSize: 10.5, fontWeight: 600, color: 'var(--text-muted)', textAlign: 'center', textTransform: 'uppercase', letterSpacing: '0.03em' }}>
                       {p.paper_name}<br /><span style={{ fontWeight: 500 }}>{p.has_practical ? `Th /${Number(p.theory_max)} + Pr /${Number(p.practical_max)}` : `/${Number(p.max_marks)}`}</span>
                     </th>
                   ))}
-                  <th style={{ padding: '9px 6px', fontSize: 10.5, fontWeight: 600, color: 'var(--green-dark)', textAlign: 'center' }}>TOTAL<br /><span style={{ fontWeight: 500 }}>/{termMax}</span></th>
+                  <th style={{ padding: '9px 6px', fontSize: 10.5, fontWeight: 600, color: 'var(--green-dark)', textAlign: 'center' }}>TOTAL<br /><span style={{ fontWeight: 500 }}>/{grandMax}</span></th>
                   <th style={{ padding: '9px 6px', fontSize: 10.5, fontWeight: 600, color: 'var(--text-muted)', textAlign: 'center' }}>ABSENT</th>
                   <th style={{ padding: '9px 10px', fontSize: 10.5, fontWeight: 600, color: 'var(--text-muted)', textAlign: 'right' }}>SOURCE</th>
                 </tr>
@@ -359,6 +399,14 @@ export default function MarksEntry() {
                         <span style={{ color: 'var(--text-muted)', fontSize: 11, marginRight: 7 }}>{r.roll}</span>{r.name}
                         {sections.length > 1 && !section && r.section ? <span style={{ color: 'var(--text-muted)', fontSize: 11 }}> · {r.section}</span> : null}
                       </td>
+                      {ptCol && (() => {
+                        const pt = ptOf(r)
+                        return (
+                          <td style={{ padding: '4px 6px', textAlign: 'center', borderRight: '1px solid var(--gray-100)', fontSize: 13, fontWeight: 600, color: pt?.has ? 'var(--text)' : pt?.absent ? 'var(--crimson)' : 'var(--gray-400)' }}>
+                            {pt?.has ? pt.sum : pt?.absent ? 'AB' : '—'}
+                          </td>
+                        )
+                      })()}
                       {papers.map(p => (
                         <td key={p.id} style={{ padding: '4px 6px', textAlign: 'center' }}>
                           {p.has_practical ? (
