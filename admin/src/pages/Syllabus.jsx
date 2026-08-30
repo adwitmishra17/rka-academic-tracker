@@ -182,7 +182,7 @@ export default function Syllabus() {
           <div style={{ width:40, height:2, background:'linear-gradient(90deg, var(--gold), transparent)', marginTop:8, borderRadius:1 }} />
         </div>
         <div style={{ display:'flex', gap:10 }}>
-          <Link to="/syllabus-upload" style={{ padding:'9px 16px', background:'var(--green-light)', color:'var(--green)', border:'1px solid var(--green-muted)', borderRadius:'var(--radius-md)', fontSize:13, fontWeight:500, textDecoration:'none' }}>↑ Upload PDF</Link>
+          <Link to="/syllabus-pdf" style={{ padding:'9px 16px', background:'var(--green-light)', color:'var(--green)', border:'1px solid var(--green-muted)', borderRadius:'var(--radius-md)', fontSize:13, fontWeight:500, textDecoration:'none' }}>↑ Upload PDF</Link>
           <button onClick={openAdd} style={{ padding:'9px 18px', background:'var(--green)', color:'white', border:'none', borderRadius:'var(--radius-md)', fontSize:13, fontWeight:500, cursor:'pointer', boxShadow:'0 2px 8px rgba(26,74,46,0.2)' }}>+ Add Topic</button>
         </div>
       </div>
@@ -238,7 +238,7 @@ export default function Syllabus() {
           <p style={{ fontSize:15, fontWeight:500, color:'var(--text)', marginBottom:8 }}>No topics found</p>
           <p style={{ fontSize:13, color:'var(--text-muted)', marginBottom:16 }}>Upload a syllabus PDF or add topics manually.</p>
           <div style={{ display:'flex', gap:10, justifyContent:'center' }}>
-            <Link to="/syllabus-upload" style={{ padding:'10px 20px', background:'var(--green-light)', color:'var(--green)', border:'1px solid var(--green-muted)', borderRadius:'var(--radius-md)', fontSize:13, fontWeight:500, textDecoration:'none' }}>↑ Upload PDF</Link>
+            <Link to="/syllabus-pdf" style={{ padding:'10px 20px', background:'var(--green-light)', color:'var(--green)', border:'1px solid var(--green-muted)', borderRadius:'var(--radius-md)', fontSize:13, fontWeight:500, textDecoration:'none' }}>↑ Upload PDF</Link>
             <button onClick={openAdd} style={{ padding:'10px 20px', background:'var(--green)', color:'white', border:'none', borderRadius:'var(--radius-md)', fontSize:13, fontWeight:500, cursor:'pointer' }}>+ Add Topic</button>
           </div>
         </div>

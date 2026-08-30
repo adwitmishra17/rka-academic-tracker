@@ -38,7 +38,6 @@ import ClassesAndSubjectsAssignment from './pages/ClassesAndSubjectsAssignment'
 import LessonPlanReschedule from './pages/LessonPlanReschedule'
 import TeacherArrangement from './pages/TeacherArrangement'
 import TestDetail from './pages/TestDetail'
-import SyllabusUpload from './pages/SyllabusUpload'
 import SyllabusFiles from './pages/SyllabusFiles'
 import ReportCardSetup from './pages/ReportCardSetup'
 import ReportCardTemplates from './pages/ReportCardTemplates'
@@ -249,7 +248,6 @@ export default function App() {
             <Route path="lesson-plan-reschedule" element={<LessonPlanReschedule />} />
             <Route path="arrangement" element={<TeacherArrangement />} />
             <Route path="tests/:testId" element={<TestDetail />} />
-            <Route path="syllabus-upload" element={<SyllabusUpload />} />
             <Route path="syllabus-pdf" element={<SyllabusFiles />} />
             <Route path="report-card-setup" element={<ReportCardSetup />} />
             <Route path="report-card-templates" element={<ReportCardTemplates />} />
