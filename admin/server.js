@@ -461,13 +461,29 @@ async function computeReportCard(studentId, sessionCode) {
     const row = { subject: subj, byTerm: {}, total: { obtained: 0, max: 0, pct: null, grade: null } }
     let cumO = 0, cumM = 0
     for (const t of terms) {
-      const paper = papers.find(p => p.term_id === t.id && p.subject_id === subj.id)
-      if (!paper) { row.byTerm[t.id] = { paper: null }; continue }
-      const mk = markByPaper.get(paper.id)
-      const obtained = mk?.is_absent ? null : (mk?.marks_obtained ?? null)
-      const pct = (obtained != null && Number(paper.max_marks) > 0) ? (100 * obtained / Number(paper.max_marks)) : null
-      row.byTerm[t.id] = { paperId: paper.id, marks: obtained, max: Number(paper.max_marks), passing: Number(paper.passing_marks), absent: !!mk?.is_absent, pct, grade: gradeFor(pct) }
-      if (obtained != null) { cumO += obtained; cumM += Number(paper.max_marks) }
+      // Since migration 154 a subject-term can hold component papers beside
+      // the Main exam (Portfolio /5, Notebook /5, …) — the term cell is the
+      // SUM of the papers that carry marks.
+      const cellPapers = papers.filter(p => p.term_id === t.id && p.subject_id === subj.id)
+      if (!cellPapers.length) { row.byTerm[t.id] = { paper: null }; continue }
+      let obtained = 0, max = 0, counted = 0, absentSeen = false, fullMax = 0, passing = 0
+      for (const paper of cellPapers) {
+        fullMax += Number(paper.max_marks)
+        passing += Number(paper.passing_marks || 0)
+        const mk = markByPaper.get(paper.id)
+        if (!mk || mk.is_absent) { if (mk?.is_absent) absentSeen = true; continue }
+        if (mk.marks_obtained == null) continue
+        obtained += Number(mk.marks_obtained)
+        max      += Number(paper.max_marks)
+        counted  += 1
+      }
+      if (counted > 0) {
+        const pct = max > 0 ? (100 * obtained / max) : null
+        row.byTerm[t.id] = { paperId: cellPapers[0].id, paperIds: cellPapers.map(p => p.id), marks: obtained, max, passing, absent: false, pct, grade: gradeFor(pct) }
+        cumO += obtained; cumM += max
+      } else {
+        row.byTerm[t.id] = { paperId: cellPapers[0].id, paperIds: cellPapers.map(p => p.id), marks: null, max: fullMax, passing, absent: absentSeen, pct: null, grade: null }
+      }
     }
     row.total = { obtained: cumO, max: cumM, pct: cumM > 0 ? (100 * cumO / cumM) : null, grade: gradeFor(cumM > 0 ? (100 * cumO / cumM) : null) }
     return row
@@ -742,7 +758,9 @@ app.post('/api/exam/papers', verifyAuth, async (req, res) => {
         term_id:       b.termId,
         paper_name:    name,
         max_marks:     max,
-        passing_marks: b.passingMarks == null || b.passingMarks === '' ? null : Number(b.passingMarks),
+        // passing_marks is NOT NULL in the schema — blank defaults to the
+        // CBSE-conventional 33% of max (a /5 paper gets 2, /80 gets 27).
+        passing_marks: b.passingMarks == null || b.passingMarks === '' ? Math.ceil(max * 0.33) : Number(b.passingMarks),
         exam_date:     b.examDate || null,
         has_practical: false,
         theory_max:    null,
