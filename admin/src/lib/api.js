@@ -116,6 +116,14 @@ export async function apiPut(path, body) {
   return parseOrThrow(res)
 }
 
+// ── Card Entries (co-scholastic + class-teacher pack) ──
+export const cardEntriesApi = {
+  load: (branchCode, sessionCode, className, termId, section) =>
+    apiGet('/api/card-entries', { branchCode, sessionCode, className, termId, section }),
+  save: (sessionCode, termId, grades, meta) =>
+    apiPost('/api/card-entries', { sessionCode, termId, grades, meta }),
+}
+
 // ── Report-card template helpers ──
 export const reportTemplateApi = {
   list:   (sessionCode)                        => apiGet('/api/report-templates', { sessionCode }),

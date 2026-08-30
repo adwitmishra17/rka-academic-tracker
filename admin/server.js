@@ -971,6 +971,119 @@ app.delete('/api/loc/:id', verifyAuth, async (req, res) => {
   catch (e) { console.error('[admin] DELETE /api/loc/:id:', e); res.status(500).json({ error: e.message }) }
 })
 
+// ─── Card Entries (Phase 2) — co-scholastic grades + class-teacher pack ─────
+// Areas/graded subjects are kind='co_scholastic' exam_subjects rows (codes
+// RCA/RCG, seeded from the card templates); their grades live in
+// exam_coscholastic_grades. Discipline / remarks / achievement / height /
+// weight live in report_card_student_meta (term row + session row).
+
+// GET /api/card-entries?branchCode=&sessionCode=&className=&termId=&section=
+app.get('/api/card-entries', verifyAuth, async (req, res) => {
+  try {
+    const { branchCode, sessionCode, className, termId, section } = req.query
+    if (!branchCode || !sessionCode || !className || !termId) {
+      return res.status(400).json({ error: 'branchCode, sessionCode, className, termId required' })
+    }
+    const bid = await branchIdForCode(branchCode)
+    if (!bid) return res.json({ students: [], areas: [], grades: {}, meta: {} })
+
+    let sq = supabase.from('students')
+      .select('id, full_name, admission_no, section, roll_number')
+      .eq('branch_id', bid).eq('class_name', className).eq('is_active', true).eq('deleted_in_sms', false)
+      .order('section').order('roll_number').order('full_name')
+    if (section) sq = sq.eq('section', section)
+
+    const [stRes, areaRes] = await Promise.all([
+      sq,
+      supabase.from('exam_subjects')
+        .select('id, subject_name, subject_code, sort_order')
+        .eq('branch_id', bid).eq('session_code', sessionCode).eq('class_name', className)
+        .eq('kind', 'co_scholastic').in('subject_code', ['RCA', 'RCG'])
+        .order('sort_order'),
+    ])
+    if (stRes.error) throw stRes.error
+    if (areaRes.error) throw areaRes.error
+    const students = stRes.data ?? []
+    const areas = areaRes.data ?? []
+    const sids = students.map(s => s.id)
+
+    let grades = {}
+    if (sids.length && areas.length) {
+      const { data, error } = await supabase.from('exam_coscholastic_grades')
+        .select('student_id, subject_id, grade')
+        .eq('term_id', termId).in('student_id', sids).in('subject_id', areas.map(a => a.id))
+      if (error) throw error
+      for (const g of data ?? []) (grades[g.student_id] ||= {})[g.subject_id] = g.grade
+    }
+
+    let meta = {}
+    if (sids.length) {
+      const { data, error } = await supabase.from('report_card_student_meta')
+        .select('student_id, term_id, discipline, remarks, achievement, height_cm, weight_kg, promoted_to')
+        .eq('session_code', sessionCode).in('student_id', sids)
+        .or(`term_id.eq.${termId},term_id.is.null`)
+      if (error) throw error
+      for (const m of data ?? []) {
+        const slot = (meta[m.student_id] ||= {})
+        if (m.term_id) { slot.discipline = m.discipline; slot.remarks = m.remarks }
+        else { slot.achievement = m.achievement; slot.heightCm = m.height_cm; slot.weightKg = m.weight_kg; slot.promotedTo = m.promoted_to }
+      }
+    }
+    res.json({ students, areas, grades, meta })
+  } catch (e) { console.error('[admin] GET /api/card-entries:', e); res.status(500).json({ error: e.message }) }
+})
+
+// POST /api/card-entries { sessionCode, termId, grades:[{studentId,subjectId,grade}], meta:[{studentId, discipline?, remarks?, achievement?, heightCm?, weightKg?, promotedTo?}] }
+app.post('/api/card-entries', verifyAuth, async (req, res) => {
+  try {
+    const { sessionCode, termId, grades, meta } = req.body || {}
+    if (!sessionCode || !termId) return res.status(400).json({ error: 'sessionCode and termId required' })
+    const by = req.user.email || req.user.uid
+    const now = new Date().toISOString()
+    let saved = 0
+
+    if (Array.isArray(grades) && grades.length) {
+      const rows = grades.filter(g => g.studentId && g.subjectId).map(g => ({
+        term_id: termId, subject_id: g.subjectId, student_id: g.studentId,
+        grade: g.grade == null || g.grade === '' ? null : String(g.grade),
+        source: 'manual', entered_by: by, entered_at: now, updated_at: now,
+      }))
+      if (rows.length) {
+        const { error } = await supabase.from('exam_coscholastic_grades')
+          .upsert(rows, { onConflict: 'term_id,subject_id,student_id' })
+        if (error) throw error
+        saved += rows.length
+      }
+    }
+
+    if (Array.isArray(meta) && meta.length) {
+      const termRows = [], sessRows = []
+      for (const m of meta) {
+        if (!m.studentId) continue
+        if (m.discipline !== undefined || m.remarks !== undefined) {
+          termRows.push({ student_id: m.studentId, session_code: sessionCode, term_id: termId,
+            discipline: m.discipline ?? null, remarks: m.remarks ?? null, entered_by: by, updated_at: now })
+        }
+        if (m.achievement !== undefined || m.heightCm !== undefined || m.weightKg !== undefined || m.promotedTo !== undefined) {
+          sessRows.push({ student_id: m.studentId, session_code: sessionCode, term_id: null,
+            achievement: m.achievement ?? null,
+            height_cm: m.heightCm == null || m.heightCm === '' ? null : Number(m.heightCm),
+            weight_kg: m.weightKg == null || m.weightKg === '' ? null : Number(m.weightKg),
+            promoted_to: m.promotedTo ?? null, entered_by: by, updated_at: now })
+        }
+      }
+      for (const rows of [termRows, sessRows]) {
+        if (!rows.length) continue
+        const { error } = await supabase.from('report_card_student_meta')
+          .upsert(rows, { onConflict: 'student_id,session_code,term_id' })
+        if (error) throw error
+        saved += rows.length
+      }
+    }
+    res.json({ saved })
+  } catch (e) { console.error('[admin] POST /api/card-entries:', e); res.status(500).json({ error: e.message }) }
+})
+
 // ─── Report-card templates (Phase 1 of the report-card rework) ──────────────
 // The template is the card's single source of truth (rows, schemes, scales,
 // entry owners, renderer family). Tables live in SMS Supabase, service-role
