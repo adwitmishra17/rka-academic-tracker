@@ -495,6 +495,24 @@ function ClassTeacherAssignment({ teacher, setTeacher }) {
         setEditing(false); setSaving(false); return
       }
 
+      // HARD preconditions. The PWA and the Firestore rules resolve
+      // class-teachership from classTeacherByEmail/<email> {className,
+      // branchCode} — assigning without either half-completes: the profile
+      // says "class teacher" but the teacher sees no students (this bit
+      // Shiwangi Tiwari: assigned before her branch was set, lookup doc
+      // silently skipped). Fail loudly instead.
+      const myEmail = (teacher.personalEmail || teacher.email || '').toLowerCase().trim()
+      const myBranch = Array.isArray(teacher.branchCodes) && teacher.branchCodes.length > 0
+        ? teacher.branchCodes[0] : null
+      if (target && !myEmail) {
+        setError("Set this teacher's email first — class-teacher access is keyed to the email they sign into the teacher app with.")
+        setSaving(false); return
+      }
+      if (target && !myBranch) {
+        setError("Set this teacher's branch first — the class-teacher assignment needs a branch.")
+        setSaving(false); return
+      }
+
       // If a real class chosen, check no one else in the SAME branch(es) holds it.
       // Different-branch holders are fine — Class 9 MAIN and Class 9 CITY have
       // separate class teachers, and both legitimately have classTeacherOf='Class 9'.
@@ -533,31 +551,21 @@ function ClassTeacherAssignment({ teacher, setTeacher }) {
       // 2. Update target teacher doc
       await updateDoc(doc(db, 'teachers', teacher.id), { classTeacherOf: target || null })
 
-      // 3. Manage this teacher's classTeacherByEmail lookup doc
-      //    Keyed by personalEmail (Gmail used to sign into the PWA), falling back
-      //    to email if personalEmail isn't set. Branch derived from teacher.branchCodes[0]
-      //    since a class teacher is single-branch in practice.
-      const myEmail = (teacher.personalEmail || teacher.email || '').toLowerCase().trim()
-      if (myEmail) {
-        if (target) {
-          const branch = Array.isArray(teacher.branchCodes) && teacher.branchCodes.length > 0
-            ? teacher.branchCodes[0]
-            : null
-          if (!branch) {
-            console.warn('Teacher has no branchCodes — classTeacherByEmail entry not written')
-          } else {
-            await setDoc(doc(db, 'classTeacherByEmail', myEmail), {
-              className: target,
-              branchCode: branch,
-              teacherDocId: teacher.id,
-              teacherName: teacher.fullName || '',
-              updatedAt: serverTimestamp(),
-            })
-          }
-        } else {
-          // Unassigning — remove the lookup doc
-          try { await deleteDoc(doc(db, 'classTeacherByEmail', myEmail)) } catch {}
-        }
+      // 3. Manage this teacher's classTeacherByEmail lookup doc — keyed by
+      //    personalEmail (the Gmail they sign into the PWA with), falling back
+      //    to email. Email + branch are guaranteed by the preconditions above,
+      //    so assignment and lookup doc can never diverge again.
+      if (target) {
+        await setDoc(doc(db, 'classTeacherByEmail', myEmail), {
+          className: target,
+          branchCode: myBranch,
+          teacherDocId: teacher.id,
+          teacherName: teacher.fullName || '',
+          updatedAt: serverTimestamp(),
+        })
+      } else if (myEmail) {
+        // Unassigning — remove the lookup doc
+        try { await deleteDoc(doc(db, 'classTeacherByEmail', myEmail)) } catch {}
       }
 
       setTeacher(prev => ({ ...prev, classTeacherOf: target || null }))
