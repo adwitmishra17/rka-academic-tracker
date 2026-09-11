@@ -65,6 +65,27 @@ export default function Layout() {
 
   async function handleLogout() { await signOut(auth); navigate('/login') }
 
+  // New-build detector: Hostinger swaps the bundle on every push, but a tab
+  // that stays open keeps running the old JS. Poll index.html and compare the
+  // hashed bundle name; offer a reload when it changes.
+  const [newBuild, setNewBuild] = useState(false)
+  useEffect(() => {
+    const current = [...document.scripts].map((s) => s.src).find((src) => /\/assets\/index-[\w-]+\.js/.test(src))
+    if (!current) return
+    const mine = current.match(/index-([\w-]+)\.js/)?.[1]
+    const check = async () => {
+      try {
+        const html = await (await fetch('/?v=' + Date.now(), { cache: 'no-store' })).text()
+        const live = html.match(/assets\/index-([\w-]+)\.js/)?.[1]
+        if (live && mine && live !== mine) setNewBuild(true)
+      } catch { /* offline — ignore */ }
+    }
+    const id = setInterval(check, 3 * 60 * 1000)
+    const onFocus = () => check()
+    window.addEventListener('focus', onFocus)
+    return () => { clearInterval(id); window.removeEventListener('focus', onFocus) }
+  }, [])
+
   const currentPage = NAV.find(n => n.end ? location.pathname === n.to : location.pathname.startsWith(n.to))
 
   const SidebarContent = () => (
@@ -183,6 +204,12 @@ export default function Layout() {
                 </>
               )}
             </button>
+          </div>
+        )}
+        {newBuild && (
+          <div style={{ position:'sticky', top: isMobile ? 54 : 49, zIndex:60, background:'var(--gold-light)', borderBottom:'1px solid rgba(201,162,39,0.4)', padding:'8px 20px', display:'flex', alignItems:'center', gap:12, fontSize:12.5, color:'var(--gold-dark)' }}>
+            <span style={{ flex:1 }}><b>A newer version of the Tracker is live.</b> Reload to get the latest screens — unsaved edits on this page will be lost.</span>
+            <button onClick={() => window.location.reload()} style={{ padding:'6px 14px', background:'var(--gold-dark)', color:'white', border:'none', borderRadius:99, fontSize:12, fontWeight:600, cursor:'pointer' }}>Reload now</button>
           </div>
         )}
         <main style={{ flex:1, overflowY:'auto' }}>
