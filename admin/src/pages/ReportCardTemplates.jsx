@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react'
 import { collection, getDocs } from 'firebase/firestore'
 import { db } from '../firebase/config'
 import { examApi, reportTemplateApi } from '../lib/api'
+import { CLASS_NAMES, compareClasses } from '../lib/classes'
 
 /* ============================================================
    Report Card Templates — the card's single source of truth.
@@ -293,6 +294,21 @@ function TemplateEditor({ template, teachers, onSaved, onClose }) {
   )
 }
 
+// Bind a class to a template — surfaces the report_card_template_classes
+// mapping so any unmapped class (e.g. pre-primary Nursery/LKG/UKG) can be
+// given a card straight from this screen.
+function ClassAssigner({ unmapped, busy, onAssign }) {
+  if (!unmapped.length) return null
+  return (
+    <select value="" disabled={!!busy} onChange={e => { const c = e.target.value; if (c) onAssign(c) }}
+      title="Add a class to this template"
+      style={{ ...inp, padding: '3px 8px', fontSize: 12, color: 'var(--text-muted)', cursor: 'pointer' }}>
+      <option value="">{busy ? 'Saving…' : '+ Add class…'}</option>
+      {unmapped.map(c => <option key={c} value={c}>{c}</option>)}
+    </select>
+  )
+}
+
 // ── Page ────────────────────────────────────────────────────────────────────
 
 export default function ReportCardTemplates() {
@@ -332,6 +348,40 @@ export default function ReportCardTemplates() {
   const tplById = useMemo(() => new Map(templates.map(t => [t.id, t])), [templates])
   const classesOf = (id) => Object.entries(classMap).filter(([, tid]) => tid === id).map(([c]) => c)
 
+  const [assignBusy, setAssignBusy] = useState('')
+  const unmappedClasses = useMemo(() => CLASS_NAMES.filter(c => !(c in classMap)), [classMap])
+
+  // Bind a class to a template. For marks-card families we also seed a
+  // classRows entry (cloned from an existing class) so the card can render the
+  // new class immediately — i.e. it starts out "like Class I", then editable.
+  async function assignClass(t, cls) {
+    if (!cls || assignBusy) return
+    setAssignBusy(cls); setError('')
+    try {
+      const needsRows = t.family === 'performance_profile' || t.family === 'secondary_annual'
+      if (needsRows && !t.definition?.classRows?.[cls]) {
+        const src = Object.keys(t.definition?.classRows || {}).sort(compareClasses)[0]
+        const cloned = src ? JSON.parse(JSON.stringify(t.definition.classRows[src])) : []
+        const definition = { ...t.definition, classRows: { ...(t.definition.classRows || {}), [cls]: cloned } }
+        const { template: updated } = await reportTemplateApi.save(t.id, { definition })
+        setTemplates(ts => ts.map(x => x.id === updated.id ? updated : x))
+      }
+      await reportTemplateApi.assign(sessionCode, cls, t.id)
+      setClassMap(m => ({ ...m, [cls]: t.id }))
+    } catch (e) { setError(e.message || String(e)) }
+    setAssignBusy('')
+  }
+
+  async function unassignClass(cls) {
+    if (assignBusy) return
+    setAssignBusy(cls); setError('')
+    try {
+      await reportTemplateApi.assign(sessionCode, cls, null)
+      setClassMap(m => { const n = { ...m }; delete n[cls]; return n })
+    } catch (e) { setError(e.message || String(e)) }
+    setAssignBusy('')
+  }
+
   return (
     <div style={{ padding: '24px 28px', maxWidth: 1100 }}>
       <div className="fade-in" style={{ marginBottom: 22 }}>
@@ -365,9 +415,16 @@ export default function ReportCardTemplates() {
               <div style={{ flex: 1, minWidth: 260 }}>
                 <div style={{ fontSize: 14.5, fontWeight: 600, color: 'var(--text)' }}>{t.name}</div>
                 <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>{FAMILY_LABEL[t.family]}</div>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginTop: 8 }}>
-                  {classesOf(t.id).map(c => <span key={c} style={chip('var(--green-light)', 'var(--green-dark)', 'var(--green-muted)')}>{c}</span>)}
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginTop: 8, alignItems: 'center' }}>
+                  {classesOf(t.id).sort(compareClasses).map(c => (
+                    <span key={c} style={{ ...chip('var(--green-light)', 'var(--green-dark)', 'var(--green-muted)'), gap: 6 }}>
+                      {c}
+                      <button onClick={() => unassignClass(c)} disabled={assignBusy === c} title={`Unassign ${c}`}
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--crimson)', padding: 0, fontSize: 13, opacity: 0.7, lineHeight: 1 }}>×</button>
+                    </span>
+                  ))}
                   {classesOf(t.id).length === 0 && <span style={{ fontSize: 12, color: 'var(--gray-400)' }}>no classes mapped</span>}
+                  <ClassAssigner unmapped={unmappedClasses} busy={assignBusy} onAssign={(cls) => assignClass(t, cls)} />
                 </div>
               </div>
               <div style={{ textAlign: 'right' }}>
@@ -382,7 +439,7 @@ export default function ReportCardTemplates() {
       )}
 
       <div style={{ marginTop: 8, padding: '12px 16px', background: 'var(--green-light)', borderRadius: 'var(--radius-md)', border: '1px solid var(--green-muted)', fontSize: 12, color: 'var(--green-dark)', lineHeight: 1.7 }}>
-        Owners set here drive the teacher-app entry queues (Phase 2) and the completeness matrix + hard print gate (Phase 3): a class's cards can't generate until every template row has data. Nursery–UKG intentionally have no template — they use HPC cards.
+        Use “+ Add class” to bind any class to a template — a marks-card template clones an existing class's subjects for the new one, which you can then adjust via Edit. Owners set here drive the teacher-app entry queues (Phase 2) and the completeness matrix + hard print gate (Phase 3): a class's cards can't generate until every template row has data. Nursery/LKG/UKG otherwise default to Holistic Progress Cards (Report Cards → HPC).
       </div>
     </div>
   )
