@@ -17,9 +17,23 @@ export default function StatusStage({ branch, sessionCode, className, setStage, 
   const [err, setErr] = useState('')
   const [drawer, setDrawer] = useState(null) // { kind:'marks', termId, subjectId, label } | { kind:'card', termId, label }
 
+  const [composites, setComposites] = useState({})
   const load = () => {
     setBusy(true); setErr('')
-    examApi.status(branch, sessionCode, className).then(setData).catch((e) => setErr(e.message)).finally(() => setBusy(false))
+    Promise.all([
+      examApi.status(branch, sessionCode, className),
+      examApi.rules(branch, sessionCode, className).catch(() => ({ rows: [] })),
+    ]).then(([st, ru]) => {
+      const m = {}
+      for (const r of ru.rows || []) if ((r.mapped || []).length > 1) for (const name of r.mapped) m[name] = { row: r.subject, members: r.mapped }
+      setComposites(m)
+      // members of a composite sit together, at the first member's position
+      const items = [...(st.items || [])]
+      const key = (it) => m[it.subjectName]?.row || `~${it.subjectName}`
+      const first = {}; items.forEach((it, i) => { const k = key(it); if (!(k in first)) first[k] = i })
+      items.sort((a, b) => first[key(a)] - first[key(b)] || key(a).localeCompare(key(b)))
+      setData({ ...st, items })
+    }).catch((e) => setErr(e.message)).finally(() => setBusy(false))
   }
   useEffect(load, [branch, sessionCode, className]) // eslint-disable-line
 
@@ -60,9 +74,17 @@ export default function StatusStage({ branch, sessionCode, className, setStage, 
               <tr><th style={th} rowSpan={2}>Subject</th><th style={th} rowSpan={2}>Teacher</th>{cols.map((t) => <th key={t.id} style={{ ...th, textAlign: 'center', borderLeft: '1px solid var(--gray-100)' }} colSpan={Math.max(1, t.keys.length)}>{t.name}</th>)}</tr>
               <tr>{cols.map((t) => (t.keys.length ? t.keys : ['—']).map((k) => <th key={t.id + k} style={{ ...th, textAlign: 'center', fontSize: 9.5, borderLeft: '1px solid var(--gray-100)' }}>{COMP_LABEL[k] || k}</th>))}</tr>
             </thead>
-            <tbody>{data.items.map((it) => (
-              <tr key={it.subjectId}>
-                <td style={{ ...td, fontWeight: 600, whiteSpace: 'nowrap' }}>{it.subjectName}</td>
+            <tbody>{data.items.map((it, i) => {
+              const comp = composites[it.subjectName]
+              const firstOfGroup = comp && (i === 0 || composites[data.items[i - 1].subjectName]?.row !== comp.row)
+              return (<React.Fragment key={it.subjectId}>
+              {firstOfGroup && (
+                <tr><td colSpan={2 + cols.reduce((n, t) => n + Math.max(1, t.keys.length), 0)} style={{ padding: '6px 10px 3px', fontSize: 11, color: 'var(--green-dark)', background: 'var(--green-light)', borderTop: '1px solid var(--green-muted)' }}>
+                  <b>Composite → {comp.row}</b> &nbsp;·&nbsp; {comp.members.join(' + ')} sum into one card row; every member's papers must be entered for the row to count
+                </td></tr>
+              )}
+              <tr style={{ background: comp ? 'var(--green-light)' : 'transparent', boxShadow: comp ? 'inset 3px 0 0 var(--green)' : 'none' }}>
+                <td style={{ ...td, fontWeight: 600, whiteSpace: 'nowrap' }}>{it.subjectName}{comp ? <div style={{ fontSize: 10, fontWeight: 500, color: 'var(--green-dark)' }}>part of {comp.row}</div> : null}</td>
                 <td style={{ ...td, fontSize: 11.5, whiteSpace: 'nowrap' }}>
                   <button onClick={() => { setClass?.(className); setStage('setup') }} title="Change in Setup" style={{ border: 'none', background: 'none', padding: 0, cursor: 'pointer', fontSize: 11.5, color: it.teacherEmail ? 'var(--text)' : 'var(--crimson)', textDecoration: 'underline dotted', textUnderlineOffset: 3 }}>{it.teacher || 'no teacher — assign'}</button>
                 </td>
@@ -82,7 +104,8 @@ export default function StatusStage({ branch, sessionCode, className, setStage, 
                   )
                 }))}
               </tr>
-            ))}</tbody>
+              </React.Fragment>)
+            })}</tbody>
           </table>
         </div>
       )}

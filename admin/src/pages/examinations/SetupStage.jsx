@@ -26,7 +26,27 @@ export default function SetupStage({ branch, sessionCode, className, config, ref
   const templates = config?.templates || []
   const classMap = config?.classMap || {}
   const selected = className || ''
-  const subjects = useMemo(() => (config?.subjects || []).filter((s) => s.class_name === selected).sort((a, b) => (a.kind === b.kind ? (a.sort_order - b.sort_order) || a.subject_name.localeCompare(b.subject_name) : a.kind === 'co_scholastic' ? 1 : -1)), [config, selected])
+  // Composite card rows (Class 9-10 Science = Physics+Chemistry+Biology, split Hindi/English …):
+  // subjectName → { row, members } from the class's template rows.
+  const [composites, setComposites] = useState({})
+  useEffect(() => {
+    setComposites({})
+    if (!selected || !classMap[selected]) return
+    examApi.rules(branch, sessionCode, selected).then(({ rows }) => {
+      const m = {}
+      for (const r of rows || []) if ((r.mapped || []).length > 1) for (const name of r.mapped) m[name] = { row: r.subject, members: r.mapped }
+      setComposites(m)
+    }).catch(() => {})
+  }, [branch, sessionCode, selected, classMap]) // eslint-disable-line
+  const subjects = useMemo(() => {
+    const list = (config?.subjects || []).filter((s) => s.class_name === selected)
+    const kindRank = (s) => (s.kind === 'co_scholastic' ? 1 : 0)
+    const groupKey = (s) => composites[s.subject_name]?.row || `~${s.subject_name}`
+    // members of a composite sit together, at the position of their first member
+    const firstPos = {}
+    list.forEach((s) => { const g = groupKey(s); if (!(g in firstPos)) firstPos[g] = s.sort_order })
+    return list.sort((a, b) => kindRank(a) - kindRank(b) || (firstPos[groupKey(a)] - firstPos[groupKey(b)]) || groupKey(a).localeCompare(groupKey(b)) || (a.sort_order - b.sort_order) || a.subject_name.localeCompare(b.subject_name))
+  }, [config, selected, composites])
   useEffect(() => { setBuildRows(null); setErr('') }, [selected])
 
   // ── Terms ─────────────────────────────────────────────────────────────────
@@ -207,10 +227,18 @@ export default function SetupStage({ branch, sessionCode, className, config, ref
                 ) : (
                   <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                     <thead><tr><th style={th}>#</th><th style={th}>Subject</th><th style={th}>Kind</th><th style={th}>Teacher (enters marks in the PWA)</th><th style={th}>Optional</th><th style={th}></th></tr></thead>
-                    <tbody>{subjects.map((s, i) => (
-                      <tr key={s.id} style={{ opacity: busy === s.id ? 0.5 : 1 }}>
+                    <tbody>{subjects.map((s, i) => {
+                      const comp = composites[s.subject_name]
+                      const firstOfGroup = comp && (i === 0 || composites[subjects[i - 1].subject_name]?.row !== comp.row)
+                      return (<React.Fragment key={s.id}>
+                      {firstOfGroup && (
+                        <tr><td colSpan={6} style={{ padding: '7px 10px 4px', fontSize: 11, color: 'var(--green-dark)', background: 'var(--green-light)', borderTop: '1px solid var(--green-muted)' }}>
+                          <b>Composite → {comp.row}</b> on the card &nbsp;·&nbsp; {comp.members.join(' + ')} are entered separately by their own teachers and summed into one row
+                        </td></tr>
+                      )}
+                      <tr style={{ opacity: busy === s.id ? 0.5 : 1, background: comp ? 'var(--green-light)' : 'transparent', boxShadow: comp ? 'inset 3px 0 0 var(--green)' : 'none' }}>
                         <td style={{ ...td, color: 'var(--text-muted)', width: 30 }}>{i + 1}</td>
-                        <td style={{ ...td, fontWeight: 600 }}>{s.subject_name}{s.subject_code ? <span style={{ marginLeft: 6, fontSize: 10, color: 'var(--text-muted)' }}>{s.subject_code}</span> : null}</td>
+                        <td style={{ ...td, fontWeight: 600 }}>{s.subject_name}{s.subject_code ? <span style={{ marginLeft: 6, fontSize: 10, color: 'var(--text-muted)' }}>{s.subject_code}</span> : null}{comp ? <span style={{ marginLeft: 6 }}><Pill tone="green">part of {comp.row}</Pill></span> : null}</td>
                         <td style={td}>
                           <button onClick={() => patchSubject(s, { kind: s.kind === 'co_scholastic' ? 'scholastic' : 'co_scholastic' })} title="Click to flip" style={{ border: 'none', background: 'none', cursor: 'pointer', padding: 0 }}>
                             <Pill tone={s.kind === 'co_scholastic' ? 'gold' : 'green'}>{s.kind === 'co_scholastic' ? 'co-scholastic' : 'scholastic'}</Pill>
@@ -227,7 +255,8 @@ export default function SetupStage({ branch, sessionCode, className, config, ref
                         <td style={td}><input type="checkbox" checked={!!s.is_optional} onChange={(e) => patchSubject(s, { isOptional: e.target.checked })} title="Elective (Class 11/12 admission choice)" /></td>
                         <td style={{ ...td, textAlign: 'right' }}>{!['RCA', 'RCG'].includes(s.subject_code) && <Btn small kind="danger" onClick={() => removeSubject(s)}>✕</Btn>}</td>
                       </tr>
-                    ))}</tbody>
+                      </React.Fragment>)
+                    })}</tbody>
                   </table>
                 )}
                 <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', padding: '10px 14px', borderTop: '1px solid var(--gray-100)', flexWrap: 'wrap' }}>
