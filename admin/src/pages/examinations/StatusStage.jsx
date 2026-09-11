@@ -105,7 +105,7 @@ export default function StatusStage({ branch, sessionCode, className, setStage, 
             )
           })}</tbody>
         </table>
-        <div style={{ padding: '8px 14px', fontSize: 11, color: 'var(--text-muted)', borderTop: '1px solid var(--gray-100)' }}>Class teachers enter these in the PWA (Marks → Report Card Entries). The office can enter or override here; office rows lock the teacher's.</div>
+        <div style={{ padding: '8px 14px', fontSize: 11, color: 'var(--text-muted)', borderTop: '1px solid var(--gray-100)' }}>Class teachers enter these in the PWA (Marks → Co-scholastic Entries). The office can enter or override here; office rows lock the teacher's.</div>
       </div>
 
       <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
