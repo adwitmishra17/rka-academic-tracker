@@ -9,6 +9,15 @@ import { inp, lbl, card, th, td, Btn, Pill, Note, Spinner } from './ui.jsx'
 
 const CO_HINTS = ['art', 'craft', 'music', 'dance', 'physical education', ' pe', 'pe ', 'sport', 'game', 'moral', 'yoga', 'drawing', 'painting', 'club', 'library', 'value education', 'life skill', 'karate', 'eca', 'activity', 'reading', 'cuet']
 const TERM_HINT = { T1: 'Periodic test 1 (PA-1) — feeds the Half-Yearly card', HY: 'Half-Yearly exam', T2: 'Periodic test 2 (PA-2) — feeds the Annual card', AN: 'Annual exam' }
+// Which card family suits which class — a mismatch (e.g. the XI–XII Progress
+// Report on Class 9) yields no rows, no composites and wrong papers.
+function familyFits(family, cls) {
+  if (!family) return true
+  if (/^Class (11|12)\b/.test(cls)) return family === 'senior_progress'
+  if (/^Class (9|10)$/.test(cls)) return family === 'secondary_annual'
+  return family === 'performance_profile'
+}
+const FAMILY_LABEL = { performance_profile: 'Classes I–VIII style', secondary_annual: 'Classes IX–X style', senior_progress: 'Classes XI–XII style' }
 const guessKind = (n) => (CO_HINTS.some((h) => ` ${String(n).toLowerCase()} `.includes(h)) ? 'co_scholastic' : 'scholastic')
 
 export default function SetupStage({ branch, sessionCode, className, config, refreshConfig, classNames, classBadges, setClass, setStage }) {
@@ -18,6 +27,7 @@ export default function SetupStage({ branch, sessionCode, className, config, ref
   const [buildRows, setBuildRows] = useState(null)   // timetable preview
   const [newSub, setNewSub] = useState({ subjectName: '', kind: 'scholastic', teacherId: '' })
   const [flash, setFlash] = useState('')
+  const [tplNonce, setTplNonce] = useState(0)   // re-mounts the select after a cancelled change
   const say = (m) => { setFlash(m); setTimeout(() => setFlash(''), 3000) }
   const fail = (e) => setErr(e.message || String(e))
 
@@ -114,10 +124,15 @@ export default function SetupStage({ branch, sessionCode, className, config, ref
 
   // ── Template binding (clones the lowest class's rows for marks-card families) ──
   async function bindTemplate(cls, templateId) {
+    const cur = templates.find((t) => t.id === classMap[cls])
+    const next = templates.find((t) => t.id === templateId)
+    if ((cur?.id || '') === (templateId || '')) return
+    const fitNote = next && !familyFits(next.family, cls) ? `\n\nWARNING: "${next.name}" is a ${FAMILY_LABEL[next.family]} card — it will not fit ${cls} (no rows, wrong papers).` : ''
+    if (!confirm(`Change the report-card template for ${cls}?\n\nFrom: ${cur?.name || 'none'}\nTo: ${next?.name || 'none'}${fitNote}\n\nRules, papers and the card layout all follow the template. Re-sync papers afterwards.`)) { setTplNonce((n) => n + 1); return }
     setBusy('tpl'); setErr('')
     try {
       if (templateId) {
-        const tpl = templates.find((t) => t.id === templateId)
+        const tpl = next
         const def = tpl?.definition || {}
         if (['performance_profile', 'secondary_annual'].includes(tpl?.family) && !def.classRows?.[cls]) {
           const src = Object.keys(def.classRows || {}).sort(compareClasses)[0]
@@ -185,6 +200,7 @@ export default function SetupStage({ branch, sessionCode, className, config, ref
                 <span title="subjects" style={{ fontSize: 10.5, color: 'var(--text-muted)' }}>{b.subjects || 0}</span>
                 {b.unassigned > 0 && <span title={`${b.unassigned} scholastic subjects without a teacher`} style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--gold)' }} />}
                 {b.subjects > 0 && !b.template && <span title="no report-card template" style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--crimson)' }} />}
+                {b.template && !familyFits(templates.find((t) => t.id === classMap[c])?.family, c) && <span title="template does not fit this class" style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--crimson)', outline: '2px solid var(--crimson-light)' }} />}
               </button>
             )
           })}
@@ -208,10 +224,13 @@ export default function SetupStage({ branch, sessionCode, className, config, ref
                 </div>
                 <div>
                   <span style={lbl}>Report-card template</span>
-                  <select value={classMap[selected] || ''} onChange={(e) => bindTemplate(selected, e.target.value)} disabled={busy === 'tpl'} style={{ ...inp, minWidth: 260 }}>
+                  <select key={tplNonce} defaultValue={classMap[selected] || ''} onChange={(e) => bindTemplate(selected, e.target.value)} disabled={busy === 'tpl'} style={{ ...inp, minWidth: 260, borderColor: classMap[selected] && !familyFits(templates.find((t) => t.id === classMap[selected])?.family, selected) ? 'var(--crimson)' : 'var(--gray-200)' }}>
                     <option value="">— none (no card for this class) —</option>
-                    {templates.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+                    {templates.map((t) => <option key={t.id} value={t.id}>{t.name}{familyFits(t.family, selected) ? '' : '  (does not fit this class)'}</option>)}
                   </select>
+                  {classMap[selected] && !familyFits(templates.find((t) => t.id === classMap[selected])?.family, selected) && (
+                    <div style={{ fontSize: 11, color: 'var(--crimson)', marginTop: 4 }}>This template does not fit {selected} — no rows or composites will resolve. Pick the matching card.</div>
+                  )}
                 </div>
                 <Btn small onClick={() => setStage('rules')} disabled={!classMap[selected]}>Scoring rules →</Btn>
               </div>
