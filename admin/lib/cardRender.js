@@ -10,9 +10,9 @@
 // Header assets are referenced by URL (public/ files served by this app with
 // no auth) so a stored card stays ~15 KB instead of carrying 90 KB of base64
 // per student. Override the host with CARD_ASSET_BASE for staging.
-const ASSET_BASE = (process.env.CARD_ASSET_BASE || 'https://tracker.rkacademyballia.in').replace(/\/$/, '')
-const CREST = `${ASSET_BASE}/crest-card.png`
-const BANNER = `${ASSET_BASE}/banner-card.png`
+// Read lazily: ES imports are hoisted above server.js's dotenv.config(), so a
+// module-level read would miss a .env.local override in local dev.
+const assetBase = () => (process.env.CARD_ASSET_BASE || 'https://tracker.rkacademyballia.in').replace(/\/$/, '')
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]))
 const dash = '—'
@@ -76,9 +76,9 @@ function header(card, subtitle) {
   const s = card.student || {}
   return `
   <div class="hdr">
-    <img class="crest" src="${CREST}" alt="" onerror="this.style.visibility='hidden'">
+    <img class="crest" src="${assetBase()}/crest-card.png" alt="" onerror="this.style.visibility='hidden'">
     <div class="mid">
-      <img class="banner" src="${BANNER}" alt="RADHAKRISHNA ACADEMY" onerror="this.replaceWith(Object.assign(document.createElement('div'),{textContent:'RADHAKRISHNA ACADEMY',style:'font-size:20px;font-weight:700;letter-spacing:.08em'}))">
+      <img class="banner" src="${assetBase()}/banner-card.png" alt="RADHAKRISHNA ACADEMY" onerror="this.replaceWith(Object.assign(document.createElement('div'),{textContent:'RADHAKRISHNA ACADEMY',style:'font-size:20px;font-weight:700;letter-spacing:.08em'}))">
       <div class="branch">${esc(s.branchName || s.branchCode || '')}</div>
       <div class="aff">AFFILIATED TO CBSE, NEW DELHI</div>
     </div>
