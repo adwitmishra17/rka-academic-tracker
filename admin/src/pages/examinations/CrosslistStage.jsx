@@ -52,10 +52,11 @@ export default function CrosslistStage({ branch, sessionCode, className, config 
   useEffect(() => { if (!termId && terms.length) setTermId(terms[0].id) }, [terms]) // eslint-disable-line
 
   useEffect(() => {
+    if (mode === 'card' && cards && cards.cardKey === cardKey && cards._section === section) return // server echoed the default key — no second fetch
     setErr(''); setBusy(true)
     const p = mode === 'raw'
       ? (termId ? examApi.crosslist(branch, termId, className, section || undefined).then(setRaw) : Promise.resolve())
-      : examApi.classCards(branch, sessionCode, className, cardKey || undefined, section || undefined).then((d) => { setCards(d); if (!cardKey) setCardKey(d.cardKey) })
+      : examApi.classCards(branch, sessionCode, className, cardKey || undefined, section || undefined).then((d) => { setCards({ ...d, _section: section }); if (!cardKey) setCardKey(d.cardKey) })
     p.catch((e) => { setErr(e.message); if (mode === 'raw') setRaw(null); else setCards(null) }).finally(() => setBusy(false))
   }, [mode, termId, cardKey, section, branch, sessionCode, className]) // eslint-disable-line
 

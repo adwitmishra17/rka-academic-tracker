@@ -8,9 +8,10 @@ import CardEntries from '../CardEntries'
    how many of the roster, when, office-overridden?), plus the class-teacher
    pack (card entries) per term. Click any cell to enter/override in place. */
 
+const COMP_LABEL = { pt: 'Periodic test', portfolio: 'Portfolio', se: 'Sub. enrichment', exam: 'Exam', notebook: 'Notebook' }
 const STATE = { empty: { tone: 'red', label: 'not started' }, partial: { tone: 'gold', label: 'partial' }, done: { tone: 'green', label: 'complete' } }
 
-export default function StatusStage({ branch, sessionCode, className, setStage }) {
+export default function StatusStage({ branch, sessionCode, className, setStage, setClass }) {
   const [data, setData] = useState(null)
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState('')
@@ -56,12 +57,14 @@ export default function StatusStage({ branch, sessionCode, className, setStage }
           <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 800 }}>
             <thead>
               <tr><th style={th} rowSpan={2}>Subject</th><th style={th} rowSpan={2}>Teacher</th>{cols.map((t) => <th key={t.id} style={{ ...th, textAlign: 'center', borderLeft: '1px solid var(--gray-100)' }} colSpan={Math.max(1, t.keys.length)}>{t.name}</th>)}</tr>
-              <tr>{cols.map((t) => (t.keys.length ? t.keys : ['—']).map((k) => <th key={t.id + k} style={{ ...th, textAlign: 'center', fontSize: 9.5, borderLeft: '1px solid var(--gray-100)' }}>{k}</th>))}</tr>
+              <tr>{cols.map((t) => (t.keys.length ? t.keys : ['—']).map((k) => <th key={t.id + k} style={{ ...th, textAlign: 'center', fontSize: 9.5, borderLeft: '1px solid var(--gray-100)' }}>{COMP_LABEL[k] || k}</th>))}</tr>
             </thead>
             <tbody>{data.items.map((it) => (
               <tr key={it.subjectId}>
                 <td style={{ ...td, fontWeight: 600, whiteSpace: 'nowrap' }}>{it.subjectName}</td>
-                <td style={{ ...td, fontSize: 11.5, color: it.teacherEmail ? 'var(--text)' : 'var(--crimson)', whiteSpace: 'nowrap' }}>{it.teacher || 'no teacher'}</td>
+                <td style={{ ...td, fontSize: 11.5, whiteSpace: 'nowrap' }}>
+                  <button onClick={() => { setClass?.(className); setStage('setup') }} title="Change in Setup" style={{ border: 'none', background: 'none', padding: 0, cursor: 'pointer', fontSize: 11.5, color: it.teacherEmail ? 'var(--text)' : 'var(--crimson)', textDecoration: 'underline dotted', textUnderlineOffset: 3 }}>{it.teacher || 'no teacher — assign'}</button>
+                </td>
                 {cols.map((t) => (t.keys.length ? t.keys : ['—']).map((k) => {
                   const p = it.papers.find((x) => x.termId === t.id && x.componentKey === k)
                   if (!p) return <td key={t.id + k} style={{ ...td, textAlign: 'center', color: 'var(--gray-400)', borderLeft: '1px solid var(--gray-50)' }}>·</td>

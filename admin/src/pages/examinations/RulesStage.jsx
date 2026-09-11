@@ -67,19 +67,38 @@ export default function RulesStage({ branch, sessionCode, className, config, ref
 
   // ── rows ──────────────────────────────────────────────────────────────────
   const rows = def?.classRows?.[className] || []
+  const mappedRows = data?.rows || []
   function setRow(i, patch) { upd((d) => { d.classRows = d.classRows || {}; d.classRows[className] = (d.classRows[className] || []).map((r, j) => j === i ? { ...r, ...patch } : r) }) }
   function addRow() { upd((d) => { d.classRows = d.classRows || {}; d.classRows[className] = [...(d.classRows[className] || []), family === 'secondary_annual' ? { subject: 'NEW SUBJECT', locCode: '', written: 80, practical: 0 } : { subject: 'NEW SUBJECT' }] }) }
   function removeRow(i) { upd((d) => { d.classRows[className] = d.classRows[className].filter((_, j) => j !== i) }) }
   function moveRow(i, dir) { upd((d) => { const a = d.classRows[className]; const j = i + dir; if (j < 0 || j >= a.length) return; [a[i], a[j]] = [a[j], a[i]] }) }
   const schemes = def?.schemes || {}
   const coreOrder = def?.coreOrder?.[className] || []
+  // which class subject feeds which row (explicit sources win over the auto match)
+  const claimedBy = useMemo(() => {
+    const m = {}
+    rows.forEach((r, i) => { const m2 = mappedRows.find((x) => x.subject === r.subject); for (const s of (r.sources || m2?.mapped || [])) (m[s] ||= []).push(i) })
+    return m
+  }, [rows, mappedRows])
+  const unusedSubjects = useMemo(() => classSubjects.filter((s) => !claimedBy[s]), [classSubjects, claimedBy])
 
+  const [savedOnce, setSavedOnce] = useState(false)
   async function save() {
     setBusy(true); setErr('')
     try {
       await reportTemplateApi.save(data.template.id, { definition: def })
-      setFlash('Rules saved — regenerate papers if max marks or term mapping changed'); setTimeout(() => setFlash(''), 4000)
+      setFlash('Rules saved.'); setSavedOnce(true)
       await refreshConfig(); load()
+    } catch (e) { setErr(e.message) }
+    setBusy(false)
+  }
+  async function resync() {
+    setBusy(true); setErr('')
+    try {
+      const r = await examApi.generatePapers(branch, sessionCode, className)
+      const per = r.perClass?.[className] || {}
+      setFlash(`Papers re-synced for ${className}: ${per.created || 0} created, ${per.adopted || 0} adopted, ${per.existing || 0} already in place.`)
+      setSavedOnce(false); await refreshConfig()
     } catch (e) { setErr(e.message) }
     setBusy(false)
   }
@@ -92,13 +111,12 @@ export default function RulesStage({ branch, sessionCode, className, config, ref
     </div>
   )
 
-  const mappedRows = data.rows || []
   const unmapped = mappedRows.filter((r) => r.unmapped).map((r) => r.subject)
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
       {err && <Note tone="red">{err}</Note>}
-      {flash && <Note tone="green">{flash}</Note>}
+      {flash && <Note tone="green">{flash}{savedOnce && <> Papers follow the rules — <button onClick={resync} disabled={busy} style={{ border: 'none', background: 'none', color: 'var(--green-dark)', textDecoration: 'underline', cursor: 'pointer', fontSize: 12.5, padding: 0, fontWeight: 600 }}>re-sync papers for {className} now</button> so new rows or max-marks changes take effect.</>}</Note>}
 
       <div style={{ ...card, display: 'flex', gap: 14, alignItems: 'center', flexWrap: 'wrap' }}>
         <div style={{ flex: 1, minWidth: 260 }}>
@@ -113,6 +131,7 @@ export default function RulesStage({ branch, sessionCode, className, config, ref
       </div>
 
       {unmapped.length > 0 && <Note tone="gold"><b>{unmapped.join(', ')}</b> — these card rows don't match any subject in {className}. Set their sources below (tick the class subjects that feed the row), or rename the row.</Note>}
+      {family !== 'senior_progress' && unusedSubjects.length > 0 && <Note tone="muted">Not on the card (no row uses them): <b>{unusedSubjects.join(', ')}</b>. Fine for activities like ECA or Karate; if one is an examined subject, tick it under a row or add a row.</Note>}
 
       {/* Card terms + components */}
       <div style={{ ...card, padding: 0, overflow: 'hidden' }}>
@@ -183,8 +202,10 @@ export default function RulesStage({ branch, sessionCode, className, config, ref
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
                       {classSubjects.map((s) => {
                         const on = chosen ? chosen.includes(s) : auto.includes(s)
+                        const elsewhere = !on && (claimedBy[s] || []).some((j) => j !== i)
                         return <button key={s} onClick={() => { const cur = chosen || auto; setRow(i, { sources: on ? cur.filter((x) => x !== s) : [...cur, s] }) }}
-                          style={{ padding: '2px 8px', borderRadius: 99, fontSize: 10.5, cursor: 'pointer', border: '1px solid ' + (on ? 'var(--green)' : 'var(--gray-200)'), background: on ? 'var(--green)' : 'var(--white)', color: on ? 'white' : 'var(--text-muted)' }}>{s}</button>
+                          title={elsewhere ? `already feeds ${rows[claimedBy[s][0]]?.subject}` : ''}
+                          style={{ padding: '2px 8px', borderRadius: 99, fontSize: 10.5, cursor: 'pointer', border: '1px solid ' + (on ? 'var(--green)' : 'var(--gray-200)'), background: on ? 'var(--green)' : 'var(--white)', color: on ? 'white' : 'var(--text-muted)', opacity: elsewhere ? 0.4 : 1 }}>{s}</button>
                       })}
                     </div>
                     {chosen && <button onClick={() => setRow(i, { sources: undefined })} style={{ ...arrow, fontSize: 10, marginTop: 3 }}>reset to auto</button>}

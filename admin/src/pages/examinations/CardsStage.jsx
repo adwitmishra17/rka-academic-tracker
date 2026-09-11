@@ -17,10 +17,11 @@ export default function CardsStage({ branch, sessionCode, className, setStage })
   const [picked, setPicked] = useState(new Set())
   const [showMissing, setShowMissing] = useState(null)
 
-  const load = () => {
+  const load = (force) => {
+    if (!force && data && data.cardKey === cardKey && data._section === section && data._class === className) return // default key echoed back
     setBusy('load'); setErr('')
     examApi.classCards(branch, sessionCode, className, cardKey || undefined, section || undefined)
-      .then((d) => { setData(d); if (!cardKey) setCardKey(d.cardKey); setPicked(new Set()) })
+      .then((d) => { setData({ ...d, _section: section, _class: className }); if (!cardKey) setCardKey(d.cardKey); setPicked(new Set()) })
       .catch((e) => { setErr(e.message); setData(null) }).finally(() => setBusy(''))
   }
   useEffect(load, [branch, sessionCode, className, cardKey, section]) // eslint-disable-line
@@ -39,14 +40,14 @@ export default function CardsStage({ branch, sessionCode, className, setStage })
     setBusy('publish'); setErr(''); setResult(null)
     try {
       const r = await examApi.publish({ branchCode: branch, sessionCode, className, cardKey: data.cardKey, section: section || undefined, studentIds: ids })
-      setResult(r); load()
+      setResult(r); load(true)
     } catch (e) { setErr(e.message) }
     setBusy('')
   }
   async function withdraw(ids) {
     if (!confirm(`Withdraw ${ids.length} published card${ids.length === 1 ? '' : 's'}? Parents will no longer see them until republished.`)) return
     setBusy('withdraw')
-    try { await examApi.unpublish(ids); load() } catch (e) { setErr(e.message) }
+    try { await examApi.unpublish(ids); load(true) } catch (e) { setErr(e.message) }
     setBusy('')
   }
   const openPreview = (studentId) => window.open(`/examinations/print?studentId=${studentId}&sessionCode=${encodeURIComponent(sessionCode)}&cardKey=${encodeURIComponent(data.cardKey)}`, '_blank')

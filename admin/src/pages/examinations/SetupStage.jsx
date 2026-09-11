@@ -8,6 +8,7 @@ import { inp, lbl, card, th, td, Btn, Pill, Note, Spinner } from './ui.jsx'
    to each class. Writes go straight to Supabase via /api/exam/*. */
 
 const CO_HINTS = ['art', 'craft', 'music', 'dance', 'physical education', ' pe', 'pe ', 'sport', 'game', 'moral', 'yoga', 'drawing', 'painting', 'club', 'library', 'value education', 'life skill', 'karate', 'eca', 'activity', 'reading', 'cuet']
+const TERM_HINT = { T1: 'Periodic test 1 (PA-1) — feeds the Half-Yearly card', HY: 'Half-Yearly exam', T2: 'Periodic test 2 (PA-2) — feeds the Annual card', AN: 'Annual exam' }
 const guessKind = (n) => (CO_HINTS.some((h) => ` ${String(n).toLowerCase()} `.includes(h)) ? 'co_scholastic' : 'scholastic')
 
 export default function SetupStage({ branch, sessionCode, className, config, refreshConfig, classNames, classBadges, setClass, setStage }) {
@@ -138,7 +139,7 @@ export default function SetupStage({ branch, sessionCode, className, config, ref
               const set = (k, val) => setTermDraft((x) => ({ ...x, [t.id]: { ...x[t.id], [k]: val } }))
               return (
                 <tr key={t.id}>
-                  <td style={{ ...td, fontWeight: 600 }}>{t.name}</td><td style={td}><Pill tone="muted">{t.short_code}</Pill></td>
+                  <td style={{ ...td, fontWeight: 600 }}>{t.name}<div style={{ fontSize: 10.5, color: 'var(--text-muted)', fontWeight: 400 }}>{TERM_HINT[t.short_code] || ''}</div></td><td style={td}><Pill tone="muted">{t.short_code}</Pill></td>
                   <td style={td}><input type="date" value={v('startsOn', 'starts_on')} onChange={(e) => set('startsOn', e.target.value)} style={inp} /></td>
                   <td style={td}><input type="date" value={v('endsOn', 'ends_on')} onChange={(e) => set('endsOn', e.target.value)} style={inp} /></td>
                   <td style={td}><input type="date" value={v('resultDate', 'result_date')} onChange={(e) => set('resultDate', e.target.value)} style={inp} /></td>
