@@ -26,6 +26,7 @@ import { fileURLToPath } from 'url'
 import dotenv   from 'dotenv'
 import admin    from 'firebase-admin'
 import { createClient } from '@supabase/supabase-js'
+import { registerExamRoutes } from './lib/examRoutes.js'
 
 // Load .env / .env.local in dev (Hostinger injects env vars directly).
 dotenv.config()
@@ -728,7 +729,7 @@ app.get('/api/exam/papers', verifyAuth, async (req, res) => {
     const { subjectId, termId } = req.query
     if (!subjectId) return res.json({ papers: [] })
     let q = supabase.from('exam_papers')
-      .select('id, term_id, paper_name, max_marks, passing_marks, exam_date, has_practical, theory_max, practical_max')
+      .select('id, term_id, paper_name, component_key, card_max, generated, max_marks, passing_marks, exam_date, has_practical, theory_max, practical_max')
       .eq('subject_id', subjectId).order('created_at')
     if (termId) q = q.eq('term_id', termId)
     const { data, error } = await q
@@ -1169,6 +1170,9 @@ app.post('/api/report-templates/assign', verifyAuth, async (req, res) => {
     res.json({ ok: true })
   } catch (e) { console.error('[admin] POST /api/report-templates/assign:', e); res.status(500).json({ error: e.message }) }
 })
+
+// ─── Examinations window (single-window exam pipeline) ─────────────────────
+if (supabase) registerExamRoutes(app, { supabase, admin, verifyAuth, branchIdForCode })
 
 // ─── Static + SPA fallback (must come AFTER /api routes) ────────────────────
 app.use(express.static(distDir, {

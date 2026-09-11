@@ -27,15 +27,15 @@ const lbl = { fontSize: 11, color: 'var(--text-muted)', display: 'block', margin
 const isAB = (v) => String(v).trim().toUpperCase() === 'AB' || String(v).trim().toUpperCase() === 'A'
 const numOrNull = (v) => (v === '' || v == null || isAB(v) ? null : Number(v))
 
-export default function MarksEntry() {
+export default function MarksEntry({ embedded = false, ctx = null }) {
   const { classes: classDocs } = useClasses()
   const { allowedBranches, currentBranch } = useAuth()
 
-  const [branch, setBranch] = useState(() => currentBranch || allowedBranches[0] || 'MAIN')
-  useEffect(() => { if (currentBranch) setBranch(currentBranch) }, [currentBranch])
+  const [branch, setBranch] = useState(() => ctx?.branch || currentBranch || allowedBranches[0] || 'MAIN')
+  useEffect(() => { if (!ctx && currentBranch) setBranch(currentBranch) }, [currentBranch]) // eslint-disable-line
   const [sessions, setSessions] = useState([])
-  const [sessionCode, setSessionCode] = useState('')
-  const [className, setClassName] = useState('')
+  const [sessionCode, setSessionCode] = useState(ctx?.sessionCode || '')
+  const [className, setClassName] = useState(ctx?.className || '')
   const [section, setSection] = useState('')
   const [terms, setTerms] = useState([])
   const [termId, setTermId] = useState('')
@@ -44,8 +44,6 @@ export default function MarksEntry() {
   const [papers, setPapers] = useState([])
   const [editingPaper, setEditingPaper] = useState(null)   // paper being edited (object)
   const [paperForm, setPaperForm] = useState(null)
-  const [newPaperOpen, setNewPaperOpen] = useState(false)
-  const [newPaper, setNewPaper] = useState({ paperName: '', maxMarks: 5, passingMarks: '' })
   const [rows, setRows] = useState([])                     // roster with per-paper values
   const [ptCol, setPtCol] = useState(null)                 // read-only Periodic column {label, max, by:Map}
   const [dirty, setDirty] = useState(new Set())
@@ -61,31 +59,31 @@ export default function MarksEntry() {
   useEffect(() => {
     examApi.sessions().then(({ sessions: s }) => {
       const codes = (s || []).filter(Boolean)
-      setSessions(codes); setSessionCode(codes[0] || '2026-27')
-    }).catch(() => setSessionCode('2026-27'))
-  }, [])
+      setSessions(codes); if (!ctx?.sessionCode) setSessionCode(codes[0] || '2026-27')
+    }).catch(() => { if (!ctx?.sessionCode) setSessionCode('2026-27') })
+  }, []) // eslint-disable-line
 
   useEffect(() => {
     if (!branch || !sessionCode) return
     setTerms([]); setTermId('')
     examApi.terms(branch, sessionCode)
-      .then(({ terms: t }) => { setTerms(t || []); if ((t || []).length) setTermId(t[0].id) })
+      .then(({ terms: t }) => { setTerms(t || []); if ((t || []).length) setTermId(ctx?.termId && t.some(x => x.id === ctx.termId) ? ctx.termId : t[0].id) })
       .catch(e => setError(e.message))
-  }, [branch, sessionCode])
+  }, [branch, sessionCode]) // eslint-disable-line
 
   useEffect(() => {
     setSubjects([]); setSubjectId('')
     if (!branch || !sessionCode || !className) return
     examApi.subjects(branch, sessionCode, className)
-      .then(({ subjects: s }) => setSubjects((s || []).filter(x => x.kind !== 'co_scholastic')))
+      .then(({ subjects: s }) => { const list = (s || []).filter(x => x.kind !== 'co_scholastic'); setSubjects(list); if (ctx?.subjectId && list.some(x => x.id === ctx.subjectId)) setSubjectId(ctx.subjectId) })
       .catch(e => setError(e.message))
-  }, [branch, sessionCode, className])
+  }, [branch, sessionCode, className]) // eslint-disable-line
 
   useEffect(() => {
     setPapers([]); setEditingPaper(null)
     if (!subjectId || !termId) return
     examApi.papers(subjectId, termId)
-      .then(({ papers: p }) => setPapers(p || []))
+      .then(({ papers: p }) => setPapers((p || []).sort((a, b) => (b.component_key ? 1 : 0) - (a.component_key ? 1 : 0))))
       .catch(e => setError(e.message))
   }, [subjectId, termId])
 
@@ -238,30 +236,30 @@ export default function MarksEntry() {
   }
 
   return (
-    <div style={{ padding: '24px 28px', maxWidth: 1100 }}>
-      <div className="fade-in" style={{ marginBottom: 20 }}>
+    <div style={{ padding: embedded ? '16px 20px' : '24px 28px', maxWidth: 1100 }}>
+      {!embedded && <div className="fade-in" style={{ marginBottom: 20 }}>
         <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 24, fontWeight: 600, color: 'var(--green-dark)', marginBottom: 3 }}>Marks Entry</h1>
         <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>Office-side exam marks — any subject, no teacher gating. Saved as manual entries the teacher-app sync never overwrites.</p>
         <div style={{ width: 40, height: 2, background: 'linear-gradient(90deg, var(--gold), transparent)', marginTop: 8, borderRadius: 1 }} />
-      </div>
+      </div>}
 
       {/* Pickers */}
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 14, alignItems: 'flex-end' }}>
-        {allowedBranches.length > 1 && !currentBranch && (
+        {!embedded && allowedBranches.length > 1 && !currentBranch && (
           <div><span style={lbl}>Branch</span>
             <select value={branch} onChange={e => { setBranch(e.target.value); setClassName('') }} style={inp}>
               {allowedBranches.map(b => <option key={b} value={b}>{branchLabel(b)}</option>)}
             </select></div>
         )}
-        <div><span style={lbl}>Session</span>
+        {!embedded && <div><span style={lbl}>Session</span>
           <select value={sessionCode} onChange={e => setSessionCode(e.target.value)} style={inp}>
             {[...new Set([sessionCode, ...sessions])].filter(Boolean).map(s => <option key={s}>{s}</option>)}
-          </select></div>
-        <div><span style={lbl}>Class</span>
+          </select></div>}
+        {!embedded && <div><span style={lbl}>Class</span>
           <select value={className} onChange={e => setClassName(e.target.value)} style={inp}>
             <option value="">Select…</option>
             {classNames.map(c => <option key={c}>{c}</option>)}
-          </select></div>
+          </select></div>}
         <div><span style={lbl}>Term</span>
           <select value={termId} onChange={e => setTermId(e.target.value)} style={inp}>
             {terms.map(t => <option key={t.id} value={t.id}>{t.name || t.label}</option>)}
@@ -289,43 +287,9 @@ export default function MarksEntry() {
             <button key={p.id}
               onClick={() => { setEditingPaper(editingPaper?.id === p.id ? null : p); setPaperForm({ maxMarks: Number(p.max_marks), passingMarks: p.passing_marks == null ? '' : Number(p.passing_marks), hasPractical: !!p.has_practical, theoryMax: p.theory_max == null ? '' : Number(p.theory_max), practicalMax: p.practical_max == null ? '' : Number(p.practical_max), examDate: p.exam_date || '' }) }}
               style={{ padding: '7px 13px', borderRadius: 'var(--radius-md)', fontSize: 12.5, border: '1px solid ' + (editingPaper?.id === p.id ? 'var(--green)' : 'var(--green-muted)'), background: editingPaper?.id === p.id ? 'var(--green)' : 'var(--green-light)', color: editingPaper?.id === p.id ? 'white' : 'var(--green-dark)', cursor: 'pointer' }}>
-              <b>{p.paper_name}</b> /{Number(p.max_marks)} ✎
+              <b>{p.paper_name}</b> /{Number(p.max_marks)}{p.card_max != null && Number(p.card_max) !== Number(p.max_marks) ? <span style={{ opacity: 0.75 }}> → /{Number(p.card_max)}</span> : null}{!p.component_key ? <span style={{ opacity: 0.7, fontSize: 10 }}> · legacy</span> : null} ✎
             </button>
           ))}
-          {!newPaperOpen ? (
-            <button onClick={() => { setNewPaperOpen(true); setNewPaper({ paperName: '', maxMarks: 5, passingMarks: '' }) }}
-              style={{ padding: '7px 14px', background: 'var(--white)', color: 'var(--green-dark)', border: '1px dashed var(--green-muted)', borderRadius: 'var(--radius-md)', fontSize: 12.5, cursor: 'pointer' }}>
-              ＋ New paper (Portfolio, Notebook…)
-            </button>
-          ) : null}
-        </div>
-      )}
-
-      {/* New paper form */}
-      {newPaperOpen && subjectId && termId && (
-        <div style={{ background: 'var(--white)', border: '1px solid var(--green-muted)', borderRadius: 'var(--radius-md)', padding: '12px 16px', display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-end', marginBottom: 14 }}>
-          <div>
-            <span style={lbl}>Paper name</span>
-            <input value={newPaper.paperName} onChange={e => setNewPaper(f => ({ ...f, paperName: e.target.value }))} placeholder="e.g. Portfolio" style={{ ...inp, width: 160 }} />
-            <div style={{ display: 'flex', gap: 5, marginTop: 6 }}>
-              {['Portfolio', 'Notebook', 'Sub. Enrichment'].map(n => (
-                <button key={n} onClick={() => setNewPaper(f => ({ ...f, paperName: n, maxMarks: 5 }))}
-                  style={{ fontSize: 10.5, padding: '2px 8px', borderRadius: 9, background: 'var(--green-light)', color: 'var(--green-dark)', border: '1px solid var(--green-muted)', cursor: 'pointer' }}>{n}</button>
-              ))}
-            </div>
-          </div>
-          <div><span style={lbl}>Max marks</span><input type="number" value={newPaper.maxMarks} onChange={e => setNewPaper(f => ({ ...f, maxMarks: e.target.value }))} style={{ ...inp, width: 80 }} /></div>
-          <div><span style={lbl}>Pass (opt.)</span><input type="number" value={newPaper.passingMarks} onChange={e => setNewPaper(f => ({ ...f, passingMarks: e.target.value }))} style={{ ...inp, width: 80 }} /></div>
-          <button onClick={async () => {
-            try {
-              const { paper: created } = await examApi.createPaper({ subjectId, termId, paperName: newPaper.paperName, maxMarks: Number(newPaper.maxMarks), passingMarks: newPaper.passingMarks })
-              setPapers(ps => [...ps, created]); setNewPaperOpen(false)
-            } catch (e) { alert(e.message || e) }
-          }} disabled={!newPaper.paperName.trim() || !(Number(newPaper.maxMarks) > 0)}
-            style={{ padding: '8px 16px', background: 'var(--green)', color: 'white', border: 'none', borderRadius: 'var(--radius-sm)', fontSize: 12.5, fontWeight: 600, cursor: 'pointer' }}>
-            Create paper
-          </button>
-          <button onClick={() => setNewPaperOpen(false)} style={{ padding: '8px 12px', background: 'var(--white)', color: 'var(--text-muted)', border: '1px solid var(--gray-200)', borderRadius: 'var(--radius-sm)', fontSize: 12.5, cursor: 'pointer' }}>Cancel</button>
         </div>
       )}
 
@@ -352,7 +316,7 @@ export default function MarksEntry() {
 
       {subjectId && termId && papers.length === 0 && !loadingRoster && (
         <div style={{ background: 'var(--gold-light)', border: '1px solid rgba(201,162,39,0.3)', borderRadius: 'var(--radius-md)', padding: '14px 16px', fontSize: 13, color: 'var(--gold-dark)' }}>
-          No paper exists for this subject in this term yet — create one above.
+          No paper for this subject in this term. Papers are generated from the scoring rules (Examinations → Papers).
         </div>
       )}
 

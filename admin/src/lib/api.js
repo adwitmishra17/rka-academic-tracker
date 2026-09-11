@@ -105,6 +105,25 @@ export const examApi = {
   createPaper:        (body)                              => apiPost('/api/exam/papers', body),
   savePaper:          (id, patch)                         => apiPatch(`/api/exam/papers/${id}`, patch),
   paperMarks:         (paperId)                           => apiGet('/api/exam/paper-marks', { paperId }),
+  // ── Examinations window (single-window pipeline) ──
+  config:             (branchCode, sessionCode)           => apiGet('/api/exam/config', { branchCode, sessionCode }),
+  seedTerms:          (branchCode, sessionCode)           => apiPost('/api/exam/terms/seed', { branchCode, sessionCode }),
+  saveTerm:           (id, patch)                         => apiPatch(`/api/exam/terms/${id}`, patch),
+  timetableSubjects:  (branchCode)                        => apiGet('/api/exam/timetable-subjects', { branchCode }),
+  bulkSubjects:       (branchCode, sessionCode, rows)     => apiPost('/api/exam/subjects/bulk', { branchCode, sessionCode, rows }),
+  saveSubject:        (id, patch)                         => apiPatch(`/api/exam/subjects/${id}`, patch),
+  deleteSubject:      (id)                                => apiDelete(`/api/exam/subjects/${id}`),
+  rules:              (branchCode, sessionCode, className) => apiGet('/api/exam/rules', { branchCode, sessionCode, className }),
+  generatePapers:     (branchCode, sessionCode, className) => apiPost('/api/exam/papers/generate', { branchCode, sessionCode, className }),
+  classPapers:        (branchCode, sessionCode, className) => apiGet('/api/exam/class-papers', { branchCode, sessionCode, className }),
+  deletePaper:        (id)                                => apiDelete(`/api/exam/papers/${id}`),
+  status:             (branchCode, sessionCode, className) => apiGet('/api/exam/status', { branchCode, sessionCode, className }),
+  classCards:         (branchCode, sessionCode, className, cardKey, section) => apiGet('/api/exam/class-cards', { branchCode, sessionCode, className, cardKey, section }),
+  card:               (studentId, sessionCode, cardKey)   => apiGet('/api/exam/card', { studentId, sessionCode, cardKey }),
+  publish:            (body)                              => apiPost('/api/exam/publish', body),
+  published:          (params)                            => apiGet('/api/exam/published', params),
+  publishedOne:       (id)                                => apiGet(`/api/exam/published/${id}`),
+  unpublish:          (ids)                               => apiPost('/api/exam/unpublish', { ids }),
 }
 
 export async function apiPut(path, body) {

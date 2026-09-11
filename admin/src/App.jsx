@@ -26,7 +26,6 @@ import StudentAuditLog from './pages/StudentAuditLog'
 import AttendanceOverview from './pages/AttendanceOverview'
 import AttendanceClass from './pages/AttendanceClass'
 import StudentPerformance from './pages/StudentPerformance'
-import Crosslist from './pages/Crosslist'
 import Timetable from './pages/Timetable'
 import PeriodSettings from './pages/PeriodSettings'
 import NonWorkingDays from './pages/NonWorkingDays'
@@ -39,13 +38,10 @@ import LessonPlanReschedule from './pages/LessonPlanReschedule'
 import TeacherArrangement from './pages/TeacherArrangement'
 import TestDetail from './pages/TestDetail'
 import SyllabusFiles from './pages/SyllabusFiles'
-import ReportCardSetup from './pages/ReportCardSetup'
 import ReportCardTemplates from './pages/ReportCardTemplates'
-import MarksEntry from './pages/MarksEntry'
-import CardEntries from './pages/CardEntries'
-import ReportCards from './pages/ReportCards'
-import ReportCardPrint from './pages/ReportCardPrint'
 import HpcCards from './pages/HpcCards'
+import Examinations from './pages/examinations/Examinations'
+import ExamPrint from './pages/examinations/ExamPrint'
 import HpcPrint from './pages/HpcPrint'
 import LoC from './pages/LoC'
 import Impersonate from './pages/Impersonate'
@@ -215,7 +211,8 @@ export default function App() {
         <Routes>
           <Route path="/login" element={!user ? <Login authError={authError} /> : <Navigate to="/" />} />
           {/* Standalone (no sidebar) — printable report card */}
-          <Route path="/report-cards/print" element={user ? <ReportCardPrint /> : <Navigate to="/login" replace />} />
+          <Route path="/examinations/print" element={user ? <ExamPrint /> : <Navigate to="/login" replace />} />
+          <Route path="/report-cards/print" element={<Navigate to="/examinations?stage=cards" replace />} />
           <Route path="/hpc/print" element={user ? <HpcPrint /> : <Navigate to="/login" replace />} />
           <Route path="/" element={user ? <Layout /> : <Navigate to="/login" />}>
             <Route index element={<Dashboard />} />
@@ -226,7 +223,13 @@ export default function App() {
             <Route path="alerts" element={<Alerts />} />
             <Route path="absentees" element={<Absentees />} />
             <Route path="performance" element={<StudentPerformance />} />
-            <Route path="crosslist" element={<Crosslist />} />
+            <Route path="examinations" element={<Examinations />} />
+            {/* Legacy exam menus → the single Examinations window */}
+            <Route path="crosslist" element={<Navigate to="/examinations?stage=crosslist" replace />} />
+            <Route path="report-card-setup" element={<Navigate to="/examinations?stage=setup" replace />} />
+            <Route path="marks-entry" element={<Navigate to="/examinations?stage=status" replace />} />
+            <Route path="card-entries" element={<Navigate to="/examinations?stage=status" replace />} />
+            <Route path="report-cards" element={<Navigate to="/examinations?stage=cards" replace />} />
             <Route path="teachers" element={<Teachers />} />
             <Route path="teacher-management" element={<TeacherManagement />} />
             <Route path="setup" element={<Setup />} />
@@ -249,11 +252,7 @@ export default function App() {
             <Route path="arrangement" element={<TeacherArrangement />} />
             <Route path="tests/:testId" element={<TestDetail />} />
             <Route path="syllabus-pdf" element={<SyllabusFiles />} />
-            <Route path="report-card-setup" element={<ReportCardSetup />} />
             <Route path="report-card-templates" element={<ReportCardTemplates />} />
-            <Route path="marks-entry" element={<MarksEntry />} />
-            <Route path="card-entries" element={<CardEntries />} />
-            <Route path="report-cards" element={<ReportCards />} />
             <Route path="hpc" element={<HpcCards />} />
             <Route path="board-candidates" element={<LoC />} />
             <Route path="impersonate" element={<Impersonate />} />

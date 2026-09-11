@@ -22,15 +22,15 @@ import { examApi, cardEntriesApi, reportTemplateApi } from '../lib/api'
 const inp = { padding: '7px 9px', border: '1px solid var(--gray-200)', borderRadius: 'var(--radius-sm)', fontSize: 12.5, fontFamily: 'var(--font-body)', color: 'var(--text)', background: 'var(--white)', outline: 'none' }
 const lbl = { fontSize: 11, color: 'var(--text-muted)', display: 'block', marginBottom: 4, fontWeight: 500 }
 
-export default function CardEntries() {
+export default function CardEntries({ embedded = false, ctx = null }) {
   const { classes: classDocs } = useClasses()
   const { allowedBranches, currentBranch } = useAuth()
 
-  const [branch, setBranch] = useState(() => currentBranch || allowedBranches[0] || 'MAIN')
-  useEffect(() => { if (currentBranch) setBranch(currentBranch) }, [currentBranch])
+  const [branch, setBranch] = useState(() => ctx?.branch || currentBranch || allowedBranches[0] || 'MAIN')
+  useEffect(() => { if (!ctx && currentBranch) setBranch(currentBranch) }, [currentBranch]) // eslint-disable-line
   const [sessions, setSessions] = useState([])
-  const [sessionCode, setSessionCode] = useState('')
-  const [className, setClassName] = useState('')
+  const [sessionCode, setSessionCode] = useState(ctx?.sessionCode || '')
+  const [className, setClassName] = useState(ctx?.className || '')
   const [section, setSection] = useState('')
   const [terms, setTerms] = useState([])
   const [termId, setTermId] = useState('')
@@ -51,9 +51,9 @@ export default function CardEntries() {
   useEffect(() => {
     examApi.sessions().then(({ sessions: s }) => {
       const codes = (s || []).filter(Boolean)
-      setSessions(codes); setSessionCode(codes[0] || '2026-27')
-    }).catch(() => setSessionCode('2026-27'))
-  }, [])
+      setSessions(codes); if (!ctx?.sessionCode) setSessionCode(codes[0] || '2026-27')
+    }).catch(() => { if (!ctx?.sessionCode) setSessionCode('2026-27') })
+  }, []) // eslint-disable-line
 
   useEffect(() => {
     if (!sessionCode) return
@@ -67,9 +67,9 @@ export default function CardEntries() {
     setTerms([]); setTermId('')
     examApi.terms(branch, sessionCode).then(({ terms: t }) => {
       setTerms(t || [])
-      if ((t || []).length) setTermId(t[0].id)
+      if ((t || []).length) setTermId(ctx?.termId && t.some(x => x.id === ctx.termId) ? ctx.termId : t[0].id)
     }).catch(e => setError(e.message))
-  }, [branch, sessionCode])
+  }, [branch, sessionCode]) // eslint-disable-line
 
   // template-driven scales for this class
   const template = useMemo(() => templates.find(t => t.id === classMap[className]) || null, [templates, classMap, className])
@@ -136,29 +136,29 @@ export default function CardEntries() {
   )
 
   return (
-    <div style={{ padding: '24px 28px', maxWidth: 1200 }}>
-      <div className="fade-in" style={{ marginBottom: 20 }}>
+    <div style={{ padding: embedded ? '16px 20px' : '24px 28px', maxWidth: 1200 }}>
+      {!embedded && <div className="fade-in" style={{ marginBottom: 20 }}>
         <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 24, fontWeight: 600, color: 'var(--green-dark)', marginBottom: 3 }}>Card Entries</h1>
         <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>Co-scholastic grades, discipline, remarks, achievement, height &amp; weight — everything on the card that isn't subject marks.</p>
         <div style={{ width: 40, height: 2, background: 'linear-gradient(90deg, var(--gold), transparent)', marginTop: 8, borderRadius: 1 }} />
-      </div>
+      </div>}
 
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 16, alignItems: 'flex-end' }}>
-        {allowedBranches.length > 1 && !currentBranch && (
+        {!embedded && allowedBranches.length > 1 && !currentBranch && (
           <div><span style={lbl}>Branch</span>
             <select value={branch} onChange={e => { setBranch(e.target.value); setClassName('') }} style={inp}>
               {allowedBranches.map(b => <option key={b} value={b}>{branchLabel(b)}</option>)}
             </select></div>
         )}
-        <div><span style={lbl}>Session</span>
+        {!embedded && <div><span style={lbl}>Session</span>
           <select value={sessionCode} onChange={e => setSessionCode(e.target.value)} style={inp}>
             {[...new Set([sessionCode, ...sessions])].filter(Boolean).map(s => <option key={s}>{s}</option>)}
-          </select></div>
-        <div><span style={lbl}>Class</span>
+          </select></div>}
+        {!embedded && <div><span style={lbl}>Class</span>
           <select value={className} onChange={e => setClassName(e.target.value)} style={inp}>
             <option value="">Select…</option>
             {classNames.map(c => <option key={c}>{c}</option>)}
-          </select></div>
+          </select></div>}
         <div><span style={lbl}>Term</span>
           <select value={termId} onChange={e => setTermId(e.target.value)} style={inp}>
             {terms.map(t => <option key={t.id} value={t.id}>{t.name || t.label}</option>)}
