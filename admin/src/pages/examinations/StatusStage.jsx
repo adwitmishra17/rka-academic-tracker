@@ -24,7 +24,8 @@ export default function StatusStage({ branch, sessionCode, className, setStage, 
   useEffect(load, [branch, sessionCode, className]) // eslint-disable-line
 
   const terms = data?.terms || []
-  const cols = useMemo(() => terms.map((t) => ({ ...t, keys: [...new Set((data?.items || []).flatMap((it) => it.papers.filter((p) => p.termId === t.id).map((p) => p.componentKey)))] })), [data, terms])
+  const ORDER = ['pt', 'portfolio', 'se', 'notebook', 'exam']
+  const cols = useMemo(() => terms.map((t) => ({ ...t, keys: [...new Set((data?.items || []).flatMap((it) => it.papers.filter((p) => p.termId === t.id).map((p) => p.componentKey)))].sort((a, b) => (ORDER.indexOf(a) + 1 || 99) - (ORDER.indexOf(b) + 1 || 99)) })), [data, terms])
   const totals = useMemo(() => {
     const all = (data?.items || []).flatMap((it) => it.papers)
     return { papers: all.length, done: all.filter((p) => p.state === 'done').length, partial: all.filter((p) => p.state === 'partial').length, empty: all.filter((p) => p.state === 'empty').length, noTeacher: (data?.items || []).filter((it) => !it.teacherEmail).length }
