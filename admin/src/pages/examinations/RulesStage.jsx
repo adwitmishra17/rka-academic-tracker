@@ -69,6 +69,37 @@ export default function RulesStage({ branch, sessionCode, className, config, ref
     return { ok: true, text: '' }
   }, [comps, plan, family, def, cardTerms])
 
+  // serialise the editable component list back into the template definition
+  function writeComps(d, list) {
+    if (family === 'performance_profile') {
+      d.components = list.map((c) => ({ key: c.key, label: c.label, max: Number(c.max), rawMax: Number(c.rawMax ?? c.max), source: { type: c.kind === 'sheet' ? 'sheet' : c.kind === 'monthlyAvg' ? 'monthlyAvg' : 'exam', kind: c.key === 'exam' ? 'TERM' : 'PT', termMap: c.termMap } }))
+    } else if (family === 'secondary_annual') {
+      d.ia = d.ia || { total: 20, components: [] }
+      const ia = list.filter((c) => c.ia)
+      d.ia.components = ia.map((c) => ({ key: c.key, label: c.label, max: Number(c.max), rawMax: c.rawMax != null ? Number(c.rawMax) : undefined, source: c.kind === 'monthlyAvg' ? { type: 'monthlyAvg' } : c.kind === 'sheet' ? { type: 'sheet', term: c.termMap?.annual } : { type: 'exam', kind: 'PT', agg: 'avg', terms: c.terms } }))
+      d.ia.total = ia.reduce((s, c) => s + Number(c.max || 0), 0)
+    }
+  }
+  const slug = (label) => { const base = String(label || 'item').toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '') || 'item'; let k = base, n = 2; while (comps.some((c) => c.key === k)) k = `${base}${n++}`; return k }
+  function addComp() {
+    const label = prompt('Name of the new component as it should print on the card (e.g. Notebook):')
+    if (!label || !label.trim()) return
+    const key = slug(label.trim())
+    const c = family === 'secondary_annual'
+      ? { key, label: label.trim(), max: 5, rawMax: 5, kind: 'sheet', ia: true, termMap: { annual: 'AN' } }
+      : { key, label: label.trim(), max: 5, rawMax: 5, kind: 'sheet', termMap: Object.fromEntries(cardTerms.map((t) => [t.key, t.key])) }
+    // keep the term exam last
+    const list = [...comps]; const examIdx = list.findIndex((x) => x.key === 'exam')
+    if (examIdx >= 0) list.splice(examIdx, 0, c); else list.push(c)
+    upd((d) => writeComps(d, list))
+  }
+  function removeComp(key) {
+    const c = comps.find((x) => x.key === key)
+    if (!c || key === 'exam') return
+    if (!confirm(`Remove "${c.label}" from the card?\n\nIts generated papers (and any marks in them) are NOT deleted — they simply stop counting. Empty ones can be deleted in the Papers stage.`)) return
+    upd((d) => writeComps(d, comps.filter((x) => x.key !== key)))
+  }
+
   function setComp(key, patch) {
     upd((d) => {
       if (family === 'performance_profile') {
@@ -161,7 +192,10 @@ export default function RulesStage({ branch, sessionCode, className, config, ref
       {/* Components — plain-language rules + arithmetic check */}
       <div style={{ ...card, padding: 0, overflow: 'hidden' }}>
         <div style={{ padding: '10px 14px', borderBottom: '1px solid var(--gray-100)' }}>
-          <div style={{ fontSize: 13, fontWeight: 600 }}>How a subject's marks are built{family === 'secondary_annual' ? '' : ' for each term column'}</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{ fontSize: 13, fontWeight: 600, flex: 1 }}>How a subject's marks are built{family === 'secondary_annual' ? '' : ' for each term column'}</div>
+            {family !== 'senior_progress' && <Btn small onClick={addComp} title="Add a sheet component (Notebook, Activity …) — set its max after adding">+ Component</Btn>}
+          </div>
           <div style={{ fontSize: 11.5, color: 'var(--text-muted)', marginTop: 2 }}>
             Read each line left to right: what the teacher enters (raw marks, in which exam term) → what it becomes on the card. Rounding is half-up (6.5 → 7).
           </div>
@@ -179,7 +213,10 @@ export default function RulesStage({ branch, sessionCode, className, config, ref
               <div key={c.key} style={{ display: 'grid', gridTemplateColumns: '210px 1fr', gap: 12, alignItems: 'start', padding: '10px 0', borderBottom: '1px solid var(--gray-50)' }}>
                 <div>
                   <input value={c.label} onChange={(e) => setComp(c.key, { label: e.target.value })} disabled={family === 'senior_progress'} style={{ ...inp, width: '100%', fontWeight: 600 }} />
-                  <div style={{ marginTop: 4 }}><Pill tone={badge[0]} title={badge[2]}>{badge[1]}</Pill></div>
+                  <div style={{ marginTop: 4, display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <Pill tone={badge[0]} title={badge[2]}>{badge[1]}</Pill>
+                    {family !== 'senior_progress' && c.key !== 'exam' && <button onClick={() => removeComp(c.key)} title="Remove this component from the card" style={{ border: 'none', background: 'none', color: 'var(--crimson)', cursor: 'pointer', fontSize: 11, padding: 0 }}>✕ remove</button>}
+                  </div>
                 </div>
                 <div style={{ fontSize: 12.5, lineHeight: 2.1, color: 'var(--text)' }}>
                   {c.kind === 'monthlyAvg' ? (
