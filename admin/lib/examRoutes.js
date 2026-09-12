@@ -71,28 +71,6 @@ export function registerExamRoutes(app, { supabase, admin, verifyAuth, branchIdF
     const snap = await fsdb().collection('timetable').where('branchCode', '==', branchCode).get()
     return snap.docs.map((d) => d.data())
   }
-  // Monthly-test averages (World A, Firestore) → { normSubject → { roll → pct } }
-  async function monthlyAverages(className, branchCode) {
-    const tests = await fsdb().collection('tests').where('kind', '==', 'monthly').where('className', '==', className).where('branchCode', '==', branchCode).get()
-    const byId = new Map(tests.docs.map((d) => [d.id, d.data()]))
-    const ids = [...byId.keys()]
-    const acc = {} // subject → roll → { sum, n }
-    for (let i = 0; i < ids.length; i += 30) {
-      const chunk = ids.slice(i, i + 30)
-      const ms = await fsdb().collection('testMarks').where('testId', 'in', chunk).get()
-      for (const d of ms.docs) {
-        const m = d.data(); const t = byId.get(m.testId); if (!t) continue
-        const max = Number(m.maxMarks || t.maxMarks || 0); if (!(max > 0)) continue
-        const subj = normName(t.subject); const roll = String(m.rollNumber || '').trim(); if (!roll) continue
-        const slot = ((acc[subj] ||= {})[roll] ||= { sum: 0, n: 0 })
-        slot.sum += m.isAbsent ? 0 : 100 * Number(m.marksObtained || 0) / max; slot.n += 1
-      }
-    }
-    const out = {}
-    for (const [subj, rolls] of Object.entries(acc)) { out[subj] = {}; for (const [roll, s] of Object.entries(rolls)) out[subj][roll] = s.sum / s.n }
-    return out
-  }
-
   // ── Supabase bundle for a class ────────────────────────────────────────────
   async function loadBundle(branchId, sessionCode, className) {
     const [t, s, tpl, map] = await Promise.all([
@@ -170,18 +148,14 @@ export function registerExamRoutes(app, { supabase, admin, verifyAuth, branchIdF
       attendanceFor(sids, sessionCode, b.terms),
     ])
     const plan = planCard(b.template.definition, b.template.family)
-    const needsMonthly = plan.components.some((c) => c.kind === 'monthlyAvg')
-    const monthly = needsMonthly ? await monthlyAverages(className, branchCode) : null
     const by = (arr, k) => { const m = new Map(); for (const r of arr) { if (!m.has(r[k])) m.set(r[k], []); m.get(r[k]).push(r) } return m }
     const marksBy = by(marks, 'student_id'), gradesBy = by(grades, 'student_id'), metaBy = by(meta, 'student_id')
     const cards = students.map((st) => {
-      const roll = String(st.roll_number || '').trim()
-      const monthlyAvg = monthly ? Object.fromEntries(Object.entries(monthly).map(([subj, rolls]) => [subj, rolls[roll]]).filter(([, v]) => v != null)) : null
       return computeCard({
         def: b.template.definition, family: b.template.family, templateName: b.template.name, className, sessionCode, cardKey,
         student: st, subjects: b.subjects, terms: b.terms, papers: b.papers,
         marks: marksBy.get(st.id) || [], coGrades: gradesBy.get(st.id) || [], meta: metaBy.get(st.id) || [],
-        monthlyAvg, attendance: attendance[st.id] || null,
+        attendance: attendance[st.id] || null,
       })
     })
     applyClassStats(cards)

@@ -72,11 +72,11 @@ export default function RulesStage({ branch, sessionCode, className, config, ref
   // serialise the editable component list back into the template definition
   function writeComps(d, list) {
     if (family === 'performance_profile') {
-      d.components = list.map((c) => ({ key: c.key, label: c.label, max: Number(c.max), rawMax: Number(c.rawMax ?? c.max), source: { type: c.kind === 'sheet' ? 'sheet' : c.kind === 'monthlyAvg' ? 'monthlyAvg' : 'exam', kind: c.key === 'exam' ? 'TERM' : 'PT', termMap: c.termMap } }))
+      d.components = list.map((c) => ({ key: c.key, label: c.label, max: Number(c.max), rawMax: Number(c.rawMax ?? c.max), source: { type: c.kind === 'sheet' ? 'sheet' : 'exam', kind: c.key === 'exam' ? 'TERM' : 'PT', termMap: c.termMap } }))
     } else if (family === 'secondary_annual') {
       d.ia = d.ia || { total: 20, components: [] }
       const ia = list.filter((c) => c.ia)
-      d.ia.components = ia.map((c) => ({ key: c.key, label: c.label, max: Number(c.max), rawMax: c.rawMax != null ? Number(c.rawMax) : undefined, source: c.kind === 'monthlyAvg' ? { type: 'monthlyAvg' } : c.kind === 'sheet' ? { type: 'sheet', term: c.termMap?.annual } : { type: 'exam', kind: 'PT', agg: 'avg', terms: c.terms } }))
+      d.ia.components = ia.map((c) => ({ key: c.key, label: c.label, max: Number(c.max), rawMax: c.rawMax != null ? Number(c.rawMax) : undefined, source: c.kind === 'sheet' ? { type: 'sheet', term: c.termMap?.annual } : { type: 'exam', kind: 'PT', agg: 'avg', terms: c.terms } }))
       d.ia.total = ia.reduce((s, c) => s + Number(c.max || 0), 0)
     }
   }
@@ -103,11 +103,11 @@ export default function RulesStage({ branch, sessionCode, className, config, ref
   function setComp(key, patch) {
     upd((d) => {
       if (family === 'performance_profile') {
-        d.components = comps.map((c) => c.key === key ? { ...c, ...patch } : c).map((c) => ({ key: c.key, label: c.label, max: Number(c.max), rawMax: Number(c.rawMax), source: { type: c.kind === 'sheet' ? 'sheet' : c.kind === 'monthlyAvg' ? 'monthlyAvg' : 'exam', kind: c.key === 'exam' ? 'TERM' : 'PT', termMap: c.termMap } }))
+        d.components = comps.map((c) => c.key === key ? { ...c, ...patch } : c).map((c) => ({ key: c.key, label: c.label, max: Number(c.max), rawMax: Number(c.rawMax), source: { type: c.kind === 'sheet' ? 'sheet' : 'exam', kind: c.key === 'exam' ? 'TERM' : 'PT', termMap: c.termMap } }))
       } else if (family === 'secondary_annual') {
         d.ia = d.ia || { total: 20, components: [] }
         const list = comps.filter((c) => c.ia).map((c) => c.key === key ? { ...c, ...patch } : c)
-        d.ia.components = list.map((c) => ({ key: c.key, label: c.label, max: Number(c.max), rawMax: c.rawMax != null ? Number(c.rawMax) : undefined, source: c.kind === 'monthlyAvg' ? { type: 'monthlyAvg' } : c.kind === 'sheet' ? { type: 'sheet', term: c.termMap?.annual } : { type: 'exam', kind: 'PT', agg: 'avg', terms: c.terms } }))
+        d.ia.components = list.map((c) => ({ key: c.key, label: c.label, max: Number(c.max), rawMax: c.rawMax != null ? Number(c.rawMax) : undefined, source: c.kind === 'sheet' ? { type: 'sheet', term: c.termMap?.annual } : { type: 'exam', kind: 'PT', agg: 'avg', terms: c.terms } }))
         d.ia.total = list.reduce((s, c) => s + Number(c.max || 0), 0)
         if (key === 'exam') { d.annualExam = { ...(d.annualExam || {}), total: Number(patch.max ?? d.annualExam?.total ?? 80), term: patch.termMap?.annual || d.annualExam?.term || 'AN' } }
       }
@@ -210,12 +210,11 @@ export default function RulesStage({ branch, sessionCode, className, config, ref
         </div>
         <div style={{ padding: '6px 14px 2px' }}>
           {comps.map((c) => {
-            const badge = c.kind === 'monthlyAvg' ? ['gold', 'Monthly-test average', 'Taken automatically from Tests & Marks (monthly tests) — nothing to enter here.']
-              : c.kind === 'sheet' ? ['muted', 'Sheet', 'A small assessment (portfolio, notebook…) the teacher scores per student in Enter Exam Marks; it has no exam date.']
+            const badge = c.kind === 'sheet' ? ['muted', 'Sheet', 'A small assessment (portfolio, notebook…) the teacher scores per student in Enter Exam Marks; it has no exam date.']
               : c.agg === 'avg' ? ['green', 'Exam paper · averaged', 'The periodic-test papers of the listed terms are averaged (as %), then scaled to the card marks.']
               : c.split ? ['green', 'Exam paper · theory + practical', 'One paper per term with a theory and a practical part; the split per subject is set in the schemes below.']
               : ['green', 'Exam paper', 'A scheduled paper in the date sheet; the subject teacher enters marks per student out of the raw max.']
-            const scaled = c.kind !== 'monthlyAvg' && !c.split && c.rawMax != null && Number(c.rawMax) !== Number(c.max)
+            const scaled = !c.split && c.rawMax != null && Number(c.rawMax) !== Number(c.max)
             const fixedCard = c.split || (c.key === 'exam' && family === 'secondary_annual')
             return (
               <div key={c.key} style={{ display: 'grid', gridTemplateColumns: '210px 1fr', gap: 12, alignItems: 'start', padding: '10px 0', borderBottom: '1px solid var(--gray-50)' }}>
@@ -231,16 +230,14 @@ export default function RulesStage({ branch, sessionCode, className, config, ref
                     <>One <b>{c.label}</b> paper per subject in each exam; its max is set per subject in the rows below (Oral 40 + Written 60, or Written 100 alone).
                       {cardTerms.map((t) => <span key={t.key} style={{ display: 'inline-block', marginLeft: 10 }}>{t.label} ← <select value={c.termMap?.[t.key] || ''} onChange={(e) => setCardTermExam(t.key, e.target.value)} style={{ ...inp, padding: '2px 6px' }}>{EXAM_CODES.map((x) => <option key={x} value={x}>{x} · {termName(x)}</option>)}</select></span>)}
                     </>
-                  ) : c.kind === 'monthlyAvg' ? (
-                    <>Average % of the class's monthly tests for the subject, scaled to <b>/<input type="number" value={c.max ?? ''} onChange={(e) => setComp(c.key, { max: e.target.value })} style={{ ...inp, width: 56, padding: '2px 6px' }} /></b> on the card. Nothing to enter.</>
                   ) : c.split ? (
-                    <>Teacher enters theory and practical marks out of the subject's scheme (below); the total goes on the card as is.
+                    <>Office enters theory and practical marks out of the subject's scheme (below); the total goes on the card as is.
                       {cardTerms.map((t) => <span key={t.key} style={{ display: 'inline-block', marginLeft: 10 }}>{t.label} column ← <select value={c.termMap?.[t.key] || ''} onChange={(e) => setCardTermExam(t.key, e.target.value)} style={{ ...inp, padding: '2px 6px' }}>{EXAM_CODES.map((x) => <option key={x} value={x}>{x} · {termName(x)}</option>)}</select></span>)}
                     </>
                   ) : c.agg === 'avg' ? (
-                    <>Teacher enters the periodic test out of <b><input type="number" value={c.rawMax ?? ''} onChange={(e) => setComp(c.key, { rawMax: e.target.value })} style={{ ...inp, width: 60, padding: '2px 6px' }} /></b> in {(c.terms || []).map((t) => <Pill key={t} tone="muted">{t} · {termName(t)}</Pill>)}; the average of those tests becomes <b>/<input type="number" value={c.max ?? ''} onChange={(e) => setComp(c.key, { max: e.target.value })} style={{ ...inp, width: 56, padding: '2px 6px' }} /></b> on the card.</>
+                    <>Office enters the periodic test out of <b><input type="number" value={c.rawMax ?? ''} onChange={(e) => setComp(c.key, { rawMax: e.target.value })} style={{ ...inp, width: 60, padding: '2px 6px' }} /></b> in {(c.terms || []).map((t) => <Pill key={t} tone="muted">{t} · {termName(t)}</Pill>)}; the average of those tests becomes <b>/<input type="number" value={c.max ?? ''} onChange={(e) => setComp(c.key, { max: e.target.value })} style={{ ...inp, width: 56, padding: '2px 6px' }} /></b> on the card.</>
                   ) : (
-                    <>Teacher enters marks out of <b><input type="number" value={c.rawMax ?? ''} onChange={(e) => setComp(c.key, { rawMax: e.target.value })} style={{ ...inp, width: 60, padding: '2px 6px' }} /></b>
+                    <>Office enters marks out of <b><input type="number" value={c.rawMax ?? ''} onChange={(e) => setComp(c.key, { rawMax: e.target.value })} style={{ ...inp, width: 60, padding: '2px 6px' }} /></b>
                       {family === 'secondary_annual' ? (
                         <> in <select value={c.termMap?.annual || 'AN'} onChange={(e) => setComp(c.key, { termMap: { annual: e.target.value } })} style={{ ...inp, padding: '2px 6px' }}>{EXAM_CODES.map((x) => <option key={x} value={x}>{x} · {termName(x)}</option>)}</select></>
                       ) : cardTerms.map((t) => (

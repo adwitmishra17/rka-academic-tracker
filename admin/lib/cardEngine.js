@@ -96,7 +96,7 @@ export function planCard(def, family) {
       const isTermExam = c.source?.kind === 'TERM' || c.key === 'exam'
       const termMap = c.source?.termMap || Object.fromEntries(terms.map((t) => [t.key, isTermExam ? ({ T1: 'HY', T2: 'AN' }[t.key] || t.key) : t.key]))
       const rawMax = c.rawMax ?? (c.key === 'pt' ? 40 : c.max)
-      return { key: c.key, label: c.label, max: Number(c.max), rawMax: Number(rawMax), kind: c.source?.type === 'monthlyAvg' ? 'monthlyAvg' : (c.source?.type === 'sheet' ? 'sheet' : 'exam'), termMap }
+      return { key: c.key, label: c.label, max: Number(c.max), rawMax: Number(rawMax), kind: c.source?.type === 'sheet' || c.source?.type === 'monthlyAvg' ? 'sheet' : 'exam', termMap }
     })
     return {
       family, rounding, subjectTotal: d.subjectTotal || 100,
@@ -112,14 +112,14 @@ export function planCard(def, family) {
   if (family === 'secondary_annual') {
     const ia = d.ia?.components?.length ? d.ia.components : [
       { key: 'ppt', label: 'P.P.T.', max: 5, source: { type: 'exam', kind: 'PT', agg: 'avg' } },
-      { key: 'ma', label: 'M.A.', max: 5, source: { type: 'monthlyAvg' } },
+      { key: 'ma', label: 'M.A.', max: 5, source: { type: 'sheet' } },
       { key: 'portfolio', label: 'Portfolio', max: 5, source: { type: 'sheet' } },
       { key: 'se', label: 'Subject Enrichment', max: 5, source: { type: 'sheet' } },
     ]
     const annualTerm = d.annualExam?.term || 'AN'
     const comps = ia.map((c) => {
-      const type = c.source?.type || 'exam'
-      if (type === 'monthlyAvg') return { key: c.key, label: c.label, max: Number(c.max), kind: 'monthlyAvg', ia: true }
+      // Legacy 'monthlyAvg' (monthly-test average) is retired: treated as an office-entered sheet.
+      const type = (c.source?.type === 'monthlyAvg' ? 'sheet' : c.source?.type) || 'exam'
       if (type === 'sheet') return { key: c.key, label: c.label, max: Number(c.max), rawMax: Number(c.rawMax ?? c.max), kind: 'sheet', ia: true, termMap: { annual: c.source?.term || annualTerm } }
       // PT average over the periodic-test terms
       return { key: c.key, label: c.label, max: Number(c.max), rawMax: Number(c.rawMax ?? 40), kind: 'exam', ia: true, agg: 'avg', paperKey: 'pt', terms: c.source?.terms || ['T1', 'T2'] }
@@ -209,7 +209,6 @@ export function generatePaperSpecs(plan, rows, termsByCode) {
   for (const row of rows) {
     for (const subj of row.sources) {
       for (const c of plan.components) {
-        if (c.kind === 'monthlyAvg') continue
         if (c.agg === 'avg') {
           for (const tc of c.terms) {
             const term = termsByCode[tc]; if (!term) continue
@@ -249,7 +248,6 @@ export function generatePaperSpecs(plan, rows, termsByCode) {
  *  marks[]    exam_marks rows for THIS student (paper_id, marks_obtained, theory_obtained, practical_obtained, is_absent)
  *  coGrades[] exam_coscholastic_grades for this student (subject_id, term_id, grade)
  *  meta[]     report_card_student_meta rows for this student
- *  monthlyAvg {normSubjectName → pct} for this student (0-100) — optional
  *  attendance {sessionTotal:{present,marked}, byTerm:{examCode:{present,marked}}} — optional
  *  cardKey    which card to build (defaults to the final one)
  */
@@ -306,11 +304,7 @@ export function computeCard(p) {
       const cell = { comps: {}, obtained: 0, max: 0, pct: null, grade: null, complete: true }
       for (const c of plan.components) {
         let v
-        if (c.kind === 'monthlyAvg') {
-          const pcts = row.sources.map((s) => p.monthlyAvg?.[normName(s.subject_name)]).filter((x) => x != null)
-          if (!pcts.length) v = { missing: true, reason: 'no monthly tests', soft: true }
-          else v = { value: roundHalfUp((pcts.reduce((a, b) => a + b, 0) / pcts.length) * c.max / 100), max: c.max, raw: null }
-        } else if (c.agg === 'avg') {
+        if (c.agg === 'avg') {
           const parts = c.terms.map((tc) => cellFor(row, tc, c.paperKey || c.key, c.max, c.rawMax))
           const have = parts.filter((x) => !x.missing)
           if (!have.length) v = { missing: true, reason: 'no periodic test entered' }
