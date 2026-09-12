@@ -3,6 +3,7 @@ import { examApi } from '../../lib/api'
 import { inp, lbl, card, th, td, Btn, Pill, Note, Spinner } from './ui.jsx'
 import CardEntries from '../CardEntries'
 import StatusStage from './StatusStage.jsx'
+import { isAB, COMP, valsFromGrid, groupsOf } from './entrySheets.js'
 
 /* Stage 4 — Marks (office-only entry, Tracker-driven).
      Class grid   one term, every student × every paper of every subject
@@ -10,44 +11,7 @@ import StatusStage from './StatusStage.jsx'
      Progress     the completeness matrix
    Writes go through POST /api/exam/marks with source='manual'. */
 
-const isAB = (v) => ['AB', 'A'].includes(String(v ?? '').trim().toUpperCase())
 const numOrNull = (v) => (v === '' || v == null || isAB(v) ? null : Number(v))
-const COMP = { pt: 'PT', portfolio: 'Portfolio', se: 'Sub. Enr.', notebook: 'Notebook', exam: 'Exam', oral: 'Oral', written: 'Written' }
-
-// ── Entry sheets (for marking on paper, then typing in) ──
-function sheetHead(groups) { return groups.flatMap((g) => g.papers.map((p) => `${g.subject.name} · ${COMP[p.componentKey] || p.name} /${p.hasPractical ? `${p.theoryMax}+${p.practicalMax}` : p.max}`)) }
-function sheetRows(data, groups, vals, withMarks) {
-  return data.students.map((s) => [s.roll || '', s.name, s.admissionNo || '', ...groups.flatMap((g) => g.papers.map((p) => {
-    if (data.applicable && !(data.applicable[s.id] || []).includes(p.subjectId)) return 'n/a'
-    if (!withMarks) return ''
-    const c = vals[`${s.id}|${p.id}`] || {}
-    return p.hasPractical ? [c.th, c.pr].filter((x) => x !== '' && x != null).join(' + ') : (c.v ?? '')
-  }))])
-}
-function loadImage(src) {
-  return new Promise((resolve) => { const img = new Image(); img.onload = () => { const cv = document.createElement('canvas'); cv.width = img.naturalWidth; cv.height = img.naturalHeight; cv.getContext('2d').drawImage(img, 0, 0); resolve({ data: cv.toDataURL('image/png'), w: img.naturalWidth, h: img.naturalHeight }) }; img.onerror = () => resolve(null); img.src = src })
-}
-async function exportSheetPDF({ data, groups, vals, withMarks, meta }) {
-  const [{ default: jsPDF }, { default: autoTable }] = await Promise.all([import('jspdf'), import('jspdf-autotable')])
-  const [banner, crest] = await Promise.all([loadImage('/banner-light.png'), loadImage('/crest.png')])
-  const doc = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'landscape' })
-  const pageW = doc.internal.pageSize.getWidth()
-  let y = 8
-  if (banner) { const bw = 56, bh = (banner.h / banner.w) * bw; if (crest) { const ch = 11, cw = (crest.w / crest.h) * ch; doc.addImage(crest.data, 'PNG', pageW / 2 - bw / 2 - cw - 4, y + (bh - ch) / 2, cw, ch) } doc.addImage(banner.data, 'PNG', pageW / 2 - bw / 2, y, bw, bh); y += bh + 2 }
-  doc.setFont('helvetica', 'bold').setFontSize(11).setTextColor(26, 74, 46); doc.text(`MARKS ENTRY SHEET — ${(meta.term || '').toUpperCase()}`, pageW / 2, y + 4, { align: 'center' })
-  doc.setFont('helvetica', 'normal').setFontSize(8.5).setTextColor(90); doc.text(`${meta.className}${meta.section ? ' - ' + meta.section : ''}  ·  ${meta.branch} branch  ·  Session ${meta.session}  ·  ${withMarks ? 'current entries' : 'blank — enter raw marks, AB for absent'}`, pageW / 2, y + 8.5, { align: 'center' }); y += 12
-  autoTable(doc, { startY: y, head: [['Roll', 'Student', 'Adm no.', ...sheetHead(groups)]], body: sheetRows(data, groups, vals, withMarks), margin: { left: 6, right: 6 }, styles: { font: 'helvetica', fontSize: 7, cellPadding: 1.4, halign: 'center', minCellHeight: 6.5 }, headStyles: { fillColor: [26, 74, 46], textColor: 255, fontSize: 6.5 }, alternateRowStyles: { fillColor: [246, 250, 247] }, columnStyles: { 0: { cellWidth: 10 }, 1: { cellWidth: 44, halign: 'left' }, 2: { cellWidth: 14 } } })
-  const pages = doc.getNumberOfPages()
-  for (let p = 1; p <= pages; p++) { doc.setPage(p); doc.setFont('helvetica', 'normal').setFontSize(7).setTextColor(150); doc.text(`Printed ${new Date().toLocaleDateString('en-IN')} · ${data.students.length} students · Teacher signature: ____________________`, 6, doc.internal.pageSize.getHeight() - 5); doc.text(`Page ${p} of ${pages}`, pageW - 6, doc.internal.pageSize.getHeight() - 5, { align: 'right' }) }
-  doc.save(`marks-sheet-${meta.branch}-${meta.className.replace(/\s+/g, '-')}${meta.section ? '-' + meta.section : ''}-${(meta.term || '').replace(/\s+/g, '-')}${withMarks ? '' : '-blank'}.pdf`)
-}
-async function exportSheetXLSX({ data, groups, vals, withMarks, meta }) {
-  const XLSX = await import('xlsx')
-  const head = ['Roll', 'Student', 'Adm no.', ...sheetHead(groups)]
-  const ws = XLSX.utils.aoa_to_sheet([[`Radhakrishna Academy — Marks entry sheet`], [`${meta.term} · ${meta.className}${meta.section ? ' - ' + meta.section : ''} · ${meta.branch} branch · Session ${meta.session}`], [], head, ...sheetRows(data, groups, vals, withMarks)])
-  ws['!cols'] = [{ wch: 6 }, { wch: 28 }, { wch: 10 }, ...groups.flatMap((g) => g.papers.map(() => ({ wch: 16 })))]
-  const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, meta.className.slice(0, 25)); XLSX.writeFile(wb, `marks-sheet-${meta.branch}-${meta.className.replace(/\s+/g, '-')}${meta.section ? '-' + meta.section : ''}-${(meta.term || '').replace(/\s+/g, '-')}${withMarks ? '' : '-blank'}.xlsx`)
-}
 
 export default function MarksStage(props) {
   const [tab, setTab] = useState('grid')
@@ -99,23 +63,13 @@ function ClassGrid({ branch, sessionCode, className, config }) {
     setBusy('load'); setErr('')
     examApi.classGrid(branch, sessionCode, className, termId, section || undefined).then((d) => {
       setData(d)
-      const v = {}
-      const byKey = new Map(d.marks.map((m) => [`${m.student_id}|${m.paper_id}`, m]))
-      for (const s of d.students) for (const p of d.papers) {
-        const m = byKey.get(`${s.id}|${p.id}`)
-        v[`${s.id}|${p.id}`] = { v: m ? (m.is_absent ? 'AB' : (m.marks_obtained == null ? '' : String(Number(m.marks_obtained)))) : '', th: m?.theory_obtained == null ? '' : String(Number(m.theory_obtained)), pr: m?.practical_obtained == null ? '' : String(Number(m.practical_obtained)), src: m?.source || null }
-      }
-      setVals(v); setDirty(new Set())
+      setVals(valsFromGrid(d)); setDirty(new Set())
     }).catch((e) => setErr(e.message)).finally(() => setBusy(''))
   }
   useEffect(load, [branch, sessionCode, className, termId, section]) // eslint-disable-line
 
   const papers = useMemo(() => (data?.papers || []).filter((p) => !only || p.componentKey === only), [data, only])
-  const groups = useMemo(() => {
-    const g = []
-    for (const p of papers) { const s = (data?.subjects || []).find((x) => x.id === p.subjectId); const last = g[g.length - 1]; if (last && last.subject.id === p.subjectId) last.papers.push(p); else g.push({ subject: s, papers: [p] }) }
-    return g
-  }, [papers, data])
+  const groups = useMemo(() => groupsOf(data, papers), [papers, data])
   const compKeys = useMemo(() => [...new Set((data?.papers || []).map((p) => p.componentKey))], [data])
   const sections = useMemo(() => [...new Set((data?.students || []).map((s) => s.section).filter(Boolean))].sort(), [data])
 
@@ -171,15 +125,7 @@ function ClassGrid({ branch, sessionCode, className, config }) {
         {compKeys.length > 1 && <div><span style={lbl}>Show</span><select value={only} onChange={(e) => setOnly(e.target.value)} style={inp}><option value="">All papers</option>{compKeys.map((k) => <option key={k} value={k}>{COMP[k] || k} only</option>)}</select></div>}
         <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
           {flash && <span style={{ fontSize: 12.5, color: 'var(--green)', fontWeight: 600 }}>{flash}</span>}
-          {data && papers.length > 0 && (() => {
-            const meta = { term: data.term?.name, className, section, branch, session: sessionCode }
-            const args = (withMarks) => ({ data, groups, vals, withMarks, meta })
-            return (<>
-              <Btn onClick={() => exportSheetPDF(args(false))} title="Student list with empty boxes for every paper of this term — for marking on paper">Blank sheet (PDF)</Btn>
-              <Btn onClick={() => exportSheetXLSX(args(false))} title="Same list as an Excel file">Blank sheet (Excel)</Btn>
-              <Btn onClick={() => exportSheetPDF(args(true))} title="Current entries, for checking against the answer sheets">With marks (PDF)</Btn>
-            </>)
-          })()}
+          <span style={{ fontSize: 11.5, color: 'var(--text-muted)' }}>Entry sheets (blank / with marks) are under <b>Crosslist</b>.</span>
           <Btn kind="primary" onClick={save} disabled={busy === 'save' || dirty.size === 0}>{busy === 'save' ? 'Saving…' : `Save ${dirty.size ? dirty.size + ' change' + (dirty.size === 1 ? '' : 's') : ''}`}</Btn>
         </div>
       </div>

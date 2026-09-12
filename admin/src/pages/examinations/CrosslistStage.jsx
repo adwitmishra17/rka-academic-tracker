@@ -1,12 +1,15 @@
 import React, { useState, useEffect, useMemo } from 'react'
 import { examApi } from '../../lib/api'
 import { inp, lbl, card, th, td, Btn, Pill, Note, Spinner } from './ui.jsx'
+import { COMP, valsFromGrid, groupsOf, exportSheetPDF, exportSheetXLSX } from './entrySheets.js'
 
 /* Stage 5 — Crosslist. Two views of the same class:
      · Raw   — one exam term, every paper summed per subject (as entered)
      · Card  — one card (T1 / Final / Annual / HY …), the engine's normalised
                subject totals + rank, exactly what will print
-   Exports: branded landscape PDF + XLSX for both. */
+     · Sheets — marks ENTRY sheets for one term (blank, for marking on paper;
+               or with the current entries, for checking)
+   Exports: branded landscape PDF + XLSX. */
 
 const cellText = (c) => (!c || !c.entered ? '—' : c.absent ? 'AB' : String(c.obtained))
 
@@ -46,6 +49,7 @@ export default function CrosslistStage({ branch, sessionCode, className, config 
   const [section, setSection] = useState('')
   const [raw, setRaw] = useState(null)
   const [cards, setCards] = useState(null)
+  const [grid, setGrid] = useState(null)
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState('')
   const terms = config?.terms || []
@@ -56,11 +60,14 @@ export default function CrosslistStage({ branch, sessionCode, className, config 
     setErr(''); setBusy(true)
     const p = mode === 'raw'
       ? (termId ? examApi.crosslist(branch, termId, className, section || undefined).then(setRaw) : Promise.resolve())
-      : examApi.classCards(branch, sessionCode, className, cardKey || undefined, section || undefined).then((d) => { setCards({ ...d, _section: section }); if (!cardKey) setCardKey(d.cardKey) })
-    p.catch((e) => { setErr(e.message); if (mode === 'raw') setRaw(null); else setCards(null) }).finally(() => setBusy(false))
+      : mode === 'sheets'
+        ? (termId ? examApi.classGrid(branch, sessionCode, className, termId, section || undefined).then(setGrid) : Promise.resolve())
+        : examApi.classCards(branch, sessionCode, className, cardKey || undefined, section || undefined).then((d) => { setCards({ ...d, _section: section }); if (!cardKey) setCardKey(d.cardKey) })
+    p.catch((e) => { setErr(e.message); if (mode === 'raw') setRaw(null); else if (mode === 'sheets') setGrid(null); else setCards(null) }).finally(() => setBusy(false))
   }, [mode, termId, cardKey, section, branch, sessionCode, className]) // eslint-disable-line
 
-  const sections = useMemo(() => [...new Set(((mode === 'raw' ? raw?.students : cards?.rows) || []).map((r) => r.section).filter(Boolean))].sort(), [raw, cards, mode])
+  const sections = useMemo(() => [...new Set(((mode === 'raw' ? raw?.students : mode === 'sheets' ? grid?.students : cards?.rows) || []).map((r) => r.section).filter(Boolean))].sort(), [raw, cards, grid, mode])
+  const sheetArgs = (withMarks) => grid && { data: grid, groups: groupsOf(grid), vals: valsFromGrid(grid), withMarks, meta: { term: grid.term?.name, className, section, branch, session: sessionCode } }
   const meta = `${className}${section ? ' - ' + section : ''}  ·  ${branch} branch  ·  Session ${sessionCode}`
   const fname = (kind) => `crosslist-${kind}-${branch}-${className.replace(/\s+/g, '-')}${section ? '-' + section : ''}`
 
@@ -86,19 +93,38 @@ export default function CrosslistStage({ branch, sessionCode, className, config 
       <div style={{ ...card, display: 'flex', gap: 12, alignItems: 'flex-end', flexWrap: 'wrap' }}>
         <div><span style={lbl}>View</span>
           <div style={{ display: 'inline-flex', border: '1px solid var(--gray-200)', borderRadius: 99, overflow: 'hidden' }}>
-            {[['card', 'As on card'], ['raw', 'Raw per term']].map(([k, l]) => <button key={k} onClick={() => setMode(k)} style={{ padding: '6px 14px', border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer', background: mode === k ? 'var(--text)' : 'var(--white)', color: mode === k ? 'var(--white)' : 'var(--text-muted)' }}>{l}</button>)}
+            {[['card', 'As on card'], ['raw', 'Raw per term'], ['sheets', 'Entry sheets']].map(([k, l]) => <button key={k} onClick={() => setMode(k)} style={{ padding: '6px 14px', border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer', background: mode === k ? 'var(--text)' : 'var(--white)', color: mode === k ? 'var(--white)' : 'var(--text-muted)' }}>{l}</button>)}
           </div></div>
-        {mode === 'raw' ? (
+        {mode === 'raw' || mode === 'sheets' ? (
           <div><span style={lbl}>Term</span><select value={termId} onChange={(e) => setTermId(e.target.value)} style={inp}>{terms.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}</select></div>
         ) : (
           <div><span style={lbl}>Card</span><select value={cardKey} onChange={(e) => setCardKey(e.target.value)} style={inp}>{(cards?.cardKeys || []).map((k) => <option key={k.key} value={k.key}>{k.label}</option>)}</select></div>
         )}
         {sections.length > 1 && <div><span style={lbl}>Section</span><select value={section} onChange={(e) => setSection(e.target.value)} style={inp}><option value="">All</option>{sections.map((s) => <option key={s}>{s}</option>)}</select></div>}
-        <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
-          <Btn onClick={() => exportPDF(exp)} disabled={!exp || busy}>PDF</Btn>
-          <Btn onClick={() => exportXLSX(exp)} disabled={!exp || busy}>Excel</Btn>
+        <div style={{ marginLeft: 'auto', display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          {mode === 'sheets' ? (<>
+            <Btn onClick={() => exportSheetPDF(sheetArgs(false))} disabled={!grid?.papers?.length || busy} title="Student list with empty boxes for every paper of this term — for marking on paper">Blank sheet (PDF)</Btn>
+            <Btn onClick={() => exportSheetXLSX(sheetArgs(false))} disabled={!grid?.papers?.length || busy} title="Same list as an Excel file">Blank sheet (Excel)</Btn>
+            <Btn onClick={() => exportSheetPDF(sheetArgs(true))} disabled={!grid?.papers?.length || busy} title="Current entries, for checking against the answer sheets">With marks (PDF)</Btn>
+          </>) : (<>
+            <Btn onClick={() => exportPDF(exp)} disabled={!exp || busy}>PDF</Btn>
+            <Btn onClick={() => exportXLSX(exp)} disabled={!exp || busy}>Excel</Btn>
+          </>)}
         </div>
       </div>
+
+      {mode === 'sheets' && !busy && grid && (
+        <div style={{ ...card }}>
+          <div style={{ fontSize: 13, fontWeight: 600 }}>Entry sheet · {grid.term?.name} · {className}{section ? ' - ' + section : ''}</div>
+          <div style={{ fontSize: 11.5, color: 'var(--text-muted)', marginTop: 3 }}>{grid.students.length} students × {grid.papers.length} papers. One column per paper, raw max in the heading; AB for absent. Type the marks back in under Marks entry → Class grid.</div>
+          {grid.papers.length === 0 ? <Note tone="gold">No papers for this term yet — generate them in Papers.</Note> : (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 10 }}>
+              {groupsOf(grid).map((g) => <span key={g.subject?.id} style={{ border: '1px solid var(--gray-200)', borderRadius: 99, padding: '3px 10px', fontSize: 11.5 }}><b>{g.subject?.name}</b> · {g.papers.map((p) => `${COMP[p.componentKey] || p.name} /${p.hasPractical ? `${p.theoryMax}+${p.practicalMax}` : p.max}`).join(' · ')}</span>)}
+            </div>
+          )}
+          {grid.applicable && <div style={{ fontSize: 11.5, color: 'var(--text-muted)', marginTop: 8 }}>Optional subjects a student does not take are printed as <b>n/a</b>.</div>}
+        </div>
+      )}
 
       {busy ? <Spinner /> : mode === 'raw' ? (raw && (
         <div style={{ ...card, padding: 0, overflow: 'auto' }}>
