@@ -191,6 +191,21 @@ export function resolveSeniorNames(def, names, subjects) {
   })
 }
 
+/** The class a student moves to on promotion (null when it is not knowable:
+ *  Class 10 picks a stream, Class 12 leaves). The office overrides per student
+ *  in Card entries; blank means this default. */
+export function nextClass(className) {
+  const c = String(className || '').trim()
+  const ladder = { Nursery: 'LKG', LKG: 'UKG', UKG: 'Class 1' }
+  if (ladder[c]) return ladder[c]
+  const m = c.match(/^Class (\d+)(?: (.+))?$/)
+  if (!m) return null
+  const n = Number(m[1]), stream = m[2]
+  if (n >= 12 || n === 10) return null
+  if (n === 11) return stream ? `Class 12 ${stream}` : null
+  return `Class ${n + 1}`
+}
+
 export function resolveRows(def, family, className, subjects, student) {
   const d = def || {}
   const isComposite = /^Class (9|10)$/.test(className)
@@ -439,7 +454,7 @@ export function computeCard(p) {
     plan: { cardTerms: plan.cardTerms, components: plan.components.map(({ key, label, max, ia, split, parts }) => ({ key, label, max, ia: !!ia, split: !!split, parts })), subjectTotal: plan.subjectTotal, iaTotal: plan.iaTotal || null },
     rows: outRows, overall,
     coScholastic, gradedSubjects, discipline, remarks, remark: remarkText,
-    session: { achievement: sess.achievement || null, heightCm: sess.height_cm ?? null, weightKg: sess.weight_kg ?? null, promotedTo: sess.promoted_to || null },
+    session: { achievement: sess.achievement || null, heightCm: sess.height_cm ?? null, weightKg: sess.weight_kg ?? null, promotedTo: sess.promoted_to || nextClass(p.className) || null, promotedToDefault: !sess.promoted_to },
     attendance,
     scales: { coScholastic: p.def?.coScholastic?.scale || ['A', 'B', 'C'], graded: p.def?.gradedSubjects?.scale || ['A'], discipline: p.def?.discipline?.scale || ['A', 'B', 'C'], gradeScale: { bands: scale?.bands || DEFAULT_BANDS, floorLabel: scale?.floorLabel || 'E' } },
     footer: p.def?.footer || {}, legend: p.def?.legend || null,

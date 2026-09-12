@@ -37,7 +37,7 @@ function CardEntriesTab({ branch, sessionCode, className, config }) {
     <div style={{ ...card, padding: 0 }}>
       <div style={{ display: 'flex', alignItems: 'flex-end', gap: 12, padding: '12px 16px', borderBottom: '1px solid var(--gray-100)' }}>
         <div><span style={lbl}>Term</span><select value={termId} onChange={(e) => setTermId(e.target.value)} style={inp}>{terms.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}</select></div>
-        <div style={{ fontSize: 11.5, color: 'var(--text-muted)', paddingBottom: 8 }}>Co-scholastic area grades, discipline and remarks are per term; achievement, height and weight are per session.</div>
+        <div style={{ fontSize: 11.5, color: 'var(--text-muted)', paddingBottom: 8 }}>Co-scholastic area grades, discipline and remarks are per term; height and weight are per session. Promotion appears with the last term and defaults to the next class.</div>
       </div>
       {termId && <CardEntries key={termId} embedded ctx={{ branch, sessionCode, className, termId }} />}
     </div>

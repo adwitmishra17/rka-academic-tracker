@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react'
 import { useClasses } from '../hooks/useClasses'
 import { useAuth } from '../App'
 import { branchLabel } from '../lib/branch'
+import { nextClass } from '../../lib/cardEngine.js'
 import { examApi, cardEntriesApi, reportTemplateApi } from '../lib/api'
 
 /* ============================================================
@@ -70,6 +71,9 @@ export default function CardEntries({ embedded = false, ctx = null }) {
       if ((t || []).length) setTermId(ctx?.termId && t.some(x => x.id === ctx.termId) ? ctx.termId : t[0].id)
     }).catch(e => setError(e.message))
   }, [branch, sessionCode]) // eslint-disable-line
+
+  // Promotion is a session-level entry that only prints on the final card → show it with the last term only
+  const isLastTerm = useMemo(() => { const t = terms.find(x => x.id === termId); return !!t && terms.every(x => (x.sort_order ?? 0) <= (t.sort_order ?? 0)) }, [terms, termId])
 
   // template-driven scales for this class
   const template = useMemo(() => templates.find(t => t.id === classMap[className]) || null, [templates, classMap, className])
@@ -196,7 +200,7 @@ export default function CardEntries({ embedded = false, ctx = null }) {
                   <th style={{ padding: '9px 6px', fontSize: 10.5, fontWeight: 600, color: 'var(--text-muted)', textAlign: 'left', minWidth: 200 }}>Remarks (term)</th>
                   <th style={{ padding: '9px 6px', fontSize: 10.5, fontWeight: 600, color: 'var(--text-muted)', textAlign: 'center' }}>Ht (cm)</th>
                   <th style={{ padding: '9px 6px', fontSize: 10.5, fontWeight: 600, color: 'var(--text-muted)', textAlign: 'center' }}>Wt (kg)</th>
-                  <th style={{ padding: '9px 6px', fontSize: 10.5, fontWeight: 600, color: 'var(--text-muted)', textAlign: 'left' }}>Promoted to</th>
+                  {isLastTerm && <th style={{ padding: '9px 6px', fontSize: 10.5, fontWeight: 600, color: 'var(--text-muted)', textAlign: 'left' }} title="Prints on the final card. Blank = the next class; type only the exceptions (held back, changed stream).">Promoted to</th>}
                 </tr>
               </thead>
               <tbody>
@@ -227,9 +231,9 @@ export default function CardEntries({ embedded = false, ctx = null }) {
                     <td style={{ padding: '4px 6px', textAlign: 'center' }}>
                       <input type="number" value={r.weightKg} onChange={e => upd(r.studentId, { weightKg: e.target.value })} style={{ ...inp, width: 62, textAlign: 'center' }} />
                     </td>
-                    <td style={{ padding: '4px 6px' }}>
-                      <input value={r.promotedTo} onChange={e => upd(r.studentId, { promotedTo: e.target.value })} placeholder="e.g. VII" style={{ ...inp, width: 90 }} title="Prints on the final card" />
-                    </td>
+                    {isLastTerm && <td style={{ padding: '4px 6px' }}>
+                      <input value={r.promotedTo} onChange={e => upd(r.studentId, { promotedTo: e.target.value })} placeholder={nextClass(className) || (/^Class 10$/.test(className) ? 'e.g. Class 11 Science' : 'course completed')} style={{ ...inp, width: 150, opacity: r.promotedTo ? 1 : 0.85 }} title={r.promotedTo ? 'Override — prints as typed' : `Blank prints "${nextClass(className) || '—'}"`} />
+                    </td>}
                   </tr>
                 ))}
               </tbody>
