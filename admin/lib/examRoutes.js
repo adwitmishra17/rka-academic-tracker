@@ -528,6 +528,34 @@ export function registerExamRoutes(app, { supabase, admin, verifyAuth, branchIdF
   })
 
   // ═══════════════════════════════════════════════════════════════════════════
+  // CLASS GRID — office enters a whole class for one term in one screen
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  // GET /api/exam/class-grid?branchCode=&sessionCode=&className=&termId=&section=
+  app.get('/api/exam/class-grid', verifyAuth, async (req, res) => {
+    try {
+      const { branchCode, sessionCode, className, termId, section } = req.query
+      if (!branchCode || !sessionCode || !className || !termId) return bad(res, 'branchCode, sessionCode, className, termId required')
+      const bid = await branchIdForCode(branchCode)
+      const [b, students] = await Promise.all([loadBundle(bid, sessionCode, className), roster(bid, className, section || undefined)])
+      const subjects = b.subjects.filter((x) => (x.kind || 'scholastic') === 'scholastic')
+      const subjOrder = new Map(subjects.map((x, i) => [x.id, i]))
+      const ORDER = ['pt', 'portfolio', 'se', 'notebook', 'exam']
+      const papers = b.papers.filter((p) => p.term_id === termId && p.component_key && subjOrder.has(p.subject_id))
+        .sort((a, c) => (subjOrder.get(a.subject_id) - subjOrder.get(c.subject_id)) || ((ORDER.indexOf(a.component_key) + 1 || 99) - (ORDER.indexOf(c.component_key) + 1 || 99)))
+      const sids = students.map((x) => x.id)
+      const marks = papers.length && sids.length ? await pagedAll(() => supabase.from('exam_marks').select('paper_id, student_id, marks_obtained, theory_obtained, practical_obtained, is_absent, source').in('paper_id', papers.map((p) => p.id)).in('student_id', sids)) : []
+      res.json({
+        term: b.terms.find((t) => t.id === termId) || null,
+        subjects: subjects.map((x) => ({ id: x.id, name: x.subject_name, teacher: x.assigned_teacher_name || null })),
+        papers: papers.map((p) => ({ id: p.id, subjectId: p.subject_id, componentKey: p.component_key, name: p.paper_name, max: Number(p.max_marks), cardMax: p.card_max != null ? Number(p.card_max) : null, hasPractical: !!p.has_practical, theoryMax: p.theory_max != null ? Number(p.theory_max) : null, practicalMax: p.practical_max != null ? Number(p.practical_max) : null })),
+        students: students.map((x) => ({ id: x.id, name: x.full_name, roll: x.roll_number, section: x.section, admissionNo: x.admission_no })),
+        marks,
+      })
+    } catch (e) { err(res, e, 'GET /api/exam/class-grid') }
+  })
+
+  // ═══════════════════════════════════════════════════════════════════════════
   // STATUS — who owes what
   // ═══════════════════════════════════════════════════════════════════════════
 

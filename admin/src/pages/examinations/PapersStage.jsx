@@ -146,7 +146,7 @@ export default function PapersStage({ branch, sessionCode, className, refreshCon
 
       <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
         <Btn onClick={() => setStage('rules')}>← Rules</Btn>
-        <Btn onClick={() => setStage('status')}>Entry status →</Btn>
+        <Btn onClick={() => setStage('status')}>Marks entry →</Btn>
       </div>
     </div>
   )

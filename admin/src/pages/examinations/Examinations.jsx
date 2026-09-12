@@ -9,7 +9,7 @@ import { inp, lbl, Pill } from './ui.jsx'
 import SetupStage from './SetupStage.jsx'
 import RulesStage from './RulesStage.jsx'
 import PapersStage from './PapersStage.jsx'
-import StatusStage from './StatusStage.jsx'
+import MarksStage from './MarksStage.jsx'
 import CrosslistStage from './CrosslistStage.jsx'
 import CardsStage from './CardsStage.jsx'
 
@@ -30,7 +30,7 @@ const STAGES = [
   { key: 'setup', n: 1, label: 'Setup', hint: 'Terms, subjects, teachers, template' },
   { key: 'rules', n: 2, label: 'Scoring rules', hint: 'Components, max marks, normalisation' },
   { key: 'papers', n: 3, label: 'Papers', hint: 'Generated from the rules · date sheet' },
-  { key: 'status', n: 4, label: 'Entry status', hint: 'Who owes marks · office entry' },
+  { key: 'status', n: 4, label: 'Marks entry', hint: 'Class grid · card entries · progress' },
   { key: 'crosslist', n: 5, label: 'Crosslist', hint: 'Class sheet · exports' },
   { key: 'cards', n: 6, label: 'Report cards', hint: 'Gate · preview · publish' },
 ]
@@ -92,7 +92,7 @@ export default function Examinations() {
   }, [classNames, config])
 
   const ctx = { branch, sessionCode, className, config, refreshConfig, classNames, classBadges, setStage: (s) => setParam({ stage: s }), setClass: (c) => setParam({ class: c }) }
-  const Stage = { setup: SetupStage, rules: RulesStage, papers: PapersStage, status: StatusStage, crosslist: CrosslistStage, cards: CardsStage }[stage] || SetupStage
+  const Stage = { setup: SetupStage, rules: RulesStage, papers: PapersStage, status: MarksStage, crosslist: CrosslistStage, cards: CardsStage }[stage] || SetupStage
   const needsClass = stage !== 'setup'
   const termsOk = (config?.terms || []).length > 0
 
@@ -102,7 +102,7 @@ export default function Examinations() {
       <div className="fade-in" style={{ display: 'flex', alignItems: 'flex-end', gap: 14, flexWrap: 'wrap', marginBottom: 16 }}>
         <div style={{ marginRight: 'auto' }}>
           <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 24, fontWeight: 600, color: 'var(--green-dark)', marginBottom: 2 }}>Examinations</h1>
-          <p style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>Setup → rules → papers → entry → crosslist → published cards, in one place.</p>
+          <p style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>Setup → rules → papers → marks → crosslist → published cards. Office-driven: all entry happens here.</p>
         </div>
         {allowedBranches.length > 1 && !currentBranch && (
           <div><span style={lbl}>Branch</span>
@@ -166,9 +166,8 @@ function railBadge(key, { config, className, classBadges, termsOk }) {
   if (!config) return null
   if (key === 'setup') {
     if (!termsOk) return 'bad'
-    const unassigned = Object.values(classBadges).reduce((s, b) => s + b.unassigned, 0)
     const noTpl = Object.values(classBadges).filter((b) => b.subjects > 0 && !b.template).length
-    return unassigned || noTpl ? 'warn' : 'ok'
+    return noTpl ? 'warn' : 'ok'
   }
   if (!className) return null
   const b = classBadges[className]

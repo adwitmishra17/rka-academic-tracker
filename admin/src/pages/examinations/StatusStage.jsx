@@ -53,14 +53,13 @@ export default function StatusStage({ branch, sessionCode, className, setStage, 
       {err && <Note tone="red">{err}</Note>}
       <div style={{ ...card, display: 'flex', gap: 16, alignItems: 'center', flexWrap: 'wrap' }}>
         <div style={{ flex: 1, minWidth: 240 }}>
-          <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--green-dark)' }}>Entry status · {className}</div>
+          <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--green-dark)' }}>Progress · {className}</div>
           <div style={{ fontSize: 11.5, color: 'var(--text-muted)', marginTop: 3 }}>
             {data.roster} students{data.sections?.length ? ` · sections ${data.sections.join(', ')}` : ''} · class teacher <b style={{ color: 'var(--text)' }}>{data.classTeacher?.name || '—'}</b>
             {data.legacyPapers ? ` · ${data.legacyPapers} legacy papers not shown` : ''}
           </div>
         </div>
         <Stat n={totals.done} label="complete" tone="green" /><Stat n={totals.partial} label="partial" tone="gold" /><Stat n={totals.empty} label="not started" tone="red" />
-        {totals.noTeacher > 0 && <Stat n={totals.noTeacher} label="no teacher" tone="red" />}
         <Btn small onClick={load} disabled={busy}>Refresh</Btn>
       </div>
 
@@ -71,7 +70,7 @@ export default function StatusStage({ branch, sessionCode, className, setStage, 
         <div style={{ ...card, padding: 0, overflow: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 800 }}>
             <thead>
-              <tr><th style={th} rowSpan={2}>Subject</th><th style={th} rowSpan={2}>Teacher</th>{cols.map((t) => <th key={t.id} style={{ ...th, textAlign: 'center', borderLeft: '1px solid var(--gray-100)' }} colSpan={Math.max(1, t.keys.length)}>{t.name}</th>)}</tr>
+              <tr><th style={th} rowSpan={2}>Subject</th><th style={th} rowSpan={2}>Subject teacher</th>{cols.map((t) => <th key={t.id} style={{ ...th, textAlign: 'center', borderLeft: '1px solid var(--gray-100)' }} colSpan={Math.max(1, t.keys.length)}>{t.name}</th>)}</tr>
               <tr>{cols.map((t) => (t.keys.length ? t.keys : ['—']).map((k) => <th key={t.id + k} style={{ ...th, textAlign: 'center', fontSize: 9.5, borderLeft: '1px solid var(--gray-100)' }}>{COMP_LABEL[k] || k}</th>))}</tr>
             </thead>
             <tbody>{data.items.map((it, i) => {
@@ -86,7 +85,7 @@ export default function StatusStage({ branch, sessionCode, className, setStage, 
               <tr style={{ background: comp ? 'var(--green-light)' : 'transparent', boxShadow: comp ? 'inset 3px 0 0 var(--green)' : 'none' }}>
                 <td style={{ ...td, fontWeight: 600, whiteSpace: 'nowrap' }}>{it.subjectName}{comp ? <div style={{ fontSize: 10, fontWeight: 500, color: 'var(--green-dark)' }}>part of {comp.row}</div> : null}</td>
                 <td style={{ ...td, fontSize: 11.5, whiteSpace: 'nowrap' }}>
-                  <button onClick={() => { setClass?.(className); setStage('setup') }} title="Change in Setup" style={{ border: 'none', background: 'none', padding: 0, cursor: 'pointer', fontSize: 11.5, color: it.teacherEmail ? 'var(--text)' : 'var(--crimson)', textDecoration: 'underline dotted', textUnderlineOffset: 3 }}>{it.teacher || 'no teacher — assign'}</button>
+                  <span style={{ fontSize: 11.5, color: 'var(--text-muted)' }}>{it.teacher || '—'}</span>
                 </td>
                 {cols.map((t) => (t.keys.length ? t.keys : ['—']).map((k) => {
                   const p = it.papers.find((x) => x.termId === t.id && x.componentKey === k)
@@ -128,7 +127,7 @@ export default function StatusStage({ branch, sessionCode, className, setStage, 
             )
           })}</tbody>
         </table>
-        <div style={{ padding: '8px 14px', fontSize: 11, color: 'var(--text-muted)', borderTop: '1px solid var(--gray-100)' }}>Class teachers enter these in the PWA (Marks → Co-scholastic Entries). The office can enter or override here; office rows lock the teacher's.</div>
+        <div style={{ padding: '8px 14px', fontSize: 11, color: 'var(--text-muted)', borderTop: '1px solid var(--gray-100)' }}>Entered by the office under Marks entry → Card entries.</div>
       </div>
 
       <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>

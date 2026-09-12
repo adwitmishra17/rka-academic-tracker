@@ -77,7 +77,7 @@ export default function CardsStage({ branch, sessionCode, className, setStage })
       </div>
 
       {blocked.length > 0 && rows.length > 0 && (
-        <Note tone="gold"><b>Hard gate:</b> a card publishes only when every scholastic component and co-scholastic grade on it is entered. Fix the gaps in <button onClick={() => setStage('status')} style={{ border: 'none', background: 'none', color: 'var(--gold-dark)', textDecoration: 'underline', cursor: 'pointer', fontSize: 12.5, padding: 0 }}>Entry status</button>; click a red pill to see exactly what is missing.</Note>
+        <Note tone="gold"><b>Hard gate:</b> a card publishes only when every scholastic component and co-scholastic grade on it is entered. Fix the gaps in <button onClick={() => setStage('status')} style={{ border: 'none', background: 'none', color: 'var(--gold-dark)', textDecoration: 'underline', cursor: 'pointer', fontSize: 12.5, padding: 0 }}>Marks entry</button>; click a red pill to see exactly what is missing.</Note>
       )}
 
       {busy === 'load' && !data ? <Spinner /> : data && (
@@ -119,7 +119,7 @@ export default function CardsStage({ branch, sessionCode, className, setStage })
               <thead><tr><th style={th}>Row</th><th style={th}>Term</th><th style={th}>Component</th><th style={th}>Reason</th></tr></thead>
               <tbody>{showMissing.missing.map((m, i) => <tr key={i}><td style={{ ...td, fontWeight: 600 }}>{m.row}</td><td style={td}>{m.term || '—'}</td><td style={td}>{m.component || '—'}</td><td style={{ ...td, color: 'var(--crimson)' }}>{m.reason}</td></tr>)}</tbody>
             </table>
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 12 }}><Btn onClick={() => setShowMissing(null)}>Close</Btn><Btn kind="primary" onClick={() => setStage('status')}>Go to Entry status</Btn></div>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 12 }}><Btn onClick={() => setShowMissing(null)}>Close</Btn><Btn kind="primary" onClick={() => setStage('status')}>Go to Marks entry</Btn></div>
           </div>
         </div>
       )}

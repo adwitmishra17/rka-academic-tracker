@@ -47,11 +47,13 @@ Also drop from `functions/index.js` once the six are gone: `ensurePapersForSubje
 
 ## 4. Teacher PWA (`rka-teacher-pwa`)
 
+Since 2026-09-13 report cards are **office-driven**: all exam marks and card entries are made in the Tracker (Examinations → Marks entry). The PWA keeps only monthly tests, HPC and My Marks.
+
 | Path | Why dead | Action |
 |---|---|---|
-| `routes/grades.js` (+ `app.use('/api', gradesRouter)` in `server.js`) | The "Co-scholastic Grades" screen was retired 2026-09-12: grades keyed to timetable co-scholastic subjects (Karate, ECA …) never matched a card area, and its A+/A/B/C/D scale differed from the template's. `/exam-grades` now redirects to `/card-entries`. | Delete the router + mount; remove `api.getGradeSubjects`/`getGrades`/`saveGrades` (or whatever `client/src/lib/api.js` names them) if nothing else calls them. |
-| `routes/papers.js` POST create branch (the code after the early `403` return: payload build, insert) | Unreachable — creation is refused. | Collapse the route to the date/passing-marks update only. |
-| `client/src/pages/ExamMarksEntry.jsx` `api.savePaper` usage | Nothing calls it any more (form removed). | Remove from `client/src/lib/api.js` if unused elsewhere. |
+| `routes/marks.js`, `routes/papers.js`, `routes/cardentries.js`, `routes/grades.js` | Unmounted in `server.js` (old paths answer 410). | Delete the four files. |
+| `client/src/pages/ExamMarksEntry.jsx`, `client/src/pages/ReportCardEntries.jsx` | Unrouted (`/exam-marks`, `/card-entries` redirect home). | Delete the two files; drop their `api.*` helpers in `client/src/lib/api.js` (`getPapers`, `savePaper`, `getMarks`, `saveMarks`, card-entries) if nothing else calls them. |
+| `exam_subjects.assigned_teacher_email` as an ACCESS key | Nothing gates on it any more (`/api/my-subjects` still filters by it for the subject list). | Keep the column as "subject teacher" reference; no action. |
 
 ## 5. Parent app (`rka-parent-app`)
 

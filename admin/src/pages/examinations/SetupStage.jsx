@@ -147,8 +147,8 @@ export default function SetupStage({ branch, sessionCode, className, config, ref
 
   const teacherOpts = (
     <>
-      <option value="">— unassigned —</option>
-      {teachers.map((t) => <option key={t.id} value={t.id} disabled={!t.email}>{t.name}{t.email ? '' : ' (no email)'}</option>)}
+      <option value="">— not set —</option>
+      {teachers.map((t) => <option key={t.id} value={t.id} disabled={!t.email}>{t.name}</option>)}
     </>
   )
 
@@ -198,7 +198,6 @@ export default function SetupStage({ branch, sessionCode, className, config, ref
               <button key={c} onClick={() => setClass(c)} style={{ display: 'flex', alignItems: 'center', gap: 6, width: '100%', textAlign: 'left', padding: '7px 9px', border: 'none', borderRadius: 10, background: active ? 'var(--green-light)' : 'transparent', cursor: 'pointer', color: active ? 'var(--green-dark)' : 'var(--text)', fontSize: 12.5, fontWeight: active ? 600 : 500 }}>
                 <span style={{ flex: 1 }}>{c}</span>
                 <span title="subjects" style={{ fontSize: 10.5, color: 'var(--text-muted)' }}>{b.subjects || 0}</span>
-                {b.unassigned > 0 && <span title={`${b.unassigned} scholastic subjects without a teacher`} style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--gold)' }} />}
                 {b.subjects > 0 && !b.template && <span title="no report-card template" style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--crimson)' }} />}
                 {b.template && !familyFits(templates.find((t) => t.id === classMap[c])?.family, c) && <span title="template does not fit this class" style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--crimson)', outline: '2px solid var(--crimson-light)' }} />}
               </button>
@@ -239,14 +238,14 @@ export default function SetupStage({ branch, sessionCode, className, config, ref
               {/* Subjects table */}
               <div style={{ ...card, padding: 0, overflow: 'hidden' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderBottom: '1px solid var(--gray-100)' }}>
-                  <div style={{ fontSize: 13, fontWeight: 600, flex: 1 }}>Subjects &amp; mark-entry teachers <span style={{ color: 'var(--text-muted)', fontWeight: 500 }}>· {subjects.length}</span></div>
+                  <div style={{ fontSize: 13, fontWeight: 600, flex: 1 }}>Subjects <span style={{ color: 'var(--text-muted)', fontWeight: 500 }}>· {subjects.length}</span></div>
                   <Btn small onClick={openBuild} disabled={busy === 'build' || terms.length === 0}>Import from timetable</Btn>
                 </div>
                 {subjects.length === 0 ? (
                   <div style={{ padding: 20, fontSize: 12.5, color: 'var(--text-muted)' }}>No subjects yet. Import from the timetable (teacher pre-filled) or add one below.</div>
                 ) : (
                   <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                    <thead><tr><th style={th}>#</th><th style={th}>Subject</th><th style={th}>Kind</th><th style={th}>Teacher (enters marks in the PWA)</th><th style={th}>Optional</th><th style={th}></th></tr></thead>
+                    <thead><tr><th style={th}>#</th><th style={th}>Subject</th><th style={th}>Kind</th><th style={th}>Subject teacher <span style={{ fontWeight: 400, textTransform: 'none', letterSpacing: 0 }}>(for reference — marks are entered by the office)</span></th><th style={th}>Optional</th><th style={th}></th></tr></thead>
                     <tbody>{subjects.map((s, i) => {
                       const comp = composites[s.subject_name]
                       const firstOfGroup = comp && (i === 0 || composites[subjects[i - 1].subject_name]?.row !== comp.row)
@@ -266,7 +265,7 @@ export default function SetupStage({ branch, sessionCode, className, config, ref
                         </td>
                         <td style={td}>
                           {['RCA', 'RCG'].includes(s.subject_code) ? <span style={{ fontSize: 11.5, color: 'var(--text-muted)' }}>card area · class teacher</span> : (
-                            <select value={s.assigned_teacher_id || ''} onChange={(e) => patchSubject(s, { teacherId: e.target.value || null })} style={{ ...inp, minWidth: 220, borderColor: (s.kind || 'scholastic') === 'scholastic' && !s.assigned_teacher_email ? 'var(--gold)' : 'var(--gray-200)' }}>
+                            <select value={s.assigned_teacher_id || ''} onChange={(e) => patchSubject(s, { teacherId: e.target.value || null })} style={{ ...inp, minWidth: 220 }}>
                               {!s.assigned_teacher_id && s.assigned_teacher_email && <option value="">{s.assigned_teacher_email}</option>}
                               {teacherOpts}
                             </select>
