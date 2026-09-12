@@ -37,27 +37,33 @@ export default function SetupStage({ branch, sessionCode, className, config, ref
   const templates = config?.templates || []
   const classMap = config?.classMap || {}
   const selected = className || ''
-  // Composite card rows (Class 9-10 Science = Physics+Chemistry+Biology, split Hindi/English …):
-  // subjectName → { row, members } from the class's template rows.
-  const [composites, setComposites] = useState({})
+  // The card decides what is listed here: rows come from the class's template
+  // (via /api/exam/rules) and each maps to the exam subject that feeds it.
+  const [cardRows, setCardRows] = useState([])      // [{ subject, mapped:[names] }]
+  const [rulesTick, setRulesTick] = useState(0)
   useEffect(() => {
-    setComposites({})
+    setCardRows([])
     if (!selected || !classMap[selected]) return
-    examApi.rules(branch, sessionCode, selected).then(({ rows }) => {
-      const m = {}
-      for (const r of rows || []) if ((r.mapped || []).length > 1) for (const name of r.mapped) m[name] = { row: r.subject, members: r.mapped }
-      setComposites(m)
-    }).catch(() => {})
-  }, [branch, sessionCode, selected, classMap]) // eslint-disable-line
-  const subjects = useMemo(() => {
-    const list = (config?.subjects || []).filter((s) => s.class_name === selected)
-    const kindRank = (s) => (s.kind === 'co_scholastic' ? 1 : 0)
-    const groupKey = (s) => composites[s.subject_name]?.row || `~${s.subject_name}`
-    // members of a composite sit together, at the position of their first member
-    const firstPos = {}
-    list.forEach((s) => { const g = groupKey(s); if (!(g in firstPos)) firstPos[g] = s.sort_order })
-    return list.sort((a, b) => kindRank(a) - kindRank(b) || (firstPos[groupKey(a)] - firstPos[groupKey(b)]) || groupKey(a).localeCompare(groupKey(b)) || (a.sort_order - b.sort_order) || a.subject_name.localeCompare(b.subject_name))
-  }, [config, selected, composites])
+    examApi.rules(branch, sessionCode, selected).then(({ rows }) => setCardRows(rows || [])).catch(() => {})
+  }, [branch, sessionCode, selected, classMap, rulesTick]) // eslint-disable-line
+  const classSubjects = useMemo(() => (config?.subjects || []).filter((s) => s.class_name === selected), [config, selected])
+  const byName = useMemo(() => Object.fromEntries(classSubjects.map((s) => [s.subject_name, s])), [classSubjects])
+  const onCardNames = useMemo(() => new Set(cardRows.flatMap((r) => r.mapped || [])), [cardRows])
+  const areaRows = useMemo(() => classSubjects.filter((s) => ['RCA', 'RCG'].includes(s.subject_code)), [classSubjects])
+  const otherSubjects = useMemo(() => classSubjects.filter((s) => !onCardNames.has(s.subject_name) && !['RCA', 'RCG'].includes(s.subject_code)).sort((a, b) => (a.kind === b.kind ? a.subject_name.localeCompare(b.subject_name) : a.kind === 'co_scholastic' ? 1 : -1)), [classSubjects, onCardNames])
+  const subjects = classSubjects
+  // canonical exam-subject name for a card row that has no subject yet
+  const CANON = { 'ENGLISH LNG & LIT.': 'English', 'ENGLISH CORE': 'English', 'HINDI COURSE-A': 'Hindi', 'HINDI CORE': 'Hindi', 'GENERAL AWARENESS WRITTEN': 'General Awareness', 'GK': 'GK' }
+  const canonName = (row) => CANON[row] || row.toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase()).replace(/\bAnd\b/, '&')
+  async function createForRows(rows) {
+    if (!rows.length) return
+    setBusy('add'); setErr('')
+    try {
+      await examApi.bulkSubjects(branch, sessionCode, rows.map((r, i) => ({ className: selected, subjectName: canonName(r.subject), kind: 'scholastic', sortOrder: 100 + i })))
+      await refreshConfig(); setRulesTick((n) => n + 1); say(`${rows.length} subject${rows.length === 1 ? '' : 's'} created`)
+    } catch (e) { fail(e) }
+    setBusy('')
+  }
   useEffect(() => { setBuildRows(null); setErr('') }, [selected])
 
   // ── Terms ─────────────────────────────────────────────────────────────────
@@ -224,7 +230,7 @@ export default function SetupStage({ branch, sessionCode, className, config, ref
                 </div>
                 <div>
                   <span style={lbl}>Report-card template</span>
-                  <select key={tplNonce} defaultValue={classMap[selected] || ''} onChange={(e) => bindTemplate(selected, e.target.value)} disabled={busy === 'tpl'} style={{ ...inp, minWidth: 260, borderColor: classMap[selected] && !familyFits(templates.find((t) => t.id === classMap[selected])?.family, selected) ? 'var(--crimson)' : 'var(--gray-200)' }}>
+                  <select key={`${selected}-${tplNonce}-${classMap[selected] || ''}`} defaultValue={classMap[selected] || ''} onChange={(e) => bindTemplate(selected, e.target.value)} disabled={busy === 'tpl'} style={{ ...inp, minWidth: 260, borderColor: classMap[selected] && !familyFits(templates.find((t) => t.id === classMap[selected])?.family, selected) ? 'var(--crimson)' : 'var(--gray-200)' }}>
                     <option value="">— none (no card for this class) —</option>
                     {templates.map((t) => <option key={t.id} value={t.id}>{t.name}{familyFits(t.family, selected) ? '' : '  (does not fit this class)'}</option>)}
                   </select>
@@ -236,47 +242,66 @@ export default function SetupStage({ branch, sessionCode, className, config, ref
                 <Btn small onClick={() => setStage('rules')} disabled={!classMap[selected]}>Scoring rules →</Btn>
               </div>
 
-              {/* Subjects table */}
+              {/* On the card — one line per card row, in print order */}
               <div style={{ ...card, padding: 0, overflow: 'hidden' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderBottom: '1px solid var(--gray-100)' }}>
-                  <div style={{ fontSize: 13, fontWeight: 600, flex: 1 }}>Subjects <span style={{ color: 'var(--text-muted)', fontWeight: 500 }}>· {subjects.length}</span></div>
-                  <Btn small onClick={openBuild} disabled={busy === 'build' || terms.length === 0}>Import from timetable</Btn>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 13, fontWeight: 600 }}>Subjects on the card <span style={{ color: 'var(--text-muted)', fontWeight: 500 }}>· {cardRows.length}</span></div>
+                    <div style={{ fontSize: 11.5, color: 'var(--text-muted)' }}>Exactly what prints, in print order. Change rows in Scoring rules; set the subject teacher here for reference.</div>
+                  </div>
+                  {cardRows.some((r) => !(r.mapped || []).length) && <Btn kind="primary" small onClick={() => createForRows(cardRows.filter((r) => !(r.mapped || []).length))} disabled={busy === 'add'}>Create {cardRows.filter((r) => !(r.mapped || []).length).length} missing subject{cardRows.filter((r) => !(r.mapped || []).length).length === 1 ? '' : 's'}</Btn>}
                 </div>
-                {subjects.length === 0 ? (
-                  <div style={{ padding: 20, fontSize: 12.5, color: 'var(--text-muted)' }}>No subjects yet. Import from the timetable (teacher pre-filled) or add one below.</div>
+                {!classMap[selected] ? (
+                  <div style={{ padding: 20, fontSize: 12.5, color: 'var(--text-muted)' }}>Bind a report-card template above — the card decides which subjects are listed.</div>
+                ) : cardRows.length === 0 ? (
+                  <div style={{ padding: 20, fontSize: 12.5, color: 'var(--text-muted)' }}>This template has no rows for {selected} yet. Add them in <button onClick={() => setStage('rules')} style={{ border: 'none', background: 'none', color: 'var(--green-dark)', textDecoration: 'underline', cursor: 'pointer', fontSize: 12.5, padding: 0 }}>Scoring rules</button>.</div>
                 ) : (
                   <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                    <thead><tr><th style={th}>#</th><th style={th}>Subject</th><th style={th}>Kind</th><th style={th}>Subject teacher <span style={{ fontWeight: 400, textTransform: 'none', letterSpacing: 0 }}>(for reference — marks are entered by the office)</span></th><th style={th}>Optional</th><th style={th}></th></tr></thead>
-                    <tbody>{subjects.map((s, i) => {
-                      const comp = composites[s.subject_name]
-                      const firstOfGroup = comp && (i === 0 || composites[subjects[i - 1].subject_name]?.row !== comp.row)
-                      return (<React.Fragment key={s.id}>
-                      {firstOfGroup && (
-                        <tr><td colSpan={6} style={{ padding: '7px 10px 4px', fontSize: 11, color: 'var(--green-dark)', background: 'var(--green-light)', borderTop: '1px solid var(--green-muted)' }}>
-                          <b>Composite → {comp.row}</b> on the card &nbsp;·&nbsp; {comp.members.join(' + ')} are entered separately by their own teachers and summed into one row
-                        </td></tr>
-                      )}
-                      <tr style={{ opacity: busy === s.id ? 0.5 : 1, background: comp ? 'var(--green-light)' : 'transparent', boxShadow: comp ? 'inset 3px 0 0 var(--green)' : 'none' }}>
-                        <td style={{ ...td, color: 'var(--text-muted)', width: 30 }}>{i + 1}</td>
-                        <td style={{ ...td, fontWeight: 600 }}>{s.subject_name}{s.subject_code ? <span style={{ marginLeft: 6, fontSize: 10, color: 'var(--text-muted)' }}>{s.subject_code}</span> : null}{comp ? <span style={{ marginLeft: 6 }}><Pill tone="green">part of {comp.row}</Pill></span> : null}</td>
-                        <td style={td}>
-                          <button onClick={() => patchSubject(s, { kind: s.kind === 'co_scholastic' ? 'scholastic' : 'co_scholastic' })} title="Click to flip" style={{ border: 'none', background: 'none', cursor: 'pointer', padding: 0 }}>
-                            <Pill tone={s.kind === 'co_scholastic' ? 'gold' : 'green'}>{s.kind === 'co_scholastic' ? 'co-scholastic' : 'scholastic'}</Pill>
-                          </button>
-                        </td>
-                        <td style={td}>
-                          {['RCA', 'RCG'].includes(s.subject_code) ? <span style={{ fontSize: 11.5, color: 'var(--text-muted)' }}>card area · class teacher</span> : (
-                            <select value={s.assigned_teacher_id || ''} onChange={(e) => patchSubject(s, { teacherId: e.target.value || null })} style={{ ...inp, minWidth: 220 }}>
-                              {!s.assigned_teacher_id && s.assigned_teacher_email && <option value="">{s.assigned_teacher_email}</option>}
-                              {teacherOpts}
-                            </select>
-                          )}
-                        </td>
-                        <td style={td}><input type="checkbox" checked={!!s.is_optional} onChange={(e) => patchSubject(s, { isOptional: e.target.checked })} title="Elective (Class 11/12 admission choice)" /></td>
-                        <td style={{ ...td, textAlign: 'right' }}>{!['RCA', 'RCG'].includes(s.subject_code) && <Btn small kind="danger" onClick={() => removeSubject(s)}>✕</Btn>}</td>
-                      </tr>
-                      </React.Fragment>)
+                    <thead><tr><th style={th}>#</th><th style={th}>On the card</th><th style={th}>Exam subject</th><th style={th}>Subject teacher <span style={{ fontWeight: 400, textTransform: 'none', letterSpacing: 0 }}>(reference — marks are entered by the office)</span></th><th style={th}>Optional</th></tr></thead>
+                    <tbody>{cardRows.map((r, i) => {
+                      const members = (r.mapped || []).map((n) => byName[n]).filter(Boolean)
+                      return (
+                        <tr key={r.subject} style={{ background: members.length ? 'transparent' : 'var(--gold-light)' }}>
+                          <td style={{ ...td, color: 'var(--text-muted)', width: 30 }}>{i + 1}</td>
+                          <td style={{ ...td, fontWeight: 700, textTransform: 'uppercase', fontSize: 12 }}>{r.subject}{r.additional ? <span style={{ marginLeft: 6 }}><Pill tone="gold">additional</Pill></span> : null}</td>
+                          <td style={td}>{members.length ? members.map((s) => <span key={s.id} style={{ marginRight: 6 }}>{s.subject_name}</span>) : <span style={{ color: 'var(--gold-dark)', fontSize: 12 }}>no subject yet → <button onClick={() => createForRows([r])} disabled={busy === 'add'} style={{ border: 'none', background: 'none', color: 'var(--green-dark)', textDecoration: 'underline', cursor: 'pointer', fontSize: 12, padding: 0 }}>create "{canonName(r.subject)}"</button></span>}{members.length > 1 && <div style={{ fontSize: 10.5, color: 'var(--green-dark)' }}>summed, then scaled to /100</div>}</td>
+                          <td style={td}>{members.map((s) => <div key={s.id} style={{ marginBottom: members.length > 1 ? 4 : 0 }}><select value={s.assigned_teacher_id || ''} onChange={(e) => patchSubject(s, { teacherId: e.target.value || null })} style={{ ...inp, minWidth: 220 }}>
+                                  {!s.assigned_teacher_id && s.assigned_teacher_email && <option value="">{s.assigned_teacher_email}</option>}
+                                  {teacherOpts}
+                                </select></div>)}</td>
+                          <td style={td}>{members.map((s) => <input key={s.id} type="checkbox" checked={!!s.is_optional} onChange={(e) => patchSubject(s, { isOptional: e.target.checked })} title="Elective (Class 11/12 admission choice)" />)}</td>
+                        </tr>
+                      )
                     })}</tbody>
+                  </table>
+                )}
+                {areaRows.length > 0 && (
+                  <div style={{ padding: '8px 14px', borderTop: '1px solid var(--gray-100)', fontSize: 11.5, color: 'var(--text-muted)' }}>
+                    Card areas (class teacher, grades): {areaRows.map((s) => s.subject_name).join(' · ')}
+                  </div>
+                )}
+              </div>
+
+              {/* Other subjects — timetable/lesson-log only, not on the card */}
+              <details style={{ ...card, padding: 0, overflow: 'hidden' }}>
+                <summary style={{ padding: '10px 14px', cursor: 'pointer', fontSize: 12.5, color: 'var(--text-muted)', listStyle: 'none', display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <span style={{ flex: 1 }}>Other subjects for {selected} (timetable, lesson log, monthly tests — not on the card) · <b>{otherSubjects.length}</b></span>
+                  <Btn small onClick={(e) => { e.preventDefault(); openBuild() }} disabled={busy === 'build' || terms.length === 0}>Import from timetable</Btn>
+                </summary>
+                {otherSubjects.length > 0 && (
+                  <table style={{ width: '100%', borderCollapse: 'collapse', borderTop: '1px solid var(--gray-100)' }}>
+                    <thead><tr><th style={th}>Subject</th><th style={th}>Kind</th><th style={th}>Teacher</th><th style={th}></th></tr></thead>
+                    <tbody>{otherSubjects.map((s) => (
+                      <tr key={s.id} style={{ opacity: busy === s.id ? 0.5 : 1 }}>
+                        <td style={{ ...td, fontWeight: 600 }}>{s.subject_name}</td>
+                        <td style={td}><button onClick={() => patchSubject(s, { kind: s.kind === 'co_scholastic' ? 'scholastic' : 'co_scholastic' })} title="Click to flip" style={{ border: 'none', background: 'none', cursor: 'pointer', padding: 0 }}><Pill tone={s.kind === 'co_scholastic' ? 'gold' : 'green'}>{s.kind === 'co_scholastic' ? 'co-scholastic' : 'scholastic'}</Pill></button></td>
+                        <td style={td}><select value={s.assigned_teacher_id || ''} onChange={(e) => patchSubject(s, { teacherId: e.target.value || null })} style={{ ...inp, minWidth: 220 }}>
+                                  {!s.assigned_teacher_id && s.assigned_teacher_email && <option value="">{s.assigned_teacher_email}</option>}
+                                  {teacherOpts}
+                                </select></td>
+                        <td style={{ ...td, textAlign: 'right' }}><Btn small kind="danger" onClick={() => removeSubject(s)}>✕</Btn></td>
+                      </tr>
+                    ))}</tbody>
                   </table>
                 )}
                 <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', padding: '10px 14px', borderTop: '1px solid var(--gray-100)', flexWrap: 'wrap' }}>
@@ -285,7 +310,7 @@ export default function SetupStage({ branch, sessionCode, className, config, ref
                   <div><span style={lbl}>Teacher</span><select value={newSub.teacherId} onChange={(e) => setNewSub((x) => ({ ...x, teacherId: e.target.value }))} style={{ ...inp, minWidth: 200 }}>{teacherOpts}</select></div>
                   <Btn kind="primary" onClick={addSubject} disabled={!newSub.subjectName.trim() || busy === 'add'}>Add</Btn>
                 </div>
-              </div>
+              </details>
             </>
           )}
         </div>
