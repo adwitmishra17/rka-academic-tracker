@@ -57,6 +57,10 @@ export default function RulesStage({ branch, sessionCode, className, config, ref
       const sum = ia + Number(exam?.max || 0)
       return { ok: sum === total, sum, text: `Internal assessment ${comps.filter((c) => c.ia).map((c) => c.max).join(' + ')} = ${ia}, plus annual exam ${exam?.max || 0} = ${sum} / ${total}`, problem: sum > total ? `exceeds ${total} by ${sum - total}.` : `short by ${total - sum}.` }
     }
+    if (family === 'pre_primary') {
+      const bad = (def?.classRows?.[className] || []).filter((r) => Number(r.oral ?? 40) + Number(r.written ?? 60) !== 100).map((r) => r.subject)
+      return { ok: bad.length === 0, sum: 100, text: 'Each subject per exam: Oral + Written = 100', problem: `these rows do not add up to 100: ${bad.join(', ')}` }
+    }
     if (family === 'senior_progress') {
       const perTerm = (plan.subjectTotal || 200) / Math.max(1, cardTerms.length)
       const bad = Object.entries(def?.schemes || {}).filter(([, sc]) => Number(sc.theory || 0) + Number(sc.practical || 0) !== perTerm).map(([n]) => n)
@@ -111,7 +115,7 @@ export default function RulesStage({ branch, sessionCode, className, config, ref
   }
   function setCardTermExam(ctKey, examCode) {
     upd((d) => {
-      if (family === 'senior_progress') d.terms = cardTerms.map((t) => t.key === ctKey ? { ...t, examTerm: examCode } : { key: t.key, label: t.label, examTerm: t.examTerm })
+      if (family === 'senior_progress' || family === 'pre_primary') d.terms = cardTerms.map((t) => t.key === ctKey ? { key: t.key, label: t.label, examTerm: examCode } : { key: t.key, label: t.label, examTerm: t.examTerm })
     })
   }
 
@@ -119,7 +123,7 @@ export default function RulesStage({ branch, sessionCode, className, config, ref
   const rows = def?.classRows?.[className] || []
   const mappedRows = data?.rows || []
   function setRow(i, patch) { upd((d) => { d.classRows = d.classRows || {}; d.classRows[className] = (d.classRows[className] || []).map((r, j) => j === i ? { ...r, ...patch } : r) }) }
-  function addRow() { upd((d) => { d.classRows = d.classRows || {}; d.classRows[className] = [...(d.classRows[className] || []), family === 'secondary_annual' ? { subject: 'NEW SUBJECT', locCode: '', written: 80, practical: 0 } : { subject: 'NEW SUBJECT' }] }) }
+  function addRow() { upd((d) => { d.classRows = d.classRows || {}; d.classRows[className] = [...(d.classRows[className] || []), family === 'secondary_annual' ? { subject: 'NEW SUBJECT', locCode: '', written: 80, practical: 0 } : family === 'pre_primary' ? { subject: 'NEW SUBJECT', oral: 40, written: 60 } : { subject: 'NEW SUBJECT' }] }) }
   function removeRow(i) { upd((d) => { d.classRows[className] = d.classRows[className].filter((_, j) => j !== i) }) }
   function moveRow(i, dir) { upd((d) => { const a = d.classRows[className]; const j = i + dir; if (j < 0 || j >= a.length) return; [a[i], a[j]] = [a[j], a[i]] }) }
   const schemes = def?.schemes || {}
@@ -198,7 +202,7 @@ export default function RulesStage({ branch, sessionCode, className, config, ref
         <div style={{ padding: '10px 14px', borderBottom: '1px solid var(--gray-100)' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <div style={{ fontSize: 13, fontWeight: 600, flex: 1 }}>How a subject's marks are built{family === 'secondary_annual' ? '' : ' for each term column'}</div>
-            {family !== 'senior_progress' && <Btn small onClick={addComp} title="Add a sheet component (Notebook, Activity …) — set its max after adding">+ Component</Btn>}
+            {!['senior_progress', 'pre_primary'].includes(family) && <Btn small onClick={addComp} title="Add a sheet component (Notebook, Activity …) — set its max after adding">+ Component</Btn>}
           </div>
           <div style={{ fontSize: 11.5, color: 'var(--text-muted)', marginTop: 2 }}>
             Read each line left to right: what the teacher enters (raw marks, in which exam term) → what it becomes on the card. Rounding is half-up (6.5 → 7).
@@ -216,14 +220,18 @@ export default function RulesStage({ branch, sessionCode, className, config, ref
             return (
               <div key={c.key} style={{ display: 'grid', gridTemplateColumns: '210px 1fr', gap: 12, alignItems: 'start', padding: '10px 0', borderBottom: '1px solid var(--gray-50)' }}>
                 <div>
-                  <input value={c.label} onChange={(e) => setComp(c.key, { label: e.target.value })} disabled={family === 'senior_progress'} style={{ ...inp, width: '100%', fontWeight: 600 }} />
+                  <input value={c.label} onChange={(e) => setComp(c.key, { label: e.target.value })} disabled={['senior_progress', 'pre_primary'].includes(family)} style={{ ...inp, width: '100%', fontWeight: 600 }} />
                   <div style={{ marginTop: 4, display: 'flex', alignItems: 'center', gap: 6 }}>
                     <Pill tone={badge[0]} title={badge[2]}>{badge[1]}</Pill>
-                    {family !== 'senior_progress' && c.key !== 'exam' && <button onClick={() => removeComp(c.key)} title="Remove this component from the card" style={{ border: 'none', background: 'none', color: 'var(--crimson)', cursor: 'pointer', fontSize: 11, padding: 0 }}>✕ remove</button>}
+                    {!['senior_progress', 'pre_primary'].includes(family) && c.key !== 'exam' && <button onClick={() => removeComp(c.key)} title="Remove this component from the card" style={{ border: 'none', background: 'none', color: 'var(--crimson)', cursor: 'pointer', fontSize: 11, padding: 0 }}>✕ remove</button>}
                   </div>
                 </div>
                 <div style={{ fontSize: 12.5, lineHeight: 2.1, color: 'var(--text)' }}>
-                  {c.kind === 'monthlyAvg' ? (
+                  {c.perRow ? (
+                    <>One <b>{c.label}</b> paper per subject in each exam; its max is set per subject in the rows below (Oral 40 + Written 60, or Written 100 alone).
+                      {cardTerms.map((t) => <span key={t.key} style={{ display: 'inline-block', marginLeft: 10 }}>{t.label} ← <select value={c.termMap?.[t.key] || ''} onChange={(e) => setCardTermExam(t.key, e.target.value)} style={{ ...inp, padding: '2px 6px' }}>{EXAM_CODES.map((x) => <option key={x} value={x}>{x} · {termName(x)}</option>)}</select></span>)}
+                    </>
+                  ) : c.kind === 'monthlyAvg' ? (
                     <>Average % of the class's monthly tests for the subject, scaled to <b>/<input type="number" value={c.max ?? ''} onChange={(e) => setComp(c.key, { max: e.target.value })} style={{ ...inp, width: 56, padding: '2px 6px' }} /></b> on the card. Nothing to enter.</>
                   ) : c.split ? (
                     <>Teacher enters theory and practical marks out of the subject's scheme (below); the total goes on the card as is.
@@ -264,7 +272,7 @@ export default function RulesStage({ branch, sessionCode, className, config, ref
             <Btn small onClick={addRow}>+ Row</Btn>
           </div>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <thead><tr><th style={th}></th><th style={th}>Row on card</th>{family === 'secondary_annual' && <><th style={th}>LoC code</th><th style={th}>Written</th><th style={th}>Practical</th><th style={th}>Additional</th></>}<th style={th}>Fed by (class subjects)</th><th style={th}></th></tr></thead>
+            <thead><tr><th style={th}></th><th style={th}>Row on card</th>{family === 'secondary_annual' && <><th style={th}>LoC code</th><th style={th}>Written</th><th style={th}>Practical</th><th style={th}>Additional</th></>}{family === 'pre_primary' && <><th style={th}>Oral</th><th style={th}>Written</th></>}<th style={th}>Fed by (class subjects)</th><th style={th}></th></tr></thead>
             <tbody>{rows.map((r, i) => {
               const m = mappedRows.find((x) => x.subject === r.subject)
               const auto = m?.mapped || []
@@ -273,6 +281,10 @@ export default function RulesStage({ branch, sessionCode, className, config, ref
                 <tr key={i} style={{ background: m?.unmapped ? 'var(--gold-light)' : 'transparent' }}>
                   <td style={{ ...td, whiteSpace: 'nowrap' }}><button onClick={() => moveRow(i, -1)} style={arrow}>↑</button><button onClick={() => moveRow(i, 1)} style={arrow}>↓</button></td>
                   <td style={td}><input value={r.subject} onChange={(e) => setRow(i, { subject: e.target.value.toUpperCase() })} style={{ ...inp, width: 190, fontWeight: 600 }} /></td>
+                  {family === 'pre_primary' && <>
+                    <td style={td}><input type="number" value={r.oral ?? 40} onChange={(e) => setRow(i, { oral: Number(e.target.value) })} style={{ ...inp, width: 60 }} title="0 = no oral paper" /></td>
+                    <td style={td}><input type="number" value={r.written ?? 60} onChange={(e) => setRow(i, { written: Number(e.target.value) })} style={{ ...inp, width: 60 }} /></td>
+                  </>}
                   {family === 'secondary_annual' && <>
                     <td style={td}><input value={r.locCode || ''} onChange={(e) => setRow(i, { locCode: e.target.value })} style={{ ...inp, width: 56 }} /></td>
                     <td style={td}><input type="number" value={r.written ?? 80} onChange={(e) => setRow(i, { written: Number(e.target.value) })} style={{ ...inp, width: 60 }} /></td>

@@ -8,7 +8,7 @@ import CardEntries from '../CardEntries'
    how many of the roster, when, office-overridden?), plus the class-teacher
    pack (card entries) per term. Click any cell to enter/override in place. */
 
-const COMP_LABEL = { pt: 'Periodic test', portfolio: 'Portfolio', se: 'Sub. enrichment', exam: 'Exam', notebook: 'Notebook' }
+const COMP_LABEL = { pt: 'Periodic test', portfolio: 'Portfolio', se: 'Sub. enrichment', exam: 'Exam', notebook: 'Notebook', oral: 'Oral', written: 'Written' }
 const STATE = { empty: { tone: 'red', label: 'not started' }, partial: { tone: 'gold', label: 'partial' }, done: { tone: 'green', label: 'complete' } }
 
 export default function StatusStage({ branch, sessionCode, className, setStage, setClass }) {
@@ -38,7 +38,7 @@ export default function StatusStage({ branch, sessionCode, className, setStage, 
   useEffect(load, [branch, sessionCode, className]) // eslint-disable-line
 
   const terms = data?.terms || []
-  const ORDER = ['pt', 'portfolio', 'se', 'notebook', 'exam']
+  const ORDER = ['oral', 'written', 'pt', 'portfolio', 'se', 'notebook', 'exam']
   const cols = useMemo(() => terms.map((t) => ({ ...t, keys: [...new Set((data?.items || []).flatMap((it) => it.papers.filter((p) => p.termId === t.id).map((p) => p.componentKey)))].sort((a, b) => (ORDER.indexOf(a) + 1 || 99) - (ORDER.indexOf(b) + 1 || 99)) })), [data, terms])
   const totals = useMemo(() => {
     const all = (data?.items || []).flatMap((it) => it.papers)

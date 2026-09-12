@@ -15,9 +15,10 @@ function familyFits(family, cls) {
   if (!family) return true
   if (/^Class (11|12)\b/.test(cls)) return family === 'senior_progress'
   if (/^Class (9|10)$/.test(cls)) return family === 'secondary_annual'
+  if (['Nursery', 'LKG', 'UKG'].includes(cls)) return family === 'pre_primary' || family === 'performance_profile'
   return family === 'performance_profile'
 }
-const FAMILY_LABEL = { performance_profile: 'Classes I–VIII style', secondary_annual: 'Classes IX–X style', senior_progress: 'Classes XI–XII style' }
+const FAMILY_LABEL = { performance_profile: 'Classes I–VIII style', secondary_annual: 'Classes IX–X style', senior_progress: 'Classes XI–XII style', pre_primary: 'Nursery–KG style' }
 const guessKind = (n) => (CO_HINTS.some((h) => ` ${String(n).toLowerCase()} `.includes(h)) ? 'co_scholastic' : 'scholastic')
 
 export default function SetupStage({ branch, sessionCode, className, config, refreshConfig, classNames, classBadges, setClass, setStage }) {
@@ -134,7 +135,7 @@ export default function SetupStage({ branch, sessionCode, className, config, ref
       if (templateId) {
         const tpl = next
         const def = tpl?.definition || {}
-        if (['performance_profile', 'secondary_annual'].includes(tpl?.family) && !def.classRows?.[cls]) {
+        if (['performance_profile', 'secondary_annual', 'pre_primary'].includes(tpl?.family) && !def.classRows?.[cls]) {
           const src = Object.keys(def.classRows || {}).sort(compareClasses)[0]
           if (src) await reportTemplateApi.save(templateId, { definition: { ...def, classRows: { ...def.classRows, [cls]: JSON.parse(JSON.stringify(def.classRows[src])) } } })
         }

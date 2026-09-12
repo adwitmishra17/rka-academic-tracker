@@ -54,9 +54,7 @@ const CSS = `
 `
 
 export function renderCardHtml(card, opts = {}) {
-  const body = card.family === 'secondary_annual' ? renderSecondary(card)
-    : card.family === 'senior_progress' ? renderSenior(card)
-    : renderPerformanceProfile(card)
+  const body = renderCardBody(card)
   return `<!doctype html><html><head><meta charset="utf-8"><title>${esc(card.student?.name || 'Report card')} · ${esc(card.sessionCode)}</title><style>${CSS}</style></head><body>${body}</body></html>`
 }
 
@@ -68,7 +66,41 @@ export function renderCardsDocument(htmlBodies) {
 export function renderCardBody(card) {
   return card.family === 'secondary_annual' ? renderSecondary(card)
     : card.family === 'senior_progress' ? renderSenior(card)
+    : card.family === 'pre_primary' ? renderPrePrimary(card)
     : renderPerformanceProfile(card)
+}
+
+// ── Family: pre_primary (Nursery / KG) ──────────────────────────────────────
+function renderPrePrimary(card) {
+  const terms = card.plan.cardTerms
+  const shown = terms.filter((t) => card.showTerms.includes(t.key))
+  const both = shown.length === terms.length
+  const head1 = `<tr><th class="l" rowspan="2">SUBJECTS</th>${shown.map((t) => `<th colspan="6">${esc(t.label)}</th>`).join('')}${both ? '<th colspan="3">TOTAL MARKS</th>' : ''}</tr>`
+  const head2 = `<tr>${shown.map(() => '<th>PAPER</th><th>M.M.</th><th>M.O.</th><th>M.M.</th><th>M.O.</th><th>GRADE</th>').join('')}${both ? '<th>M.M.</th><th>M.O.</th><th>GRADE</th>' : ''}</tr>`
+  const rowsHtml = card.rows.map((r) => {
+    const parts = [['oral', 'ORAL', r.oralMax], ['written', 'WRITTEN', r.writtenMax]].filter(([, , m]) => m > 0)
+    const n = parts.length
+    return parts.map(([k, label, max], i) => {
+      const first = i === 0
+      return `<tr>${first ? `<td class="l sub" rowspan="${n}">${esc(r.subject)}</td>` : ''}${shown.map((t) => {
+        const cell = r.byTerm[t.key]; const v = cell?.comps?.[k]
+        const paperCells = `<td>${label}</td><td>${max}</td><td><b>${cellVal(v)}</b></td>`
+        return first ? paperCells + `<td rowspan="${n}">${cell?.max || dash}</td><td rowspan="${n}"><b>${cell?.complete ? cell.obtained : dash}</b></td><td rowspan="${n}">${cell?.complete ? esc(cell.grade) : dash}</td>` : paperCells
+      }).join('')}${both && first ? `<td rowspan="${n}">${r.total.max || dash}</td><td rowspan="${n}"><b>${r.total.max ? r.total.obtained : dash}</b></td><td rowspan="${n}">${r.total.grade ? esc(r.total.grade) : dash}</td>` : ''}</tr>`
+    }).join('')
+  }).join('')
+  const ov = card.overall
+  const agg = `<tr class="tot"><td class="l">AGGREGATE MARKS</td>${shown.map((t) => { const o = ov.byTerm?.[t.key]; return `<td colspan="6">${o ? `${o.obtained}/${o.max}, PER : ${o.pct.toFixed(2)} %` : dash}</td>` }).join('')}${both ? `<td colspan="3">${ov.max ? `${ov.obtained}/${ov.max}, ${ov.pct.toFixed(2)} %` : dash}</td>` : ''}</tr>`
+  const a = card.attendance
+  const attRow = a ? `<tr class="tot"><td class="l">ATTENDANCE</td>${shown.map((t) => { const x = a.byTerm?.[t.key]; return `<td colspan="6">${x ? `${x.present} / ${x.marked}, ${(100 * x.present / (x.marked || 1)).toFixed(2)} %` : dash}</td>` }).join('')}${both ? `<td colspan="3">${a.sessionTotal ? `${a.sessionTotal.present} / ${a.sessionTotal.marked}, ${(100 * a.sessionTotal.present / (a.sessionTotal.marked || 1)).toFixed(2)} %` : dash}</td>` : ''}</tr>` : ''
+  const banner = `<div class="sec" style="background:#111;color:#fff;text-align:center;font-weight:700;font-size:12px;padding:5px 8px;letter-spacing:.04em">TOTAL MARKS : ${ov.max ? `${ov.obtained}/${ov.max}` : dash}, PER : ${ov.pct != null ? ov.pct.toFixed(2) + '%' : dash}, RANK : ${card.rank ?? dash} , OVERALL GRADE : ${ov.grade ? esc(ov.grade) : dash}</div>`
+  const extra = [['Weight', card.session?.weightKg ? `${card.session.weightKg} K.G.` : null], ['Height', card.session?.heightCm ? `${card.session.heightCm} C.M.` : null]]
+  return `<div class="page">${stamp(card)}${header(card, `PROGRESS REPORT CARD ( SESSION : ${esc(card.sessionCode)} )${card.interim ? ' · ' + esc(shown[0].label) : ''}`)}${infoBlock(card, extra)}
+  <table><thead>${head1}${head2}</thead><tbody>${rowsHtml}${agg}${attRow}</tbody></table>
+  ${banner}
+  <div class="two">${gradeTable('CO - CURRICULAR ACTIVITIES', card.coScholastic, terms, card.showTerms)}<div class="sec"><h4>GRADING</h4>${gradeLegend(card)}</div></div>
+  ${remarkBlock(card)}
+  ${footer(card)}</div>`
 }
 
 // ── shared chrome ───────────────────────────────────────────────────────────

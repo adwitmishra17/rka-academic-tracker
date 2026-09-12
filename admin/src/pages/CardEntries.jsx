@@ -93,7 +93,7 @@ export default function CardEntries({ embedded = false, ctx = null }) {
             studentId: s.id, roll: s.roll_number || '', name: s.full_name, section: s.section || '',
             grades: Object.fromEntries((a || []).map(ar => [ar.id, g[ar.id] || ''])),
             discipline: m.discipline || '', remarks: m.remarks || '',
-            achievement: m.achievement || '', heightCm: m.heightCm ?? '', weightKg: m.weightKg ?? '',
+            achievement: m.achievement || '', heightCm: m.heightCm ?? '', weightKg: m.weightKg ?? '', promotedTo: m.promotedTo || '',
           }
         }))
         setLoading(false)
@@ -115,7 +115,7 @@ export default function CardEntries({ embedded = false, ctx = null }) {
       const meta = dirtyRows.map(r => ({
         studentId: r.studentId,
         discipline: r.discipline || null, remarks: r.remarks || null,
-        achievement: r.achievement || null, heightCm: r.heightCm, weightKg: r.weightKg,
+        achievement: r.achievement || null, heightCm: r.heightCm, weightKg: r.weightKg, promotedTo: r.promotedTo || null,
       }))
       const { saved } = await cardEntriesApi.save(sessionCode, termId, grades, meta)
       setDirty(new Set())
@@ -197,6 +197,7 @@ export default function CardEntries({ embedded = false, ctx = null }) {
                   <th style={{ padding: '9px 6px', fontSize: 10.5, fontWeight: 600, color: 'var(--text-muted)', textAlign: 'left', minWidth: 140 }}>Achievement</th>
                   <th style={{ padding: '9px 6px', fontSize: 10.5, fontWeight: 600, color: 'var(--text-muted)', textAlign: 'center' }}>Ht (cm)</th>
                   <th style={{ padding: '9px 6px', fontSize: 10.5, fontWeight: 600, color: 'var(--text-muted)', textAlign: 'center' }}>Wt (kg)</th>
+                  <th style={{ padding: '9px 6px', fontSize: 10.5, fontWeight: 600, color: 'var(--text-muted)', textAlign: 'left' }}>Promoted to</th>
                 </tr>
               </thead>
               <tbody>
@@ -229,6 +230,9 @@ export default function CardEntries({ embedded = false, ctx = null }) {
                     </td>
                     <td style={{ padding: '4px 6px', textAlign: 'center' }}>
                       <input type="number" value={r.weightKg} onChange={e => upd(r.studentId, { weightKg: e.target.value })} style={{ ...inp, width: 62, textAlign: 'center' }} />
+                    </td>
+                    <td style={{ padding: '4px 6px' }}>
+                      <input value={r.promotedTo} onChange={e => upd(r.studentId, { promotedTo: e.target.value })} placeholder="e.g. VII" style={{ ...inp, width: 90 }} title="Prints on the final card" />
                     </td>
                   </tr>
                 ))}

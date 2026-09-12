@@ -133,6 +133,24 @@ export function planCard(def, family) {
       components: comps,
     }
   }
+  if (family === 'pre_primary') {
+    // Nursery / KG "Progress Report Card": Half Yearly + Annual, each subject = ORAL /40 + WRITTEN /60
+    // (a row may be written-only /100). Rank + overall grade; co-curricular A–E per term.
+    const terms = (d.terms?.length ? d.terms : [{ key: 'HY', label: 'HALF YEARLY EXAM' }, { key: 'AN', label: 'ANNUAL EXAM' }]).map((t) => ({ key: t.key, label: t.label, examTerm: t.examTerm || t.key }))
+    const comps = [
+      { key: 'oral',    label: 'Oral',    kind: 'exam', perRow: 'oral',    termMap: Object.fromEntries(terms.map((t) => [t.key, t.examTerm])) },
+      { key: 'written', label: 'Written', kind: 'exam', perRow: 'written', termMap: Object.fromEntries(terms.map((t) => [t.key, t.examTerm])) },
+    ]
+    return {
+      family, rounding, subjectTotal: d.subjectTotal || 100,
+      cardTerms: terms,
+      cardKeys: [
+        { key: terms[0].key, label: `${titleCase(terms[0].label)} card`, showTerms: [terms[0].key], gateTerms: [terms[0].key], interim: true },
+        { key: terms[1]?.key || 'AN', label: 'Final card', showTerms: terms.map((t) => t.key), gateTerms: terms.map((t) => t.key) },
+      ],
+      components: comps,
+    }
+  }
   if (family === 'senior_progress') {
     const terms = (d.terms?.length ? d.terms : [{ key: 'HY', label: 'HALF YEARLY' }, { key: 'AN', label: 'ANNUAL' }]).map((t) => ({ key: t.key, label: t.label }))
     const comps = [{ key: 'exam', label: 'Exam', kind: 'exam', split: true, termMap: Object.fromEntries(terms.map((t) => [t.key, t.examTerm || t.key])) }]
@@ -177,7 +195,7 @@ export function resolveRows(def, family, className, subjects, student) {
   if (rows?.length) {
     return rows.map((r) => {
       const ids = resolveRowSubjects(r, scholastic, { composite: isComposite })
-      return { subject: r.subject, locCode: r.locCode || null, sources: ids, subjectIds: ids.map((s) => s.id), written: r.written != null ? Number(r.written) : null, practical: r.practical != null ? Number(r.practical) : 0, additional: !!r.additional, countsInAggregate: r.countsInAggregate !== false }
+      return { subject: r.subject, locCode: r.locCode || null, sources: ids, subjectIds: ids.map((s) => s.id), written: r.written != null ? Number(r.written) : null, practical: r.practical != null ? Number(r.practical) : 0, oral: r.oral != null ? Number(r.oral) : (family === 'pre_primary' ? 40 : null), additional: !!r.additional, countsInAggregate: r.countsInAggregate !== false }
     })
   }
   // No template rows → every scholastic subject, one row each (legacy behaviour)
@@ -202,6 +220,11 @@ export function generatePaperSpecs(plan, rows, termsByCode) {
         }
         for (const [cardTerm, examCode] of Object.entries(c.termMap || {})) {
           const term = termsByCode[examCode]; if (!term) continue
+          if (c.perRow) {
+            const max = Number(row[c.perRow] ?? 0)
+            if (max > 0) push({ subjectId: subj.id, termId: term.id, termCode: examCode, componentKey: c.key, paperName: c.label, maxMarks: max, cardMax: max, hasPractical: false })
+            continue
+          }
           if (c.key === 'exam' && (plan.family === 'secondary_annual' || plan.family === 'senior_progress')) {
             const th = Number(row.written ?? c.max), pr = Number(row.practical || 0)
             const total = th + pr
@@ -275,7 +298,7 @@ export function computeCard(p) {
 
   const gateTerms = new Set(cardKey.gateTerms)
   const outRows = rows.map((row) => {
-    const r = { subject: row.subject, locCode: row.locCode, additional: !!row.additional, countsInAggregate: row.countsInAggregate !== false, unmapped: row.sources.length === 0, byTerm: {}, total: { obtained: 0, max: 0, pct: null, grade: null } }
+    const r = { subject: row.subject, locCode: row.locCode, additional: !!row.additional, countsInAggregate: row.countsInAggregate !== false, unmapped: row.sources.length === 0, oralMax: row.oral ?? null, writtenMax: row.written ?? null, byTerm: {}, total: { obtained: 0, max: 0, pct: null, grade: null } }
     if (r.unmapped) { missing.push({ row: row.subject, reason: 'no subject mapped for this row' }); return r }
     let cumO = 0, cumM = 0
     for (const ct of plan.cardTerms) {
@@ -299,9 +322,15 @@ export function computeCard(p) {
         } else {
           const examCode = c.termMap?.[ct.key]
           if (!examCode) continue
-          // Senior/secondary exam papers: card max is the row's own scheme
-          const cardMax = c.key === 'exam' && (plan.family !== 'performance_profile') ? (Number(row.written ?? c.max) + Number(row.practical || 0)) : c.max
-          v = cellFor(row, examCode, c.key === 'exam' && c.paperKey ? c.paperKey : c.key, cardMax, c.rawMax)
+          if (c.perRow) {
+            const rowMax = Number(row[c.perRow] ?? 0)
+            if (!(rowMax > 0)) continue // this row has no such paper (e.g. written-only)
+            v = cellFor(row, examCode, c.key, rowMax, rowMax)
+          } else {
+            // Senior/secondary exam papers: card max is the row's own scheme
+            const cardMax = c.key === 'exam' && (plan.family !== 'performance_profile') ? (Number(row.written ?? c.max) + Number(row.practical || 0)) : c.max
+            v = cellFor(row, examCode, c.key === 'exam' && c.paperKey ? c.paperKey : c.key, cardMax, c.rawMax)
+          }
         }
         cell.comps[c.key] = v
         cell.max += v.max ?? (c.max || 0)

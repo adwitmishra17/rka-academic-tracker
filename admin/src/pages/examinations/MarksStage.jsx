@@ -12,7 +12,7 @@ import StatusStage from './StatusStage.jsx'
 
 const isAB = (v) => ['AB', 'A'].includes(String(v ?? '').trim().toUpperCase())
 const numOrNull = (v) => (v === '' || v == null || isAB(v) ? null : Number(v))
-const COMP = { pt: 'PT', portfolio: 'Portfolio', se: 'Sub. Enr.', notebook: 'Notebook', exam: 'Exam' }
+const COMP = { pt: 'PT', portfolio: 'Portfolio', se: 'Sub. Enr.', notebook: 'Notebook', exam: 'Exam', oral: 'Oral', written: 'Written' }
 
 export default function MarksStage(props) {
   const [tab, setTab] = useState('grid')

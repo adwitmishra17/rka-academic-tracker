@@ -540,7 +540,7 @@ export function registerExamRoutes(app, { supabase, admin, verifyAuth, branchIdF
       const [b, students] = await Promise.all([loadBundle(bid, sessionCode, className), roster(bid, className, section || undefined)])
       const subjects = b.subjects.filter((x) => (x.kind || 'scholastic') === 'scholastic')
       const subjOrder = new Map(subjects.map((x, i) => [x.id, i]))
-      const ORDER = ['pt', 'portfolio', 'se', 'notebook', 'exam']
+      const ORDER = ['oral', 'written', 'pt', 'portfolio', 'se', 'notebook', 'exam']
       const papers = b.papers.filter((p) => p.term_id === termId && p.component_key && subjOrder.has(p.subject_id))
         .sort((a, c) => (subjOrder.get(a.subject_id) - subjOrder.get(c.subject_id)) || ((ORDER.indexOf(a.component_key) + 1 || 99) - (ORDER.indexOf(c.component_key) + 1 || 99)))
       const sids = students.map((x) => x.id)
