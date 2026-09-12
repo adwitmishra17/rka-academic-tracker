@@ -414,7 +414,7 @@ export function computeCard(p) {
   return {
     v: 2, family: p.family, templateName: p.templateName || null, title: p.def?.title || 'REPORT CARD',
     cardKey: cardKey.key, cardLabel: cardKey.label, showTerms: cardKey.showTerms, interim: !!cardKey.interim,
-    sessionCode: p.sessionCode, className: p.className,
+    sessionCode: p.sessionCode, className: p.className, classTeacher: p.classTeacher || null,
     student: publicStudent(p.student),
     plan: { cardTerms: plan.cardTerms, components: plan.components.map(({ key, label, max, ia, split, parts }) => ({ key, label, max, ia: !!ia, split: !!split, parts })), subjectTotal: plan.subjectTotal, iaTotal: plan.iaTotal || null },
     rows: outRows, overall,
@@ -424,7 +424,7 @@ export function computeCard(p) {
     scales: { coScholastic: p.def?.coScholastic?.scale || ['A', 'B', 'C'], graded: p.def?.gradedSubjects?.scale || ['A'], discipline: p.def?.discipline?.scale || ['A', 'B', 'C'], gradeScale: { bands: scale?.bands || DEFAULT_BANDS, floorLabel: scale?.floorLabel || 'E' } },
     footer: p.def?.footer || {}, legend: p.def?.legend || null,
     completeness: { ok: missing.length === 0, missing, warnings },
-    rank: null, sectionHighest: null, // filled by the class pass
+    rank: null, sectionStrength: null, sectionHighest: null, sectionAverage: null, sectionAverageByTerm: null, // filled by the class pass
     computedAt: new Date().toISOString(),
   }
 }
@@ -449,9 +449,17 @@ export function applyClassStats(cards) {
     const sorted = [...list].sort((a, b) => b.overall.pct - a.overall.pct)
     let last = null, rank = 0
     sorted.forEach((c, i) => { if (last == null || c.overall.pct < last - 1e-9) { rank = i + 1; last = c.overall.pct } c.rank = rank; c.sectionStrength = list.length })
-    const highest = {}
-    for (const c of list) for (const r of c.rows) { if (r.unmapped) continue; const cur = highest[r.subject] ?? -1; if (r.total.max > 0 && r.total.obtained > cur) highest[r.subject] = r.total.obtained }
-    for (const c of list) c.sectionHighest = highest
+    const highest = {}, sums = {}, counts = {}
+    const byTermSum = {}, byTermCount = {}
+    for (const c of list) for (const r of c.rows) {
+      if (r.unmapped || !(r.total.max > 0)) continue
+      const cur = highest[r.subject] ?? -1; if (r.total.obtained > cur) highest[r.subject] = r.total.obtained
+      sums[r.subject] = (sums[r.subject] || 0) + r.total.obtained; counts[r.subject] = (counts[r.subject] || 0) + 1
+      for (const [k, cell] of Object.entries(r.byTerm)) { if (cell.hidden || !cell.complete) continue; const key = `${r.subject}|${k}`; byTermSum[key] = (byTermSum[key] || 0) + cell.obtained; byTermCount[key] = (byTermCount[key] || 0) + 1 }
+    }
+    const average = {}; for (const s of Object.keys(sums)) average[s] = Math.round(10 * sums[s] / counts[s]) / 10
+    const averageByTerm = {}; for (const key of Object.keys(byTermSum)) averageByTerm[key] = Math.round(10 * byTermSum[key] / byTermCount[key]) / 10
+    for (const c of list) { c.sectionHighest = highest; c.sectionAverage = average; c.sectionAverageByTerm = averageByTerm }
   }
   return cards
 }

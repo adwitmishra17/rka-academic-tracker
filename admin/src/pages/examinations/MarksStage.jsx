@@ -18,6 +18,7 @@ const COMP = { pt: 'PT', portfolio: 'Portfolio', se: 'Sub. Enr.', notebook: 'Not
 function sheetHead(groups) { return groups.flatMap((g) => g.papers.map((p) => `${g.subject.name} · ${COMP[p.componentKey] || p.name} /${p.hasPractical ? `${p.theoryMax}+${p.practicalMax}` : p.max}`)) }
 function sheetRows(data, groups, vals, withMarks) {
   return data.students.map((s) => [s.roll || '', s.name, s.admissionNo || '', ...groups.flatMap((g) => g.papers.map((p) => {
+    if (data.applicable && !(data.applicable[s.id] || []).includes(p.subjectId)) return 'n/a'
     if (!withMarks) return ''
     const c = vals[`${s.id}|${p.id}`] || {}
     return p.hasPractical ? [c.th, c.pr].filter((x) => x !== '' && x != null).join(' + ') : (c.v ?? '')
@@ -205,6 +206,9 @@ function ClassGrid({ branch, sessionCode, className, config }) {
                         const k = `${s.id}|${p.id}`; const c = vals[k] || { v: '', th: '', pr: '' }
                         const isDirty = dirty.has(k); const ci = colIdx++
                         const bg = isDirty ? 'var(--gold-light)' : 'transparent'
+                        if (data.applicable && !(data.applicable[s.id] || []).includes(p.subjectId)) {
+                          return <td key={p.id} style={{ ...td, padding: 3, textAlign: 'center', borderLeft: i === 0 ? '1px solid var(--gray-100)' : 'none', color: 'var(--gray-400)', fontSize: 11 }} title="Not this student's subject (set in SMS: optional subject / science path)">n/a</td>
+                        }
                         return (
                           <td key={p.id} style={{ ...td, padding: 3, textAlign: 'center', borderLeft: i === 0 ? '1px solid var(--gray-100)' : 'none', background: bg }} title={c.src ? `entered by ${c.src === 'manual' ? 'office' : 'teacher'}` : ''}>
                             {p.hasPractical ? (
@@ -228,6 +232,7 @@ function ClassGrid({ branch, sessionCode, className, config }) {
         )
       )}
       {data?.hiddenSubjects?.length > 0 && <div style={{ fontSize: 11.5, color: 'var(--text-muted)' }}>Not on the card, so not entered here: {data.hiddenSubjects.join(', ')}.</div>}
+      {data?.applicable && <div style={{ fontSize: 11.5, color: 'var(--text-muted)' }}>Cells marked <b>n/a</b> are subjects that student does not take — the optional subject and PCM / PCB path come from the student's SMS record.</div>}
       {data && papers.length > 0 && (
         <div style={{ fontSize: 11.5, color: 'var(--text-muted)' }}>
           Type the raw marks as on the answer sheet (the card scales them). <b>AB</b> = absent for that paper. Enter or ↓ moves down the column. Changed cells turn gold until saved. {data.students.length} students · {papers.length} papers.

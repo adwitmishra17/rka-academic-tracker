@@ -12,7 +12,7 @@ import { examApi, cardEntriesApi, reportTemplateApi } from '../lib/api'
    · graded subjects (Art & Activity, Conversation — A scale)
    · discipline (per term)
    · class-teacher remarks (per term)
-   · achievement / height / weight (session-level)
+   · height / weight / promoted-to (session-level)
 
    Grades land in exam_coscholastic_grades (source='manual');
    the rest in report_card_student_meta. Scales come from the
@@ -93,7 +93,7 @@ export default function CardEntries({ embedded = false, ctx = null }) {
             studentId: s.id, roll: s.roll_number || '', name: s.full_name, section: s.section || '',
             grades: Object.fromEntries((a || []).map(ar => [ar.id, g[ar.id] || ''])),
             discipline: m.discipline || '', remarks: m.remarks || '',
-            achievement: m.achievement || '', heightCm: m.heightCm ?? '', weightKg: m.weightKg ?? '', promotedTo: m.promotedTo || '',
+            heightCm: m.heightCm ?? '', weightKg: m.weightKg ?? '', promotedTo: m.promotedTo || '',
           }
         }))
         setLoading(false)
@@ -115,7 +115,7 @@ export default function CardEntries({ embedded = false, ctx = null }) {
       const meta = dirtyRows.map(r => ({
         studentId: r.studentId,
         discipline: r.discipline || null, remarks: r.remarks || null,
-        achievement: r.achievement || null, heightCm: r.heightCm, weightKg: r.weightKg, promotedTo: r.promotedTo || null,
+        heightCm: r.heightCm, weightKg: r.weightKg, promotedTo: r.promotedTo || null,
       }))
       const { saved } = await cardEntriesApi.save(sessionCode, termId, grades, meta)
       setDirty(new Set())
@@ -139,7 +139,7 @@ export default function CardEntries({ embedded = false, ctx = null }) {
     <div style={{ padding: embedded ? '16px 20px' : '24px 28px', maxWidth: 1200 }}>
       {!embedded && <div className="fade-in" style={{ marginBottom: 20 }}>
         <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 24, fontWeight: 600, color: 'var(--green-dark)', marginBottom: 3 }}>Card Entries</h1>
-        <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>Co-scholastic grades, discipline, remarks, achievement, height &amp; weight — everything on the card that isn't subject marks.</p>
+        <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>Co-scholastic grades, discipline, remarks, height &amp; weight, promotion — everything on the card that isn't subject marks.</p>
         <div style={{ width: 40, height: 2, background: 'linear-gradient(90deg, var(--gold), transparent)', marginTop: 8, borderRadius: 1 }} />
       </div>}
 
@@ -194,7 +194,6 @@ export default function CardEntries({ embedded = false, ctx = null }) {
                   {coshAreas.map(a => <th key={a.id} style={{ padding: '9px 6px', fontSize: 10.5, fontWeight: 600, color: 'var(--text-muted)', textAlign: 'center' }}>{a.subject_name}</th>)}
                   <th style={{ padding: '9px 6px', fontSize: 10.5, fontWeight: 600, color: 'var(--text-muted)', textAlign: 'center' }}>Discipline</th>
                   <th style={{ padding: '9px 6px', fontSize: 10.5, fontWeight: 600, color: 'var(--text-muted)', textAlign: 'left', minWidth: 200 }}>Remarks (term)</th>
-                  <th style={{ padding: '9px 6px', fontSize: 10.5, fontWeight: 600, color: 'var(--text-muted)', textAlign: 'left', minWidth: 140 }}>Achievement</th>
                   <th style={{ padding: '9px 6px', fontSize: 10.5, fontWeight: 600, color: 'var(--text-muted)', textAlign: 'center' }}>Ht (cm)</th>
                   <th style={{ padding: '9px 6px', fontSize: 10.5, fontWeight: 600, color: 'var(--text-muted)', textAlign: 'center' }}>Wt (kg)</th>
                   <th style={{ padding: '9px 6px', fontSize: 10.5, fontWeight: 600, color: 'var(--text-muted)', textAlign: 'left' }}>Promoted to</th>
@@ -222,9 +221,6 @@ export default function CardEntries({ embedded = false, ctx = null }) {
                     <td style={{ padding: '4px 6px' }}>
                       <input value={r.remarks} onChange={e => upd(r.studentId, { remarks: e.target.value })} placeholder="—" style={{ ...inp, width: '100%', minWidth: 190 }} />
                     </td>
-                    <td style={{ padding: '4px 6px' }}>
-                      <input value={r.achievement} onChange={e => upd(r.studentId, { achievement: e.target.value })} placeholder="—" style={{ ...inp, width: '100%', minWidth: 130 }} />
-                    </td>
                     <td style={{ padding: '4px 6px', textAlign: 'center' }}>
                       <input type="number" value={r.heightCm} onChange={e => upd(r.studentId, { heightCm: e.target.value })} style={{ ...inp, width: 62, textAlign: 'center' }} />
                     </td>
@@ -245,7 +241,7 @@ export default function CardEntries({ embedded = false, ctx = null }) {
               {saving ? 'Saving…' : `Save ${dirty.size} student${dirty.size === 1 ? '' : 's'}`}
             </button>
             <span style={{ fontSize: 11.5, color: 'var(--text-muted)' }}>
-              Grades &amp; discipline are per <b>term</b> · achievement / height / weight are per <b>session</b> · scales come from the class's card template
+              Grades &amp; discipline are per <b>term</b> · height / weight / promotion are per <b>session</b> · scales come from the class's card template
             </span>
           </div>
         </>

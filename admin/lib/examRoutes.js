@@ -134,6 +134,20 @@ export function registerExamRoutes(app, { supabase, admin, verifyAuth, branchIdF
   function nextDay(d) { const x = new Date(d); x.setDate(x.getDate() + 1); return x.toISOString().slice(0, 10) }
 
   // Compute every student's card for a class (+ rank/section-highest)
+  /** Subjects that feed a row on the class's card. Senior rows resolve per student
+   *  (science_path drops Biology or Mathematics; optional_subject adds one), so the
+   *  class-wide set is the union over the roster and `applicable` says which
+   *  subjects each student actually takes (null for every other family). */
+  function cardSubjects(b, className, students) {
+    if (!b.template) return { onCard: null, applicable: null }
+    const def = b.template.definition, fam = b.template.family
+    if (fam === 'senior_progress' && students?.length) {
+      const onCard = new Set(), applicable = {}
+      for (const st of students) { const ids = resolveRows(def, fam, className, b.subjects, st).flatMap((r) => r.subjectIds); applicable[st.id] = ids; for (const id of ids) onCard.add(id) }
+      return { onCard, applicable }
+    }
+    return { onCard: new Set(resolveRows(def, fam, className, b.subjects, null).flatMap((r) => r.subjectIds)), applicable: null }
+  }
   async function computeClass({ branchId, branchCode, sessionCode, className, cardKey, section, studentIds }) {
     const b = await loadBundle(branchId, sessionCode, className)
     if (!b.template) throw Object.assign(new Error(`${className} has no report-card template bound (Setup stage)`), { status: 400 })
@@ -141,12 +155,14 @@ export function registerExamRoutes(app, { supabase, admin, verifyAuth, branchIdF
     if (studentIds?.length) students = students.filter((s) => studentIds.includes(s.id))
     const sids = students.map((s) => s.id)
     const paperIds = b.papers.map((p) => p.id)
-    const [marks, grades, meta, attendance] = await Promise.all([
+    const [marks, grades, meta, attendance, cts] = await Promise.all([
       paperIds.length && sids.length ? pagedAll(() => supabase.from('exam_marks').select('paper_id, student_id, marks_obtained, theory_obtained, practical_obtained, is_absent, source').in('paper_id', paperIds).in('student_id', sids)) : [],
       sids.length ? pagedAll(() => supabase.from('exam_coscholastic_grades').select('student_id, subject_id, term_id, grade, entered_at').in('student_id', sids).in('term_id', b.terms.map((t) => t.id))) : [],
       sids.length ? pagedAll(() => supabase.from('report_card_student_meta').select('student_id, term_id, discipline, remarks, achievement, height_cm, weight_kg, promoted_to, updated_at').eq('session_code', sessionCode).in('student_id', sids)) : [],
       attendanceFor(sids, sessionCode, b.terms),
+      classTeachers(branchCode).catch(() => ({})),
     ])
+    const classTeacher = cts?.[className]?.name || null
     const plan = planCard(b.template.definition, b.template.family)
     const by = (arr, k) => { const m = new Map(); for (const r of arr) { if (!m.has(r[k])) m.set(r[k], []); m.get(r[k]).push(r) } return m }
     const marksBy = by(marks, 'student_id'), gradesBy = by(grades, 'student_id'), metaBy = by(meta, 'student_id')
@@ -155,7 +171,7 @@ export function registerExamRoutes(app, { supabase, admin, verifyAuth, branchIdF
         def: b.template.definition, family: b.template.family, templateName: b.template.name, className, sessionCode, cardKey,
         student: st, subjects: b.subjects, terms: b.terms, papers: b.papers,
         marks: marksBy.get(st.id) || [], coGrades: gradesBy.get(st.id) || [], meta: metaBy.get(st.id) || [],
-        attendance: attendance[st.id] || null,
+        attendance: attendance[st.id] || null, classTeacher,
       })
     })
     applyClassStats(cards)
@@ -515,8 +531,8 @@ export function registerExamRoutes(app, { supabase, admin, verifyAuth, branchIdF
       let subjects = b.subjects.filter((x) => (x.kind || 'scholastic') === 'scholastic')
       // Only subjects that feed a row on the card are entered; the rest (timetable-only) are listed as hidden.
       let hidden = []
-      if (b.template) {
-        const onCard = new Set(resolveRows(b.template.definition, b.template.family, className, b.subjects, null).flatMap((r) => r.subjectIds))
+      const { onCard, applicable } = cardSubjects(b, className, students)
+      if (onCard) {
         hidden = subjects.filter((x) => !onCard.has(x.id)).map((x) => x.subject_name)
         subjects = subjects.filter((x) => onCard.has(x.id))
       }
@@ -529,6 +545,7 @@ export function registerExamRoutes(app, { supabase, admin, verifyAuth, branchIdF
       res.json({
         term: b.terms.find((t) => t.id === termId) || null,
         hiddenSubjects: hidden,
+        applicable, // senior classes only: studentId → subjectIds this student takes (others are not entered)
         subjects: subjects.map((x) => ({ id: x.id, name: x.subject_name, teacher: x.assigned_teacher_name || null })),
         papers: papers.map((p) => ({ id: p.id, subjectId: p.subject_id, componentKey: p.component_key, name: p.paper_name, max: Number(p.max_marks), cardMax: p.card_max != null ? Number(p.card_max) : null, hasPractical: !!p.has_practical, theoryMax: p.theory_max != null ? Number(p.theory_max) : null, practicalMax: p.practical_max != null ? Number(p.practical_max) : null })),
         students: students.map((x) => ({ id: x.id, name: x.full_name, roll: x.roll_number, section: x.section, admissionNo: x.admission_no })),
@@ -550,7 +567,8 @@ export function registerExamRoutes(app, { supabase, admin, verifyAuth, branchIdF
       const [b, students, cts, tlist] = await Promise.all([loadBundle(bid, sessionCode, className), roster(bid, className), classTeachers(branchCode), activeTeachers(null)])
       const tName = new Map(tlist.map((t) => [t.id, t.name]))
       const sids = new Set(students.map((s) => s.id))
-      const onCard = b.template ? new Set(resolveRows(b.template.definition, b.template.family, className, b.subjects, null).flatMap((r) => r.subjectIds)) : null
+      const { onCard, applicable } = cardSubjects(b, className, students)
+      const expectedFor = (subjectId) => (applicable ? students.filter((st) => applicable[st.id]?.includes(subjectId)).length : students.length)
       const typedPapers = b.papers.filter((p) => p.component_key && (!onCard || onCard.has(p.subject_id)))
       const marks = typedPapers.length ? await pagedAll(() => supabase.from('exam_marks').select('paper_id, student_id, is_absent, source, entered_at, updated_at').in('paper_id', typedPapers.map((p) => p.id))) : []
       const agg = new Map()
@@ -566,7 +584,8 @@ export function registerExamRoutes(app, { supabase, admin, verifyAuth, branchIdF
         subjectId: s.id, subjectName: s.subject_name, teacher: s.assigned_teacher_name || tName.get(s.assigned_teacher_id) || s.assigned_teacher_email || null, teacherEmail: s.assigned_teacher_email || null,
         papers: typedPapers.filter((p) => p.subject_id === s.id).sort((a, c) => (termName[a.term_id]?.sort_order || 0) - (termName[c.term_id]?.sort_order || 0)).map((p) => {
           const a = agg.get(p.id) || { entered: 0, absent: 0, manual: 0, lastAt: null }
-          return { id: p.id, termId: p.term_id, termCode: termName[p.term_id]?.short_code, termName: termName[p.term_id]?.name, componentKey: p.component_key, paperName: p.paper_name, maxMarks: Number(p.max_marks), cardMax: p.card_max != null ? Number(p.card_max) : null, examDate: p.exam_date, ...a, roster: students.length, state: a.entered === 0 ? 'empty' : a.entered < students.length ? 'partial' : 'done' }
+          const expected = expectedFor(p.subject_id)
+          return { id: p.id, termId: p.term_id, termCode: termName[p.term_id]?.short_code, termName: termName[p.term_id]?.name, componentKey: p.component_key, paperName: p.paper_name, maxMarks: Number(p.max_marks), cardMax: p.card_max != null ? Number(p.card_max) : null, examDate: p.exam_date, ...a, roster: expected, state: a.entered === 0 ? 'empty' : a.entered < expected ? 'partial' : 'done' }
         }),
       }))
       // card entries completeness per exam term

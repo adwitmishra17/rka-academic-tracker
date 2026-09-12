@@ -1,258 +1,362 @@
 // ============================================================================
-// admin/lib/cardRender.js — engine card → self-contained A4 HTML string.
+// admin/lib/cardRender.js — engine card → self-contained A4 HTML ("Passport").
 //
-// The SAME string is: previewed in the Examinations window, frozen into
-// published_report_cards.html at publish time, printed from SMS, and shown
-// in the parent app. Only the crest + wordmark load from this app's public
-// folder; everything else is inline.
+// The SAME string is previewed in the Examinations window, frozen into
+// published_report_cards.html at publish time, printed from SMS and shown in
+// the parent app. Look: cream paper, near-black ink, one maroon accent; Lora
+// for names/headings, JetBrains Mono for record numbers, Inter for the rest.
+// One page layout for every family; only the marks table changes shape.
+// Interim (single-term) cards carry section average/highest; final cards
+// carry both terms side by side and the session total.
 // ============================================================================
 
-// Header assets are referenced by URL (public/ files served by this app with
-// no auth) so a stored card stays ~15 KB instead of carrying 90 KB of base64
-// per student. Override the host with CARD_ASSET_BASE for staging.
-// Read lazily: ES imports are hoisted above server.js's dotenv.config(), so a
-// module-level read would miss a .env.local override in local dev.
+// Only the crest loads by URL (public/ file, no auth). Read lazily: imports are
+// hoisted above server.js's dotenv.config(), so a module-level read would miss
+// a .env.local override in local dev.
 const assetBase = () => (process.env.CARD_ASSET_BASE || 'https://tracker.rkacademyballia.in').replace(/\/$/, '')
+const AFFILIATION = '2133183', SCHOOL_CODE = '71447'
+const ADDRESS = 'Affiliated to CBSE, New Delhi · Ballia, Uttar Pradesh'
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]))
 const dash = '—'
 const fmt = (v) => (v == null ? dash : String(v))
+const pct1 = (v) => (v == null ? dash : `${Number(v).toFixed(1)}%`)
 const cellVal = (c) => (!c || c.hidden ? '' : c.missing ? dash : c.absent ? 'AB' : fmt(c.value))
+const title = (s) => String(s || '').toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase()).replace(/\bAnd\b/g, '&').replace(/\bLng\b/, 'Lng').replace(/\bGk\b/, 'GK').replace(/\bLit\b/, 'Lit.').replace(/\bEvs\b/, 'EVS').replace(/\bIt\b/, 'IT').replace(/\bIp\b/, 'IP')
+const dmy = (d) => { try { const x = new Date(d); return isNaN(x) ? String(d) : `${String(x.getDate()).padStart(2, '0')}-${String(x.getMonth() + 1).padStart(2, '0')}-${x.getFullYear()}` } catch { return String(d) } }
+const grey = (s) => `<td class="dim">${s}</td>`
 
 const CSS = `
+  @import url('https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,600;0,700;1,400&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap');
   *{box-sizing:border-box}
-  body{margin:0;background:#f4f4f5;font-family:Georgia,"Times New Roman",serif;color:#111}
-  .page{width:210mm;min-height:297mm;margin:0 auto;background:#fff;padding:12mm 12mm 10mm;position:relative}
-  .hdr{display:flex;align-items:center;gap:10px;border-bottom:2.5px solid #1a4a2e;padding-bottom:8px;margin-bottom:8px}
-  .hdr img.crest{width:58px;height:58px;object-fit:contain}
-  .hdr .mid{flex:1;text-align:center}
-  .hdr img.banner{max-width:300px;width:100%;height:auto;display:block;margin:0 auto}
-  .hdr .branch{font-size:10.5px;color:#444;margin-top:2px}
-  .hdr .aff{font-size:9.5px;color:#666;letter-spacing:.06em}
-  .title{text-align:center;font-weight:700;font-size:15px;letter-spacing:.12em;margin:6px 0 2px;color:#1a4a2e}
-  .sub{text-align:center;font-size:11px;color:#333;margin-bottom:8px}
-  .info{display:grid;grid-template-columns:1fr 1fr 1fr;gap:3px 14px;font-size:11px;margin-bottom:8px}
-  .info b{font-weight:600;color:#000}
-  .info span{color:#555}
+  html{color-scheme:light}
+  body{margin:0;background:#e9e7e0;font-family:Inter,system-ui,-apple-system,"Segoe UI",sans-serif;color:#1A1A1A;font-variant-numeric:tabular-nums;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .page{width:210mm;height:297mm;margin:0 auto;background:#FAF7F0;color:#1A1A1A;position:relative;padding:10mm 12mm 8mm;display:flex;flex-direction:column;gap:6px;overflow:hidden}
+  .hd{display:flex;align-items:center;gap:12px;border-bottom:1px solid #D8D2C2;padding-bottom:7px}
+  .hd img.crest{width:48px;height:48px;object-fit:contain;flex-shrink:0}
+  .school b{display:block;font-family:Lora,Georgia,serif;font-size:20px;letter-spacing:.06em;line-height:1.1}
+  .school span{font-size:10px;color:#8C8579}
+  .meta{margin-left:auto;text-align:right;font-family:"JetBrains Mono",ui-monospace,monospace;font-size:8px;color:#8C8579;line-height:1.6;white-space:nowrap}
+  .meta b{color:#7B1F2B;font-size:10.5px}
+  .title{display:flex;align-items:baseline;justify-content:space-between;padding:1px 0}
+  .title h2{margin:0;font-family:Lora,Georgia,serif;font-size:20px;letter-spacing:.28em;font-weight:600}
+  .title span{font-family:"JetBrains Mono",ui-monospace,monospace;font-size:9px;color:#8C8579;letter-spacing:.1em}
+  .strip{display:grid;grid-template-columns:1fr;gap:12px;border:1px solid #D8D2C2;padding:7px 9px}
+  .strip.hasphoto{grid-template-columns:26mm 1fr}
+  .photo{width:26mm;height:30mm;background:#E8E4D8;object-fit:cover;display:block}
+  .cells{display:grid;grid-template-columns:repeat(3,1fr);gap:5px 12px;align-content:center}
+  .cell small{display:block;font-size:7.5px;letter-spacing:.12em;text-transform:uppercase;color:#8C8579}
+  .cell b{font-size:11px;font-weight:600}
+  .cell b.mono{font-family:"JetBrains Mono",ui-monospace,monospace;font-weight:500}
+  .cell b.name{font-family:Lora,Georgia,serif;font-size:14px}
+  .metrics{display:grid;grid-template-columns:repeat(6,1fr);border:1px solid #D8D2C2}
+  .metrics div{padding:5px 6px;border-right:1px solid #D8D2C2;text-align:center}
+  .metrics div:last-child{border-right:0}
+  .metrics .v{font-family:Lora,Georgia,serif;font-size:17px;font-weight:600;line-height:1.15}
+  .metrics .v.red{color:#7B1F2B}
+  .metrics .k{font-size:7.5px;letter-spacing:.12em;text-transform:uppercase;color:#8C8579}
   table{width:100%;border-collapse:collapse;font-size:10.5px}
-  th,td{border:1px solid #444;padding:3px 4px;text-align:center;vertical-align:middle}
-  th{background:#eef4ef;font-weight:700;font-size:9.5px;letter-spacing:.02em}
-  td.l,th.l{text-align:left}
-  td.sub{font-weight:600;text-transform:uppercase}
-  tr.tot td{font-weight:700;background:#f7f7f2}
-  .sec{margin-top:8px}
-  .sec h4{margin:0 0 3px;font-size:11px;letter-spacing:.08em;color:#1a4a2e}
-  .two{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-  .remark{border:1px solid #444;padding:5px 7px;min-height:38px;font-size:11px;line-height:1.5}
-  .foot{display:flex;justify-content:space-between;margin-top:22px;font-size:10.5px}
-  .foot div{border-top:1px solid #333;padding-top:3px;width:150px;text-align:center}
-  .legend{font-size:9px;color:#444;margin-top:5px}
-  .result{margin-top:6px;font-size:11.5px}
-  .fail{color:#b00020;font-weight:700}
-  .stamp{position:absolute;right:12mm;top:12mm;font-size:8.5px;color:#888;text-align:right}
-  @media print{body{background:#fff}.page{margin:0;width:auto;min-height:auto;page-break-after:always}@page{size:A4 portrait;margin:0}}
+  th{font-size:7.5px;letter-spacing:.08em;text-transform:uppercase;color:#8C8579;text-align:center;padding:4px 3px;border-bottom:1px solid #1A1A1A;line-height:1.3;font-weight:600;vertical-align:bottom}
+  th.l,td.l{text-align:left}
+  th.band{border-bottom:1px solid #D8D2C2;color:#1A1A1A;letter-spacing:.14em;padding-bottom:2px}
+  th.sep,td.sep{border-left:1px solid #D8D2C2}
+  td{padding:5.5px 3px;text-align:center;border-bottom:1px solid #D8D2C2;color:#1A1A1A}
+  tbody tr:nth-child(even) td{background:rgba(123,31,43,.035)}
+  td.sub{font-weight:600;font-size:11px}
+  td.sub small{display:block;font-weight:400;font-size:8.5px;color:#8C8579}
+  td.t{font-weight:700}
+  td.g{color:#7B1F2B;font-weight:700}
+  td.dim{color:#8C8579}
+  td.fail{color:#7B1F2B;font-weight:700}
+  td small.mm{color:#B5AE9E;font-size:8px}
+  table.dense{font-size:9.5px}
+  table.dense td{padding:4.5px 2px}
+  table.dense th{letter-spacing:.04em;padding:3px 2px}
+  table.dense td.sub{font-size:10px}
+  table.roomy td{padding:8px 3px}
+  tr.sum td{border-top:1px solid #1A1A1A;border-bottom:0;font-weight:700;background:none!important;white-space:nowrap}
+  td.t,td.g{white-space:nowrap}
+  h4{font-size:7.5px;letter-spacing:.14em;text-transform:uppercase;color:#8C8579;margin:0 0 3px;font-weight:600}
+  .row2{display:grid;grid-template-columns:1.25fr 1fr;gap:14px;margin-top:4px}
+  .chart svg{width:100%;height:auto;display:block}
+  .legend{display:flex;gap:12px;font-size:8.5px;color:#8C8579;margin-top:2px}
+  .legend i{display:inline-block;width:9px;height:9px;margin-right:4px;vertical-align:-1px;border-radius:2px}
+  .co div{display:flex;justify-content:space-between;align-items:baseline;border-bottom:1px dotted #D8D2C2;padding:3.5px 0;font-size:10px}
+  .co small{color:#8C8579;font-style:italic;font-family:Lora,Georgia,serif;font-size:9px;margin-left:4px}
+  .co b{color:#7B1F2B;font-family:"JetBrains Mono",ui-monospace,monospace;font-weight:500}
+  .co b.plain{color:#1A1A1A;font-family:Inter,sans-serif;font-weight:600}
+  .bottom{display:grid;grid-template-columns:1.25fr 1fr;gap:14px;margin-top:2px;flex:1;min-height:34mm;max-height:64mm}
+  .bottom>div{display:flex;flex-direction:column}
+  .box{border:1px solid #D8D2C2;padding:7px 9px;font-size:10.5px;line-height:1.55;flex:1}
+  .box i{font-family:Lora,Georgia,serif}
+  .box .who{display:block;font-size:8px;color:#8C8579;margin-top:4px;letter-spacing:.06em;text-transform:uppercase}
+  .box .kv{display:grid;grid-template-columns:auto 1fr;gap:2px 10px}
+  .box .kv span{color:#8C8579;font-size:9.5px}
+  .box .kv b{font-weight:600}
+  .box .result{font-family:Lora,Georgia,serif;font-size:13.5px;font-weight:700;color:#7B1F2B;margin-top:5px;letter-spacing:.04em}
+  .box .note{font-size:9px;color:#8C8579;margin-top:5px}
+  .key{font-size:8px;color:#8C8579;line-height:1.5}
+  .sig{display:flex;justify-content:space-between;margin-top:auto;padding-top:16px;font-size:8px;letter-spacing:.12em;text-transform:uppercase;color:#8C8579}
+  .sig div{border-top:1px solid #1A1A1A;width:44mm;text-align:center;padding-top:4px}
+  .foot{display:flex;justify-content:space-between;font-family:"JetBrains Mono",ui-monospace,monospace;font-size:7.5px;color:#8C8579}
+  @media print{body{background:#fff}.page{margin:0;page-break-after:always}@page{size:A4 portrait;margin:0}}
 `
 
-export function renderCardHtml(card, opts = {}) {
-  const body = renderCardBody(card)
-  return `<!doctype html><html><head><meta charset="utf-8"><title>${esc(card.student?.name || 'Report card')} · ${esc(card.sessionCode)}</title><style>${CSS}</style></head><body>${body}</body></html>`
+export function renderCardHtml(card) {
+  return `<!doctype html><html><head><meta charset="utf-8"><title>${esc(card.student?.name || 'Report card')} · ${esc(card.sessionCode)}</title><style>${CSS}</style></head><body>${renderCardBody(card)}</body></html>`
 }
-
 /** Several cards in one printable document (SMS batch print). */
-export function renderCardsDocument(htmlBodies) {
-  return `<!doctype html><html><head><meta charset="utf-8"><title>Report cards</title><style>${CSS}</style></head><body>${htmlBodies.join('\n')}</body></html>`
+export function renderCardsDocument(bodies) {
+  return `<!doctype html><html><head><meta charset="utf-8"><title>Report cards</title><style>${CSS}</style></head><body>${bodies.join('\n')}</body></html>`
 }
 /** Just the <div class="page"> for a card (for renderCardsDocument). */
 export function renderCardBody(card) {
-  return card.family === 'secondary_annual' ? renderSecondary(card)
-    : card.family === 'senior_progress' ? renderSenior(card)
-    : card.family === 'pre_primary' ? renderPrePrimary(card)
-    : renderPerformanceProfile(card)
-}
-
-// ── Family: pre_primary (Nursery / KG) ──────────────────────────────────────
-function renderPrePrimary(card) {
-  const terms = card.plan.cardTerms
-  const shown = terms.filter((t) => card.showTerms.includes(t.key))
-  const both = shown.length === terms.length
-  const head1 = `<tr><th class="l" rowspan="2">SUBJECTS</th>${shown.map((t) => `<th colspan="6">${esc(t.label)}</th>`).join('')}${both ? '<th colspan="3">TOTAL MARKS</th>' : ''}</tr>`
-  const head2 = `<tr>${shown.map(() => '<th>PAPER</th><th>M.M.</th><th>M.O.</th><th>M.M.</th><th>M.O.</th><th>GRADE</th>').join('')}${both ? '<th>M.M.</th><th>M.O.</th><th>GRADE</th>' : ''}</tr>`
-  const rowsHtml = card.rows.map((r) => {
-    const parts = [['oral', 'ORAL', r.oralMax], ['written', 'WRITTEN', r.writtenMax]].filter(([, , m]) => m > 0)
-    const n = parts.length
-    return parts.map(([k, label, max], i) => {
-      const first = i === 0
-      return `<tr>${first ? `<td class="l sub" rowspan="${n}">${esc(r.subject)}</td>` : ''}${shown.map((t) => {
-        const cell = r.byTerm[t.key]; const v = cell?.comps?.[k]
-        const paperCells = `<td>${label}</td><td>${max}</td><td><b>${cellVal(v)}</b></td>`
-        return first ? paperCells + `<td rowspan="${n}">${cell?.max || dash}</td><td rowspan="${n}"><b>${cell?.complete ? cell.obtained : dash}</b></td><td rowspan="${n}">${cell?.complete ? esc(cell.grade) : dash}</td>` : paperCells
-      }).join('')}${both && first ? `<td rowspan="${n}">${r.total.max || dash}</td><td rowspan="${n}"><b>${r.total.max ? r.total.obtained : dash}</b></td><td rowspan="${n}">${r.total.grade ? esc(r.total.grade) : dash}</td>` : ''}</tr>`
-    }).join('')
-  }).join('')
-  const ov = card.overall
-  const agg = `<tr class="tot"><td class="l">AGGREGATE MARKS</td>${shown.map((t) => { const o = ov.byTerm?.[t.key]; return `<td colspan="6">${o ? `${o.obtained}/${o.max}, PER : ${o.pct.toFixed(2)} %` : dash}</td>` }).join('')}${both ? `<td colspan="3">${ov.max ? `${ov.obtained}/${ov.max}, ${ov.pct.toFixed(2)} %` : dash}</td>` : ''}</tr>`
-  const a = card.attendance
-  const attRow = a ? `<tr class="tot"><td class="l">ATTENDANCE</td>${shown.map((t) => { const x = a.byTerm?.[t.key]; return `<td colspan="6">${x ? `${x.present} / ${x.marked}, ${(100 * x.present / (x.marked || 1)).toFixed(2)} %` : dash}</td>` }).join('')}${both ? `<td colspan="3">${a.sessionTotal ? `${a.sessionTotal.present} / ${a.sessionTotal.marked}, ${(100 * a.sessionTotal.present / (a.sessionTotal.marked || 1)).toFixed(2)} %` : dash}</td>` : ''}</tr>` : ''
-  const banner = `<div class="sec" style="background:#111;color:#fff;text-align:center;font-weight:700;font-size:12px;padding:5px 8px;letter-spacing:.04em">TOTAL MARKS : ${ov.max ? `${ov.obtained}/${ov.max}` : dash}, PER : ${ov.pct != null ? ov.pct.toFixed(2) + '%' : dash}, RANK : ${card.rank ?? dash} , OVERALL GRADE : ${ov.grade ? esc(ov.grade) : dash}</div>`
-  const extra = [['Weight', card.session?.weightKg ? `${card.session.weightKg} K.G.` : null], ['Height', card.session?.heightCm ? `${card.session.heightCm} C.M.` : null]]
-  return `<div class="page">${stamp(card)}${header(card, `SESSION : ${esc(card.sessionCode)}${card.interim ? ' · ' + esc(shown[0].label) : ''}`)}${infoBlock(card, extra)}
-  <table><thead>${head1}${head2}</thead><tbody>${rowsHtml}${agg}${attRow}</tbody></table>
-  ${banner}
-  <div class="two">${gradeTable('CO - CURRICULAR ACTIVITIES', card.coScholastic, terms, card.showTerms)}<div class="sec"><h4>GRADING</h4>${gradeLegend(card)}</div></div>
-  ${remarkBlock(card)}
-  ${footer(card)}</div>`
-}
-
-// ── shared chrome ───────────────────────────────────────────────────────────
-function header(card, subtitle) {
-  const s = card.student || {}
-  return `
-  <div class="hdr">
-    <img class="crest" src="${assetBase()}/crest-card.png" alt="" onerror="this.style.visibility='hidden'">
-    <div class="mid">
-      <img class="banner" src="${assetBase()}/banner-card.png" alt="RADHAKRISHNA ACADEMY" onerror="this.replaceWith(Object.assign(document.createElement('div'),{textContent:'RADHAKRISHNA ACADEMY',style:'font-size:20px;font-weight:700;letter-spacing:.08em'}))">
-      <div class="branch">${esc(s.branchName || s.branchCode || '')}</div>
-      <div class="aff">AFFILIATED TO CBSE, NEW DELHI</div>
+  const shown = card.plan.cardTerms.filter((t) => card.showTerms.includes(t.key))
+  const final = card.plan.cardTerms.length > 1 && shown.length === card.plan.cardTerms.length
+  const table = card.family === 'secondary_annual' ? tableSecondary(card, shown)
+    : card.family === 'senior_progress' ? tableSenior(card, shown, final)
+    : card.family === 'pre_primary' ? tablePrePrimary(card, shown, final)
+    : tablePerformance(card, shown, final)
+  const resultTitle = final || card.family === 'secondary_annual' ? `Result · Session ${card.sessionCode}` : `Result · ${shown.map((t) => t.label).join(' & ')}`
+  return `<div class="page">
+    ${header(card)}
+    ${titleStrip(card, shown)}
+    ${studentStrip(card)}
+    ${metrics(card, shown, final)}
+    ${table}
+    <div class="row2">
+      <div class="chart">${chart(card, shown, final)}</div>
+      <div>${coScholastic(card, shown)}</div>
     </div>
-    <div style="width:58px"></div>
-  </div>
-  <div class="title">${esc(card.title || 'REPORT CARD')}</div>
-  <div class="sub">${esc(subtitle)}</div>`
+    <div class="bottom">
+      <div><h4>Class teacher's remarks</h4><div class="box"><i>${esc(card.remark || '')}</i>${card.classTeacher ? `<span class="who">${esc(card.classTeacher)} · Class teacher</span>` : ''}</div></div>
+      <div><h4>${esc(resultTitle)}</h4><div class="box">${resultBox(card, final)}</div></div>
+    </div>
+    <div class="key">${gradeKey(card)}</div>
+    <div class="sig"><div>Class Teacher</div><div>Parent / Guardian</div><div>Principal</div></div>
+    <div class="foot"><span>${esc(recordNo(card))} · ${card.publishedAt ? 'issued ' + dmy(card.publishedAt) + (card.publishedVersion > 1 ? ` · v${card.publishedVersion}` : '') : 'PREVIEW · ' + dmy(card.computedAt)}</span><span>${esc(card.student?.branchName || card.student?.branchCode || '')}</span></div>
+  </div>`
 }
-function stamp(card) {
-  const v = card.publishedVersion ? `v${card.publishedVersion} · ` : ''
-  const when = card.publishedAt || card.computedAt
-  return `<div class="stamp">${card.publishedAt ? 'PUBLISHED' : 'PREVIEW'} · ${v}${esc(new Date(when).toLocaleDateString('en-IN'))}</div>`
+
+// ── shared blocks ───────────────────────────────────────────────────────────
+function recordNo(card) { return `RC/${card.student?.branchCode || 'RKA'}/${card.sessionCode}/${card.cardKey}/${card.student?.admissionNo || dash}` }
+function header(card) {
+  return `<div class="hd"><img class="crest" src="${assetBase()}/crest-card.png" alt="" onerror="this.style.visibility='hidden'">
+    <div class="school"><b>RADHAKRISHNA ACADEMY</b><span>${esc(ADDRESS)}${card.student?.branchName ? ' · ' + esc(card.student.branchName) : ''}</span></div>
+    <div class="meta">AFFILIATION <b>${AFFILIATION}</b><br>SCHOOL CODE <b>${SCHOOL_CODE}</b><br>RECORD ${esc(recordNo(card))}</div></div>`
 }
-function infoBlock(card, extra = []) {
+function titleStrip(card, shown) {
+  const t = card.family === 'performance_profile' ? 'PERFORMANCE PROFILE' : card.family === 'senior_progress' ? 'PROGRESS REPORT' : 'REPORT CARD'
+  const sub = card.family === 'secondary_annual' ? 'ANNUAL' : shown.map((x) => x.label.toUpperCase()).join(' & ')
+  return `<div class="title"><h2>${t}</h2><span>SESSION ${esc(card.sessionCode)} · ${esc(sub)}</span></div>`
+}
+function studentStrip(card) {
   const s = card.student || {}
-  const items = [
-    ['Name', s.name], ['Class', `${s.className || ''}${s.section ? ' - ' + s.section : ''}`], ['Roll No.', s.rollNumber],
-    ['Admission No.', s.admissionNo], ['Father', s.father], ['Mother', s.mother],
-    ['Date of Birth', s.dob ? fmtDate(s.dob) : null], ...extra,
-  ].filter(([, v]) => v != null && v !== '')
-  return `<div class="info">${items.map(([k, v]) => `<div><span>${esc(k)}: </span><b>${esc(v)}</b></div>`).join('')}</div>`
+  const senior = card.family === 'senior_progress' || card.family === 'secondary_annual'
+  const cls = `${(s.className || '').replace(/^Class /, '')}${s.section ? ' – ' + s.section : ''}`
+  const cells = [
+    ['Student', s.name, 'name'], ['Class / Section', cls], ['Roll No.', s.rollNumber, 'mono'],
+    ['Admission No.', s.admissionNo, 'mono'], ['Date of Birth', s.dob ? dmy(s.dob) : null, 'mono'],
+    senior ? ['Board Reg. No.', s.boardRegNo, 'mono'] : ['House', s.house],
+    ['Father', s.father], ['Mother', s.mother], ['Class teacher', card.classTeacher],
+  ]
+  const photo = card.photoUrl ? `<img class="photo" src="${esc(card.photoUrl)}" alt="" onerror="this.style.visibility='hidden'">` : ''
+  return `<div class="strip${photo ? ' hasphoto' : ''}">${photo}<div class="cells">${cells.map(([k, v, c]) => `<div class="cell"><small>${k}</small><b class="${c || ''}">${v == null || v === '' ? dash : esc(v)}</b></div>`).join('')}</div></div>`
 }
-function fmtDate(d) { try { const x = new Date(d); return isNaN(x) ? d : x.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) } catch { return d } }
-function attendanceLine(card) {
-  const a = card.attendance
-  if (!a) return ''
-  if (a.mode === 'perTerm') {
-    const parts = card.plan.cardTerms.filter((t) => card.showTerms.includes(t.key)).map((t) => { const x = a.byTerm?.[t.key]; return `${esc(t.label)}: ${x ? `${x.present}/${x.marked}` : dash}` })
-    return `<div class="sec"><b style="font-size:11px">Attendance</b> &nbsp; ${parts.join(' &nbsp;·&nbsp; ')}</div>`
+function attendanceFor(card, shown, final) {
+  const a = card.attendance; if (!a) return null
+  if (final || a.mode !== 'perTerm') return a.sessionTotal
+  let present = 0, marked = 0, any = false
+  for (const t of shown) { const x = a.byTerm?.[t.key]; if (x) { present += x.present; marked += x.marked; any = true } }
+  return any ? { present, marked } : a.sessionTotal
+}
+function metrics(card, shown, final) {
+  const a = attendanceFor(card, shown, final)
+  const o = card.overall
+  const present = a ? Math.round(a.present) : null, marked = a ? Math.round(a.marked) : null
+  const pctLabel = final || card.family === 'secondary_annual' ? 'Session' : (shown.length === 1 ? shown[0].label : 'Overall')
+  return `<div class="metrics">
+    <div><div class="v">${fmt(marked)}</div><div class="k">Working days</div></div>
+    <div><div class="v">${fmt(present)}</div><div class="k">Present</div></div>
+    <div><div class="v red">${marked != null ? marked - present : dash}</div><div class="k">Absent</div></div>
+    <div><div class="v">${marked ? pct1(100 * present / marked) : dash}</div><div class="k">Attendance</div></div>
+    <div><div class="v">${o.pct != null ? pct1(o.pct) : dash}</div><div class="k">${esc(pctLabel)}${o.grade ? ' · grade ' + esc(o.grade) : ''}</div></div>
+    <div><div class="v red">${fmt(card.rank)}</div><div class="k">Rank${card.sectionStrength ? ' of ' + card.sectionStrength : ''}</div></div>
+  </div>`
+}
+/** Section average / highest columns — interim cards only (the final card spends the width on the second term). */
+function sectionCols(card, shown, final, rowspan) {
+  if (final || !card.sectionAverage) return { head: '', cell: () => '', sum: '' }
+  const t = shown[0]?.key
+  const rs = rowspan ? ` rowspan="${rowspan}"` : ''
+  return {
+    head: `<th class="sep"${rs}>Section<br>average</th><th${rs}>Section<br>highest</th>`,
+    cell: (r) => { const avg = card.sectionAverageByTerm?.[`${r.subject}|${t}`] ?? card.sectionAverage?.[r.subject]; return `<td class="dim sep">${avg == null ? dash : avg}</td><td class="dim">${card.sectionHighest?.[r.subject] == null ? dash : card.sectionHighest[r.subject]}</td>` },
+    sum: `<td class="sep"></td><td></td>`,
   }
-  const x = a.sessionTotal
-  return x ? `<div class="sec"><b style="font-size:11px">Attendance</b> &nbsp; ${x.present} / ${x.marked} days</div>` : ''
 }
-function gradeTable(title, rows, terms, showTerms) {
-  if (!rows?.length) return ''
-  const shown = terms.filter((t) => showTerms.includes(t.key))
-  return `<div class="sec"><h4>${esc(title)}</h4><table><thead><tr><th class="l">Area</th>${shown.map((t) => `<th>${esc(t.label)}</th>`).join('')}</tr></thead>
-  <tbody>${rows.map((r) => `<tr><td class="l">${esc(r.name)}</td>${shown.map((t) => `<td>${esc(r.byTerm?.[t.key] ?? dash)}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`
-}
-function remarkBlock(card) {
-  return `<div class="sec"><h4>CLASS TEACHER'S REMARKS</h4><div class="remark">${esc(card.remark || '')}</div></div>`
-}
-function footer(card) {
-  const f = card.footer || {}
-  const bits = []
-  if (f.achievement && card.session?.achievement) bits.push(`<div><span>Achievement: </span><b>${esc(card.session.achievement)}</b></div>`)
-  if (f.heightWeight && (card.session?.heightCm || card.session?.weightKg)) bits.push(`<div><span>Height: </span><b>${fmt(card.session.heightCm)} cm</b> &nbsp; <span>Weight: </span><b>${fmt(card.session.weightKg)} kg</b></div>`)
-  if ((f.promotedTo || f.promotedLine) && card.session?.promotedTo) bits.push(`<div><span>Promoted to: </span><b>${esc(card.session.promotedTo)}</b></div>`)
-  if (f.result && card.result) bits.push(`<div class="result"><span>RESULT: </span><b class="${card.result === 'FAIL' ? 'fail' : ''}">${esc(card.result)}</b></div>`)
-  return `${bits.length ? `<div class="sec info" style="grid-template-columns:1fr 1fr">${bits.join('')}</div>` : ''}
-  <div class="foot"><div>Class Teacher</div><div>Parent / Guardian</div><div>Principal</div></div>`
-}
-function gradeLegend(card) {
-  const b = card.scales?.gradeScale?.bands || []
-  return `<div class="legend">Grading: ${b.map(([m, g]) => `${g} ≥ ${m}`).join(' · ')} · below ${b[b.length - 1]?.[0] ?? 33}: ${esc(card.scales?.gradeScale?.floorLabel || 'E')}</div>`
-}
+const totalCell = (o) => (o?.max ? `${o.obtained} / ${o.max}` : dash)
+const gradeCell = (g) => `<td class="g">${g ? esc(g) : dash}</td>`
 
-// ── Family: performance_profile (I–VIII) ────────────────────────────────────
-function renderPerformanceProfile(card) {
-  const terms = card.plan.cardTerms
-  const shown = terms.filter((t) => card.showTerms.includes(t.key))
+// ── family: performance_profile (I–VIII) ────────────────────────────────────
+function tablePerformance(card, shown, final) {
   const comps = card.plan.components
-  const perTermMax = comps.reduce((s, c) => s + (c.max || 0), 0)
-  const head1 = `<tr><th class="l" rowspan="2">SUBJECT</th>${shown.map((t) => `<th colspan="${comps.length + 2}">${esc(t.label)}${t.examLabel ? `<br><span style="font-weight:500">(${esc(t.examLabel)})</span>` : ''}</th>`).join('')}<th rowspan="2">GRAND<br>TOTAL<br>/${perTermMax * shown.length}</th><th rowspan="2">GRADE</th></tr>`
-  const head2 = `<tr>${shown.map(() => comps.map((c) => `<th>${esc(c.label)}<br>/${c.max}</th>`).join('') + `<th>TOTAL<br>/${perTermMax}</th><th>GR.</th>`).join('')}</tr>`
-  const body = card.rows.map((r) => `<tr><td class="l sub">${esc(r.subject)}</td>${shown.map((t) => {
-    const cell = r.byTerm[t.key]
-    if (!cell || cell.hidden) return comps.map(() => '<td></td>').join('') + '<td></td><td></td>'
-    return comps.map((c) => `<td>${cellVal(cell.comps[c.key])}</td>`).join('') + `<td><b>${cell.complete ? cell.obtained : dash}</b></td><td>${cell.complete ? esc(cell.grade) : dash}</td>`
-  }).join('')}<td><b>${r.total.max ? r.total.obtained : dash}</b></td><td>${r.total.grade ? esc(r.total.grade) : dash}</td></tr>`).join('')
-  const ov = card.overall
-  const tot = `<tr class="tot"><td class="l">TOTAL</td>${shown.map((t) => { const o = ov.byTerm?.[t.key]; return comps.map(() => '<td></td>').join('') + `<td>${o ? `${o.obtained}/${o.max}` : dash}</td><td>${o?.grade ? esc(o.grade) : ''}</td>` }).join('')}<td>${ov.max ? `${ov.obtained}/${ov.max}` : dash}</td><td>${ov.pct != null ? `${ov.pct.toFixed(1)}%` : ''}</td></tr>`
-  const subtitle = `Session ${card.sessionCode}${card.interim || card.showTerms.length === 1 ? ` · ${shown.map((t) => t.label).join(' & ')}` : ''}`
-  return `<div class="page">${stamp(card)}${header(card, subtitle)}${infoBlock(card, [['House', card.student?.house]])}
-  <table><thead>${head1}${head2}</thead><tbody>${body}${tot}</tbody></table>
-  ${gradeLegend(card)}
-  <div class="two">${gradeTable('GRADED SUBJECTS', card.gradedSubjects, terms, card.showTerms)}${gradeTable('CO-SCHOLASTIC AREAS', card.coScholastic, terms, card.showTerms)}</div>
-  ${disciplineRow(card, shown)}
-  ${attendanceLine(card)}
-  ${remarkBlock(card)}
-  ${footer(card)}</div>`
-}
-function disciplineRow(card, shown) {
-  if (!card.discipline) return ''
-  const any = shown.some((t) => card.discipline[t.key] != null)
-  if (!any) return ''
-  return `<div class="sec" style="font-size:11px"><b>Discipline:</b> ${shown.map((t) => `${esc(t.label)} <b>${esc(card.discipline[t.key] ?? dash)}</b>`).join(' &nbsp;·&nbsp; ')}</div>`
+  const perTerm = comps.reduce((s, c) => s + (c.max || 0), 0)
+  const sc = sectionCols(card, shown, final)
+  const compHead = (first) => comps.map((c, j) => `<th class="${!first && !j ? 'sep' : ''}">${esc(c.label)}<br>/${c.max}</th>`).join('')
+  const head = final
+    ? `<tr><th class="l" rowspan="2">Scholastic area</th>${shown.map((t, i) => `<th class="band ${i ? 'sep' : ''}" colspan="${comps.length + 2}">${esc(t.label)}${t.examLabel ? ' · ' + esc(t.examLabel) : ''}</th>`).join('')}<th class="band sep" colspan="2">Session</th></tr>
+       <tr>${shown.map((t, i) => compHead(i === 0) + `<th>Total<br>/${perTerm}</th><th>Grade</th>`).join('')}<th class="sep">Total<br>/${perTerm * shown.length}</th><th>Grade</th></tr>`
+    : `<tr><th class="l">Scholastic area</th>${compHead(true)}<th class="sep">Total<br>/${perTerm}</th><th>Grade</th>${sc.head}</tr>`
+  const body = card.rows.map((r) => {
+    const cells = shown.map((t, i) => {
+      const cell = r.byTerm[t.key]
+      return comps.map((c, j) => `<td class="${i && !j ? 'sep' : ''}">${cellVal(cell?.comps?.[c.key])}</td>`).join('')
+        + `<td class="t ${!final ? 'sep' : ''}">${cell?.complete ? cell.obtained : dash}</td>${gradeCell(cell?.complete ? cell.grade : null)}`
+    }).join('')
+    const tail = final ? `<td class="t sep">${r.total.max ? r.total.obtained : dash}</td>${gradeCell(r.total.grade)}` : sc.cell(r)
+    return `<tr><td class="l sub">${esc(title(r.subject))}</td>${cells}${tail}</tr>`
+  }).join('')
+  const o = card.overall
+  const sum = `<tr class="sum"><td class="l">Total</td>${shown.map((t, i) => { const x = o.byTerm?.[t.key]; return `<td colspan="${comps.length}" class="${i ? 'sep' : ''}"></td><td class="${!final ? 'sep' : ''}">${totalCell(x)}</td>${gradeCell(x?.grade)}` }).join('')}${final ? `<td class="sep">${totalCell(o)}</td>${gradeCell(o.grade)}` : sc.sum}</tr>`
+  return `<table class="${final ? 'dense' : (card.rows.length <= 6 ? 'roomy' : '')}"><thead>${head}</thead><tbody>${body}${sum}</tbody></table>`
 }
 
-// ── Family: secondary_annual (IX–X) ─────────────────────────────────────────
-function renderSecondary(card) {
+// ── family: secondary_annual (IX–X) ─────────────────────────────────────────
+function tableSecondary(card, shown) {
   const ia = card.plan.components.filter((c) => c.ia)
-  const exam = card.plan.components.find((c) => !c.ia)
   const iaTotal = card.plan.iaTotal || ia.reduce((s, c) => s + c.max, 0)
-  const head1 = `<tr><th class="l" rowspan="2">SUBJECT</th><th rowspan="2">CODE</th><th colspan="${ia.length + 1}">INTERNAL ASSESSMENT /${iaTotal}</th><th colspan="3">ANNUAL EXAM</th><th rowspan="2">TOTAL<br>/${card.plan.subjectTotal}</th><th rowspan="2">GRADE</th></tr>`
-  const head2 = `<tr>${ia.map((c) => `<th>${esc(c.label)}<br>/${c.max}</th>`).join('')}<th>TOTAL</th><th>PRAC.</th><th>WRITTEN</th><th>TOTAL</th></tr>`
+  const sc = sectionCols(card, shown, false, 2)
+  const head = `<tr><th class="l" rowspan="2">Scholastic area</th><th rowspan="2">Code</th><th class="band" colspan="${ia.length + 1}">Internal assessment · ${iaTotal}</th><th class="band sep" colspan="3">Annual examination</th><th rowspan="2" class="sep">Total<br>/${card.plan.subjectTotal}</th><th rowspan="2">Grade</th>${sc.head}</tr>
+    <tr>${ia.map((c) => `<th>${esc(c.label)}<br>/${c.max}</th>`).join('')}<th>Total</th><th class="sep">Prac.</th><th>Written</th><th>Total</th></tr>`
   const body = card.rows.map((r) => {
     const cell = r.byTerm.annual || {}
+    const iaOk = ia.every((c) => cell.comps?.[c.key] && !cell.comps[c.key].missing)
     const iaSum = ia.reduce((s, c) => { const v = cell.comps?.[c.key]; return v && !v.missing ? s + (v.value || 0) : s }, 0)
-    const iaOk = ia.every((c) => { const v = cell.comps?.[c.key]; return v && !v.missing })
     const ex = cell.comps?.exam
-    const exTot = ex && !ex.missing ? (ex.absent ? 'AB' : ex.value) : dash
-    const pr = ex && !ex.missing && ex.practicalMax ? ex.practical : (ex && !ex.missing ? dash : dash)
-    const wr = ex && !ex.missing ? (ex.theoryMax ? ex.theory : ex.value) : dash
-    return `<tr><td class="l sub">${esc(r.subject)}${r.additional ? ' <span style="font-weight:400;font-size:9px">(Additional)</span>' : ''}</td><td>${esc(r.locCode || '')}</td>${ia.map((c) => `<td>${cellVal(cell.comps?.[c.key])}</td>`).join('')}<td><b>${iaOk ? iaSum : dash}</b></td><td>${ex?.absent ? 'AB' : fmt(pr)}</td><td>${ex?.absent ? 'AB' : fmt(wr)}</td><td><b>${fmt(exTot)}</b></td><td><b>${cell.complete ? cell.obtained : dash}</b></td><td>${cell.complete ? esc(cell.grade) : dash}</td></tr>`
+    const has = ex && !ex.missing
+    const wr = has ? (ex.absent ? 'AB' : fmt(ex.theoryMax ? ex.theory : ex.value)) : dash
+    const pr = has ? (ex.absent ? 'AB' : (ex.practicalMax ? fmt(ex.practical) : dash)) : dash
+    const exT = has ? (ex.absent ? 'AB' : fmt(ex.value)) : dash
+    return `<tr><td class="l sub">${esc(title(r.subject))}${r.additional ? '<small>Additional subject · not in aggregate</small>' : ''}</td>${grey(esc(r.locCode || ''))}${ia.map((c) => `<td>${cellVal(cell.comps?.[c.key])}</td>`).join('')}<td class="t">${iaOk ? iaSum : dash}</td><td class="sep">${pr}</td><td>${wr}</td><td class="t">${exT}</td><td class="t sep">${cell.complete ? cell.obtained : dash}</td>${gradeCell(cell.complete ? cell.grade : null)}${sc.cell(r)}</tr>`
   }).join('')
-  const ov = card.overall
-  const tot = `<tr class="tot"><td class="l" colspan="${ia.length + 6}">GRAND TOTAL (excluding additional subjects)</td><td>${ov.max ? `${ov.obtained}/${ov.max}` : dash}</td><td>${ov.pct != null ? `${ov.pct.toFixed(1)}%` : ''}</td></tr>`
-  const extra = [['Board Reg. No.', card.student?.boardRegNo], ['Comp ID', card.student?.compId]]
-  return `<div class="page">${stamp(card)}${header(card, `Session ${card.sessionCode} · ANNUAL`)}${infoBlock(card, extra)}
-  <table><thead>${head1}${head2}</thead><tbody>${body}${tot}</tbody></table>
-  ${card.legend ? `<div class="legend">${esc(card.legend)}</div>` : ''}${gradeLegend(card)}
-  <div class="two">${gradeTable('CO-SCHOLASTIC AREAS', card.coScholastic, card.plan.cardTerms, card.showTerms)}${gradeTable('GRADED SUBJECTS', card.gradedSubjects, card.plan.cardTerms, card.showTerms)}</div>
-  ${disciplineRow(card, card.plan.cardTerms)}
-  ${attendanceLine(card)}
-  ${remarkBlock(card)}
-  ${footer(card)}</div>`
+  const o = card.overall
+  return `<table><thead>${head}</thead><tbody>${body}<tr class="sum"><td class="l" colspan="${ia.length + 6}">Aggregate · excluding additional subjects</td><td class="sep">${totalCell(o)}</td>${gradeCell(o.grade)}${sc.sum}</tr></tbody></table>`
 }
 
-// ── Family: senior_progress (XI–XII) ────────────────────────────────────────
-function renderSenior(card) {
-  const terms = card.plan.cardTerms
-  const shown = terms.filter((t) => card.showTerms.includes(t.key))
-  const head1 = `<tr><th class="l" rowspan="2">SUBJECT</th>${shown.map((t) => `<th colspan="4">${esc(t.label)}</th>`).join('')}<th rowspan="2">TOTAL<br>/${card.plan.subjectTotal / terms.length * shown.length}</th><th rowspan="2">GRADE</th></tr>`
-  const head2 = `<tr>${shown.map(() => '<th>MM<br>TH/PR</th><th>THEORY</th><th>PRAC.</th><th>TOTAL</th>').join('')}</tr>`
-  const body = card.rows.map((r) => `<tr><td class="l sub">${esc(r.subject)}</td>${shown.map((t) => {
-    const cell = r.byTerm[t.key]; const ex = cell?.comps?.exam
-    if (!cell || cell.hidden) return '<td></td><td></td><td></td><td></td>'
-    if (!ex || ex.missing) return `<td>${dash}</td><td>${dash}</td><td>${dash}</td><td>${dash}</td>`
-    const mm = ex.theoryMax ? `${ex.theoryMax}/${ex.practicalMax}` : `${ex.max}`
-    return `<td>${mm}</td><td>${ex.absent ? 'AB' : fmt(ex.theoryMax ? ex.theory : ex.value)}${cell.fail ? ' <span class="fail">F</span>' : ''}</td><td>${ex.absent ? 'AB' : (ex.practicalMax ? fmt(ex.practical) : dash)}</td><td><b>${ex.absent ? 'AB' : fmt(ex.value)}</b></td>`
-  }).join('')}<td><b>${r.total.max ? r.total.obtained : dash}</b></td><td>${r.total.grade ? esc(r.total.grade) : dash}</td></tr>`).join('')
-  const ov = card.overall
-  const tot = `<tr class="tot"><td class="l">TOTAL</td>${shown.map((t) => { const o = ov.byTerm?.[t.key]; return `<td colspan="3"></td><td>${o ? `${o.obtained}/${o.max}` : dash}</td>` }).join('')}<td>${ov.max ? `${ov.obtained}/${ov.max}` : dash}</td><td>${ov.pct != null ? `${ov.pct.toFixed(1)}%` : ''}</td></tr>`
-  const interimBits = card.interim ? `<div class="sec info" style="grid-template-columns:1fr 1fr 1fr"><div><span>Rank in section: </span><b>${card.rank ?? dash}${card.sectionStrength ? ` / ${card.sectionStrength}` : ''}</b></div>${card.sectionHighest ? `<div style="grid-column:span 2"><span>Section highest: </span><b>${esc(card.rows.filter((r) => !r.unmapped).map((r) => `${titleish(r.subject)} ${card.sectionHighest[r.subject] ?? dash}`).join(' · '))}</b></div>` : ''}</div>` : ''
-  const extra = [['Stream', (card.className || '').replace(/^Class \d+ /, '')], ['Board Reg. No.', card.student?.boardRegNo]]
-  return `<div class="page">${stamp(card)}${header(card, `Session ${card.sessionCode} · ${shown.map((t) => t.label).join(' & ')}`)}${infoBlock(card, extra)}
-  <table><thead>${head1}${head2}</thead><tbody>${body}${tot}</tbody></table>
-  ${gradeLegend(card)}${interimBits}
-  ${disciplineRow(card, shown)}
-  ${attendanceLine(card)}
-  ${remarkBlock(card)}
-  ${footer(card)}</div>`
+// ── family: senior_progress (XI–XII) ────────────────────────────────────────
+function tableSenior(card, shown, final) {
+  const sc = sectionCols(card, shown, final, 2)
+  const head = `<tr><th class="l" rowspan="2">Subject</th>${shown.map((t, i) => `<th class="band ${i ? 'sep' : ''}" colspan="4">${esc(t.label)}</th>`).join('')}${final ? '<th class="band sep" colspan="2">Session</th>' : `<th rowspan="2" class="sep">Grade</th>${sc.head}`}</tr>
+    <tr>${shown.map((t, i) => `<th class="${i ? 'sep' : ''}">Max<br>Th / Pr</th><th>Theory</th><th>Prac.</th><th>Total</th>`).join('')}${final ? `<th class="sep">Total<br>/${card.plan.subjectTotal}</th><th>Grade</th>` : ''}</tr>`
+  const body = card.rows.map((r) => {
+    const cells = shown.map((t, i) => {
+      const cell = r.byTerm[t.key]; const ex = cell?.comps?.exam
+      const mm = r.practical ? `${r.written} / ${r.practical}` : (r.written != null ? `${r.written}` : dash)
+      if (!ex || ex.missing) return `<td class="${i ? 'sep' : ''} dim">${mm}</td><td>${dash}</td><td>${dash}</td><td>${dash}</td>`
+      const mmLive = ex.theoryMax ? `${ex.theoryMax} / ${ex.practicalMax}` : `${ex.max}`
+      return `<td class="${i ? 'sep' : ''} dim">${mmLive}</td><td class="${cell.fail ? 'fail' : ''}">${ex.absent ? 'AB' : fmt(ex.theoryMax ? ex.theory : ex.value)}${cell.fail ? ' F' : ''}</td><td>${ex.absent ? 'AB' : (ex.practicalMax ? fmt(ex.practical) : dash)}</td><td class="t">${ex.absent ? 'AB' : fmt(ex.value)}</td>`
+    }).join('')
+    const tail = final ? `<td class="t sep">${r.total.max ? r.total.obtained : dash}</td>${gradeCell(r.total.grade)}` : `<td class="g sep">${r.total.grade ? esc(r.total.grade) : dash}</td>${sc.cell(r)}`
+    return `<tr><td class="l sub">${esc(title(r.subject))}</td>${cells}${tail}</tr>`
+  }).join('')
+  const o = card.overall
+  const sum = `<tr class="sum"><td class="l">Total</td>${shown.map((t, i) => { const x = o.byTerm?.[t.key]; return `<td colspan="3" class="${i ? 'sep' : ''}"></td><td>${totalCell(x)}</td>` }).join('')}${final ? `<td class="sep">${totalCell(o)}</td>${gradeCell(o.grade)}` : `<td class="g sep">${o.grade ? esc(o.grade) : dash}</td>${sc.sum}`}</tr>`
+  return `<table class="${card.rows.length <= 6 ? 'roomy' : ''}"><thead>${head}</thead><tbody>${body}${sum}</tbody></table>`
 }
-function titleish(s) { return String(s).split(' ').map((w) => w.length > 3 ? w[0] + w.slice(1).toLowerCase() : w).join(' ') }
+
+// ── family: pre_primary (Nursery / KG) ──────────────────────────────────────
+function tablePrePrimary(card, shown, final) {
+  const sc = sectionCols(card, shown, final, 2)
+  const head = `<tr><th class="l" rowspan="2">Subject</th>${shown.map((t, i) => `<th class="band ${i ? 'sep' : ''}" colspan="4">${esc(t.label)}</th>`).join('')}${final ? '<th class="band sep" colspan="2">Session</th>' : sc.head}</tr>
+    <tr>${shown.map((t, i) => `<th class="${i ? 'sep' : ''}">Oral</th><th>Written</th><th>Total</th><th>Grade</th>`).join('')}${final ? '<th class="sep">Total</th><th>Grade</th>' : ''}</tr>`
+  const body = card.rows.map((r) => {
+    const cells = shown.map((t, i) => {
+      const cell = r.byTerm[t.key]
+      const oral = r.oralMax ? `${cellVal(cell?.comps?.oral)}<small class="mm"> /${r.oralMax}</small>` : dash
+      const written = r.writtenMax ? `${cellVal(cell?.comps?.written)}<small class="mm"> /${r.writtenMax}</small>` : dash
+      return `<td class="${i ? 'sep' : ''}">${oral}</td><td>${written}</td><td class="t">${cell?.complete ? `${cell.obtained}<small class="mm"> /${cell.max}</small>` : dash}</td>${gradeCell(cell?.complete ? cell.grade : null)}`
+    }).join('')
+    const tail = final ? `<td class="t sep">${r.total.max ? `${r.total.obtained}<small class="mm"> /${r.total.max}</small>` : dash}</td>${gradeCell(r.total.grade)}` : sc.cell(r)
+    return `<tr><td class="l sub">${esc(title(r.subject))}</td>${cells}${tail}</tr>`
+  }).join('')
+  const o = card.overall
+  const sum = `<tr class="sum"><td class="l">Aggregate</td>${shown.map((t, i) => { const x = o.byTerm?.[t.key]; return `<td colspan="2" class="${i ? 'sep' : ''}"></td><td>${totalCell(x)}</td>${gradeCell(x?.grade)}` }).join('')}${final ? `<td class="sep">${totalCell(o)}</td>${gradeCell(o.grade)}` : sc.sum}</tr>`
+  return `<table class="${card.rows.length <= 6 ? 'roomy' : ''}"><thead>${head}</thead><tbody>${body}${sum}</tbody></table>`
+}
+
+// ── chart: subject totals vs section (interim) or term vs term (final) ──────
+function shortName(s) {
+  const t = title(s).replace(/^English.*/, 'English').replace(/^Hindi.*/, 'Hindi').replace('Social Science', 'Soc. Sci.').replace('Mathematics', 'Maths').replace('Artificial Intelligence', 'A.I.').replace('English Lng & Lit.', 'English').replace('Hindi Course-A', 'Hindi').replace('Hindi Course-B', 'Hindi').replace(/ Core$/, '').replace('General Awareness', 'Gen. Aw.').replace('Environmental Studies', 'EVS').replace('Computer Science', 'Comp. Sci.').replace('Informatics Practices', 'IP').replace('Physical Education', 'Phy. Ed.').replace('Business Studies', 'Bus. St.').replace('Accountancy', 'Accounts').replace('Political Science', 'Pol. Sci.').replace('Fine Arts', 'Arts')
+  return t.length > 12 ? t.slice(0, 11) + '.' : t
+}
+function chart(card, shown, final) {
+  const rows = card.rows.filter((r) => !r.unmapped && !r.additional)
+  if (!rows.length) return ''
+  const perRow = (r, k) => r.byTerm[k]?.max || null
+  const per = card.family === 'secondary_annual' ? (card.plan.subjectTotal || 100) : (Math.max(...rows.map((r) => perRow(r, shown[0]?.key) || 0)) || 100)
+  const W = 400, base = 118, H = 104, n = rows.length, gw = W / n
+  const y = (v) => base - Math.max(0, Math.min(per, v)) * H / per
+  const grid = [25, 50, 75, 100].map((p) => { const v = Math.round(per * p / 100); return `<line x1="0" x2="${W}" y1="${y(v)}" y2="${y(v)}" stroke="#E8E4D8" stroke-width=".6"/><text x="0" y="${y(v) - 1.5}" font-size="6" fill="#B5AE9E" font-family="Inter,sans-serif">${v}</text>` }).join('')
+  const labels = rows.map((r, i) => `<text x="${i * gw + gw / 2}" y="${base + 9}" text-anchor="middle" font-size="6" fill="#8C8579" font-family="Inter,sans-serif">${esc(shortName(r.subject).toUpperCase())}</text>`).join('')
+  const bw = Math.min(12, gw / 2.6)
+  let bars, legend, h4
+  if (final && shown.length >= 2) {
+    const [a, b] = shown
+    bars = rows.map((r, i) => {
+      const x = i * gw + gw / 2, ca = r.byTerm[a.key], cb = r.byTerm[b.key]; const va = ca?.complete ? ca.obtained : 0, vb = cb?.complete ? cb.obtained : 0
+      return `<rect x="${x - bw - 1}" y="${y(va)}" width="${bw}" height="${base - y(va)}" fill="#D8D2C2"/><rect x="${x + 1}" y="${y(vb)}" width="${bw}" height="${base - y(vb)}" fill="#7B1F2B"/>${cb?.complete ? `<text x="${x + 1 + bw / 2}" y="${y(vb) - 2}" text-anchor="middle" font-size="6.5" font-weight="700" fill="#7B1F2B" font-family="Inter,sans-serif">${vb}</text>` : ''}`
+    }).join('')
+    legend = `<span><i style="background:#D8D2C2"></i>${esc(a.label)}</span><span><i style="background:#7B1F2B"></i>${esc(b.label)}</span>`
+    h4 = `${esc(a.label)} against ${esc(b.label)} · marks out of ${per}`
+  } else {
+    const t = shown[0]?.key
+    const hasSection = !!card.sectionAverage
+    bars = rows.map((r, i) => {
+      const x = i * gw + gw / 2, c = r.byTerm[t]; const v = c?.complete ? c.obtained : 0
+      const avg = card.sectionAverageByTerm?.[`${r.subject}|${t}`] ?? card.sectionAverage?.[r.subject]; const hi = card.sectionHighest?.[r.subject]
+      const mine = hasSection ? `<rect x="${x + 1}" y="${y(v)}" width="${bw}" height="${base - y(v)}" fill="#7B1F2B"/>` : `<rect x="${x - bw / 2}" y="${y(v)}" width="${bw}" height="${base - y(v)}" fill="#7B1F2B"/>`
+      const lx = hasSection ? x + 1 + bw / 2 : x
+      return `${hasSection && avg != null ? `<rect x="${x - bw - 1}" y="${y(avg)}" width="${bw}" height="${base - y(avg)}" fill="#D8D2C2"/>` : ''}${mine}${hasSection && hi != null ? `<line x1="${x - bw - 2}" x2="${x + bw + 2}" y1="${y(hi)}" y2="${y(hi)}" stroke="#1A1A1A" stroke-width=".9"/>` : ''}${c?.complete ? `<text x="${lx}" y="${y(v) - 2}" text-anchor="middle" font-size="6.5" font-weight="700" fill="#7B1F2B" font-family="Inter,sans-serif">${v}</text>` : ''}`
+    }).join('')
+    legend = `<span><i style="background:#7B1F2B"></i>${esc((card.student?.name || 'Student').split(' ')[0])}</span>${hasSection ? '<span><i style="background:#D8D2C2"></i>Section average</span><span><i style="border:1px solid #1A1A1A;background:#FAF7F0"></i>Section highest</span>' : ''}`
+    h4 = `${esc(shown[0]?.label || '')} · marks out of ${per}${hasSection ? ' against the section' : ''}`
+  }
+  return `<h4>${h4}</h4><svg viewBox="0 0 400 134">${grid}${bars}<line x1="0" x2="${W}" y1="${base}" y2="${base}" stroke="#1A1A1A" stroke-width=".8"/>${labels}</svg><div class="legend">${legend}</div>`
+}
+
+// ── co-scholastic list (graded subjects, areas, discipline, height/weight) ──
+function coScholastic(card, shown) {
+  const tk = shown.map((t) => t.key)
+  const g = (row) => tk.map((k) => row.byTerm?.[k] ?? dash).join(' / ')
+  const lines = []
+  for (const r of card.gradedSubjects || []) lines.push(`<div><span>${esc(title(r.name))}<small>graded subject</small></span><b>${esc(g(r))}</b></div>`)
+  for (const r of card.coScholastic || []) lines.push(`<div><span>${esc(title(r.name))}</span><b>${esc(g(r))}</b></div>`)
+  if (card.discipline && tk.some((k) => card.discipline[k] != null)) lines.push(`<div><span>Discipline<small>punctuality, conduct</small></span><b>${esc(tk.map((k) => card.discipline[k] ?? dash).join(' / '))}</b></div>`)
+  if (card.session?.heightCm || card.session?.weightKg) lines.push(`<div><span>Height · Weight</span><b class="plain">${card.session.heightCm ? card.session.heightCm + ' cm' : dash} · ${card.session.weightKg ? card.session.weightKg + ' kg' : dash}</b></div>`)
+  if (!lines.length) return ''
+  const scale = (card.scales?.coScholastic || []).join('–')
+  const termNote = tk.length > 1 ? ' · ' + shown.map((t) => esc(t.label.replace(/ exam$/i, ''))).join(' / ') : ''
+  return `<h4>Co-scholastic${scale ? ` · scale ${esc(scale)}` : ''}${termNote}</h4><div class="co">${lines.join('')}</div>`
+}
+
+// ── result box ──────────────────────────────────────────────────────────────
+function resultBox(card, final) {
+  const o = card.overall
+  const isFinal = final || card.family === 'secondary_annual'
+  const kv = [['Marks', totalCell(o)], ['Percentage', pct1(o.pct)], ['Grade', o.grade || dash], ['Rank', card.rank != null ? `${card.rank}${card.sectionStrength ? ' of ' + card.sectionStrength : ''}` : dash]]
+  let tail = ''
+  if (isFinal) {
+    const promo = card.session?.promotedTo
+    if (card.family === 'secondary_annual' && card.result) tail = `<div class="result">RESULT: ${esc(card.result)}</div>`
+    else if (promo) { const p = String(promo).replace(/^Class /i, '').toUpperCase(); tail = `<div class="result">PROMOTED TO ${/^\d/.test(p) ? 'CLASS ' : ''}${esc(p)}</div>` }
+    else tail = `<div class="note">Promotion as decided by the school.</div>`
+  } else tail = `<div class="note">Promotion is decided on the final card.</div>`
+  return `<div class="kv">${kv.map(([k, v]) => `<span>${k}</span><b>${esc(v)}</b>`).join('')}</div>${tail}`
+}
+function gradeKey(card) {
+  const b = card.scales?.gradeScale?.bands || []
+  const parts = b.map(([m, g]) => `${g} ≥ ${m}`)
+  const extra = card.family === 'performance_profile' ? ' Periodic tests are conducted out of 40 and shown out of 10.' : card.family === 'secondary_annual' ? ' P.P.T. = pen-paper test; M.A. = multiple assessment; internal assessment as per CBSE.' : ''
+  return `Grades · ${parts.join(' · ')} · ${esc(card.scales?.gradeScale?.floorLabel || 'E')} below ${b[b.length - 1]?.[0] ?? 33}.${extra} AB = absent.`
+}
