@@ -93,8 +93,11 @@ export function planCard(def, family) {
       { key: 'se', label: 'Subject Enrichment', max: 5, source: { type: 'sheet' } },
       { key: 'exam', label: 'Term Exam', max: 80, source: { type: 'exam', kind: 'TERM' } },
     ]).map((c) => {
-      const isTermExam = c.source?.kind === 'TERM' || c.key === 'exam'
-      const termMap = c.source?.termMap || Object.fromEntries(terms.map((t) => [t.key, isTermExam ? ({ T1: 'HY', T2: 'AN' }[t.key] || t.key) : t.key]))
+      // Default term for each component: periodic tests are their own exam term (T1 / T2);
+      // the term exam AND the office sheets (portfolio, subject enrichment …) are entered
+      // with the half-yearly / annual exam — the office fills them in at the same sitting.
+      const isPT = c.source?.kind === 'PT' || c.key === 'pt'
+      const termMap = c.source?.termMap || Object.fromEntries(terms.map((t) => [t.key, isPT ? t.key : ({ T1: 'HY', T2: 'AN' }[t.key] || t.key)]))
       const rawMax = c.rawMax ?? (c.key === 'pt' ? 40 : c.max)
       return { key: c.key, label: c.label, max: Number(c.max), rawMax: Number(rawMax), kind: c.source?.type === 'sheet' || c.source?.type === 'monthlyAvg' ? 'sheet' : 'exam', termMap }
     })
