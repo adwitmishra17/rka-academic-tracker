@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react'
 import { examApi, reportTemplateApi } from '../../lib/api'
+import { planCard } from '../../../lib/cardEngine.js'
 import { inp, lbl, card, th, td, Btn, Pill, Note, Spinner } from './ui.jsx'
 
 /* Stage 2 — Scoring rules. Edits the class's report-card template
@@ -28,7 +29,10 @@ export default function RulesStage({ branch, sessionCode, className, config, ref
   useEffect(load, [branch, sessionCode, className]) // eslint-disable-line
 
   const family = data?.template?.family
-  const plan = data?.plan
+  // The plan is derived from the EDITING copy (def), not the server's snapshot,
+  // so every edit — including removing a component — shows immediately and
+  // what you see is exactly what Save persists. Same engine code as the server.
+  const plan = useMemo(() => (def && family ? planCard(def, family) : data?.plan || null), [def, family, data])
   const sharedClasses = useMemo(() => Object.entries(config?.classMap || {}).filter(([, id]) => id === data?.template?.id).map(([c]) => c), [config, data])
   const classSubjects = data?.subjects || []
   const cardTerms = plan?.cardTerms || []
@@ -36,15 +40,7 @@ export default function RulesStage({ branch, sessionCode, className, config, ref
   function upd(mut) { setDef((d) => { const n = JSON.parse(JSON.stringify(d)); mut(n); return n }); setDirty(true) }
 
   // ── components (performance_profile) ──────────────────────────────────────
-  const comps = useMemo(() => {
-    if (!def || !plan) return []
-    if (family === 'performance_profile') {
-      // ensure def.components carries everything the plan derived (defaults materialised so edits stick)
-      return plan.components.map((c) => ({ key: c.key, label: c.label, max: c.max, rawMax: c.rawMax, kind: c.kind, termMap: c.termMap }))
-    }
-    if (family === 'secondary_annual') return plan.components
-    return plan.components
-  }, [def, plan, family])
+  const comps = useMemo(() => (plan ? plan.components : []), [plan])
 
   // Does the on-card arithmetic add up to the card's subject total?
   const arithmetic = useMemo(() => {
