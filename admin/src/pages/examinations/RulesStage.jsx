@@ -128,6 +128,34 @@ export default function RulesStage({ branch, sessionCode, className, config, ref
   function moveRow(i, dir) { upd((d) => { const a = d.classRows[className]; const j = i + dir; if (j < 0 || j >= a.length) return; [a[i], a[j]] = [a[j], a[i]] }) }
   const schemes = def?.schemes || {}
   const coreOrder = def?.coreOrder?.[className] || []
+  // Senior classes: core list + optional list per class; each name has a scheme (theory/practical per term)
+  const DEFAULT_OPTIONALS = /Commerce$/.test(className) ? ['PHYSICAL EDUCATION', 'COMPUTER SCIENCE', 'HINDI CORE', 'MATHEMATICS'] : ['PHYSICAL EDUCATION', 'COMPUTER SCIENCE', 'HINDI CORE']
+  const optionalOrder = def?.optionalOrder?.[className] || DEFAULT_OPTIONALS
+  function setList(which, names) { upd((d) => { d[which] = d[which] || {}; d[which][className] = names }) }
+  function addToList(which, current) {
+    const name = prompt(`${which === 'coreOrder' ? 'Core' : 'Optional'} subject name as it prints on the card (e.g. HINDI CORE):`)
+    const n = (name || '').trim().toUpperCase(); if (!n || current.includes(n)) return
+    upd((d) => { d.schemes = d.schemes || {}; if (!d.schemes[n]) d.schemes[n] = { theory: 80, practical: 20 }; d[which] = d[which] || {}; d[which][className] = [...current, n] })
+  }
+  function moveIn(which, current, i, dir) { const j = i + dir; if (j < 0 || j >= current.length) return; const a = [...current]; [a[i], a[j]] = [a[j], a[i]]; setList(which, a) }
+  const seniorRows = (which, current) => current.map((name, i) => {
+    const sc = schemes[name] || { theory: 100, practical: 0 }; const m = mappedRows.find((x) => x.subject === name)
+    return (
+      <tr key={name}>
+        <td style={{ ...td, fontWeight: 600 }}>{name}</td>
+        <td style={td}><input type="number" value={sc.theory ?? ''} onChange={(e) => upd((d) => { d.schemes = d.schemes || {}; d.schemes[name] = { ...(d.schemes[name] || {}), theory: Number(e.target.value) } })} style={{ ...inp, width: 64 }} /></td>
+        <td style={td}><input type="number" value={sc.practical ?? ''} onChange={(e) => upd((d) => { d.schemes = d.schemes || {}; d.schemes[name] = { ...(d.schemes[name] || {}), practical: Number(e.target.value) } })} style={{ ...inp, width: 64 }} /></td>
+        <td style={td}>{Number(sc.theory || 0) + Number(sc.practical || 0)}</td>
+        <td style={td}>{m ? (m.unmapped ? <Pill tone="red">no subject — create it in Setup</Pill> : <Pill tone="green">{m.mapped.join(', ')}</Pill>) : <span style={{ color: 'var(--text-muted)', fontSize: 11 }}>save to check</span>}</td>
+        <td style={{ ...td, whiteSpace: 'nowrap', textAlign: 'right' }}>
+          <Btn small onClick={() => moveIn(which, current, i, -1)} disabled={i === 0} title="Move up">↑</Btn>{' '}
+          <Btn small onClick={() => moveIn(which, current, i, 1)} disabled={i === current.length - 1} title="Move down">↓</Btn>{' '}
+          <Btn small kind="danger" onClick={() => setList(which, current.filter((_, j) => j !== i))} title="Remove from this class">✕</Btn>
+        </td>
+      </tr>
+    )
+  })
+  const unusedSchemes = Object.keys(schemes).filter((n) => !coreOrder.includes(n) && !optionalOrder.includes(n))
   // which class subject feeds which row (explicit sources win over the auto match)
   const claimedBy = useMemo(() => {
     const m = {}
@@ -309,23 +337,28 @@ export default function RulesStage({ branch, sessionCode, className, config, ref
         </div>
       ) : (
         <div style={{ ...card, padding: 0, overflow: 'hidden' }}>
-          <div style={{ padding: '10px 14px', borderBottom: '1px solid var(--gray-100)', fontSize: 13, fontWeight: 600 }}>Subject schemes (theory / practical max per term) · rows resolve per student from stream + optional subject</div>
-          <div style={{ padding: '8px 14px', fontSize: 11.5, color: 'var(--text-muted)' }}>Core order for {className}: {coreOrder.join(' · ') || '—'} (edit in Card Designer). Science path PCM drops Biology, PCB drops Mathematics.</div>
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <thead><tr><th style={th}>Subject</th><th style={th}>Theory</th><th style={th}>Practical</th><th style={th}>Total / term</th><th style={th}>Matches class subject</th></tr></thead>
-            <tbody>{Object.entries(schemes).map(([name, sc]) => {
-              const m = mappedRows.find((x) => x.subject === name)
-              return (
-                <tr key={name}>
-                  <td style={{ ...td, fontWeight: 600 }}>{name}</td>
-                  <td style={td}><input type="number" value={sc.theory ?? ''} onChange={(e) => upd((d) => { d.schemes[name].theory = Number(e.target.value) })} style={{ ...inp, width: 64 }} /></td>
-                  <td style={td}><input type="number" value={sc.practical ?? ''} onChange={(e) => upd((d) => { d.schemes[name].practical = Number(e.target.value) })} style={{ ...inp, width: 64 }} /></td>
-                  <td style={td}>{Number(sc.theory || 0) + Number(sc.practical || 0)}</td>
-                  <td style={td}>{m ? (m.unmapped ? <Pill tone="red">no subject</Pill> : <Pill tone="green">{m.mapped.join(', ')}</Pill>) : <span style={{ color: 'var(--text-muted)', fontSize: 11 }}>not in this class's core</span>}</td>
-                </tr>
-              )
-            })}</tbody>
-          </table>
+          <div style={{ display: 'flex', alignItems: 'center', padding: '10px 14px', borderBottom: '1px solid var(--gray-100)' }}>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 13, fontWeight: 600 }}>Card rows for {className} — core subjects, in print order</div>
+              <div style={{ fontSize: 11.5, color: 'var(--text-muted)', marginTop: 2 }}>Theory / practical max per term. Science path from SMS drops Biology (PCM) or Mathematics (PCB) for that student.</div>
+            </div>
+            <Btn small onClick={() => addToList('coreOrder', coreOrder)}>+ Core subject</Btn>
+          </div>
+          <div style={{ overflowX: 'auto' }}><table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <thead><tr><th style={th}>Subject</th><th style={th}>Theory</th><th style={th}>Practical</th><th style={th}>Total / term</th><th style={th}>Matches class subject</th><th style={th}></th></tr></thead>
+            <tbody>{seniorRows('coreOrder', coreOrder)}{coreOrder.length === 0 && <tr><td colSpan={6} style={{ ...td, color: 'var(--text-muted)' }}>No core subjects yet — add them.</td></tr>}</tbody>
+          </table></div>
+          <div style={{ display: 'flex', alignItems: 'center', padding: '10px 14px', borderTop: '1px solid var(--gray-100)', borderBottom: '1px solid var(--gray-100)', background: 'var(--gray-50)' }}>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 13, fontWeight: 600 }}>Optional subjects — one per student</div>
+              <div style={{ fontSize: 11.5, color: 'var(--text-muted)', marginTop: 2 }}>Each student's pick comes from their SMS record (Optional subject). A student's card prints the core plus that one row; other optionals stay off it.</div>
+            </div>
+            <Btn small onClick={() => addToList('optionalOrder', optionalOrder)}>+ Optional subject</Btn>
+          </div>
+          <div style={{ overflowX: 'auto' }}><table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <tbody>{seniorRows('optionalOrder', optionalOrder)}{optionalOrder.length === 0 && <tr><td colSpan={6} style={{ ...td, color: 'var(--text-muted)' }}>No optional subjects for this class.</td></tr>}</tbody>
+          </table></div>
+          {unusedSchemes.length > 0 && <div style={{ padding: '8px 14px', fontSize: 11.5, color: 'var(--text-muted)' }}>Schemes on this template not used by {className}: {unusedSchemes.join(' · ')} — add one above to put it on this class's card.</div>}
         </div>
       )}
 

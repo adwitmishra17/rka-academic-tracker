@@ -167,6 +167,27 @@ export function planCard(def, family) {
 }
 
 // ── Rows for a class (+ per-student for seniors) ────────────────────────────
+/** Optional subjects a senior class offers (one per student, chosen in SMS).
+ *  Stored per class in the template as optionalOrder; the default mirrors the
+ *  SMS admission rule: every stream offers Physical Education, Computer
+ *  Science and Hindi; Commerce also offers Mathematics. */
+export function seniorOptionals(def, className) {
+  const list = def?.optionalOrder?.[className]
+  if (Array.isArray(list)) return list
+  const base = ['PHYSICAL EDUCATION', 'COMPUTER SCIENCE', 'HINDI CORE']
+  return /Commerce$/.test(className || '') ? [...base, 'MATHEMATICS'] : base
+}
+/** Senior rows for an explicit list of scheme names (core, optional, or both). */
+export function resolveSeniorNames(def, names, subjects) {
+  const schemes = def?.schemes || {}
+  const scholastic = subjects.filter((s) => (s.kind || 'scholastic') === 'scholastic')
+  return names.map((name) => {
+    const scheme = schemes[name] || schemes[normName(name)] || { theory: 100, practical: 0 }
+    const ids = resolveRowSubjects({ subject: name }, scholastic, { composite: false })
+    return { subject: name, sources: ids, subjectIds: ids.map((s) => s.id), written: Number(scheme.theory || 0), practical: Number(scheme.practical || 0), countsInAggregate: true }
+  })
+}
+
 export function resolveRows(def, family, className, subjects, student) {
   const d = def || {}
   const isComposite = /^Class (9|10)$/.test(className)
@@ -184,11 +205,7 @@ export function resolveRows(def, family, className, subjects, student) {
       const schemeName = Object.keys(schemes).find((k) => rowSourceNames(k).includes(opt)) || student.optional_subject
       names.push(schemeName)
     }
-    return names.map((name) => {
-      const scheme = schemes[name] || schemes[normName(name)] || { theory: 100, practical: 0 }
-      const ids = resolveRowSubjects({ subject: name }, scholastic, { composite: false })
-      return { subject: name, sources: ids, subjectIds: ids.map((s) => s.id), written: Number(scheme.theory || 0), practical: Number(scheme.practical || 0), countsInAggregate: true }
-    })
+    return resolveSeniorNames(d, names, subjects)
   }
   const rows = d.classRows?.[className]
   if (rows?.length) {

@@ -12,7 +12,7 @@
 // Registered from server.js: registerExamRoutes(app, { supabase, admin, verifyAuth, branchIdForCode })
 // ============================================================================
 
-import { computeCard, planCard, resolveRows, generatePaperSpecs, applyClassStats, normName } from './cardEngine.js'
+import { computeCard, planCard, resolveRows, resolveSeniorNames, seniorOptionals, generatePaperSpecs, applyClassStats, normName } from './cardEngine.js'
 import { renderCardHtml } from './cardRender.js'
 
 const STANDARD_TERMS = [
@@ -349,8 +349,10 @@ export function registerExamRoutes(app, { supabase, admin, verifyAuth, branchIdF
       const b = await loadBundle(bid, sessionCode, className)
       if (!b.template) return res.json({ template: null, plan: null, rows: [], terms: b.terms })
       const plan = planCard(b.template.definition, b.template.family)
-      const rows = resolveRows(b.template.definition, b.template.family, className, b.subjects, null)
-        .map((r) => ({ subject: r.subject, locCode: r.locCode, written: r.written, practical: r.practical, additional: r.additional, mapped: r.sources.map((s) => s.subject_name), unmapped: r.sources.length === 0 }))
+      const shape = (r, extra = {}) => ({ subject: r.subject, locCode: r.locCode, written: r.written, practical: r.practical, additional: r.additional, mapped: r.sources.map((s) => s.subject_name), unmapped: r.sources.length === 0, ...extra })
+      const rows = resolveRows(b.template.definition, b.template.family, className, b.subjects, null).map((r) => shape(r))
+      // Senior classes: the core prints for everyone; each student adds ONE optional (chosen in SMS)
+      if (b.template.family === 'senior_progress') rows.push(...resolveSeniorNames(b.template.definition, seniorOptionals(b.template.definition, className), b.subjects).map((r) => shape(r, { optional: true })))
       res.json({ template: b.template, plan, rows, terms: b.terms, subjects: b.subjects.filter((s) => (s.kind || 'scholastic') === 'scholastic').map((s) => s.subject_name) })
     } catch (e) { err(res, e, 'GET /api/exam/rules') }
   })
@@ -410,14 +412,12 @@ export function registerExamRoutes(app, { supabase, admin, verifyAuth, branchIdF
         if (!b.template) { summary.skipped.push({ className: cls, reason: 'no template bound' }); continue }
         if (!b.terms.length) { summary.skipped.push({ className: cls, reason: 'no terms — seed terms first' }); continue }
         const plan = planCard(b.template.definition, b.template.family)
-        // Senior rows resolve per student; for paper generation we need EVERY scheme subject the class offers.
+        // Senior rows resolve per student; papers are needed for the class core plus every optional the class offers.
         let rows
         if (b.template.family === 'senior_progress') {
           const d = b.template.definition || {}
-          const names = new Set([...(d.coreOrder?.[cls] || []), ...Object.keys(d.schemes || {})])
-          rows = resolveRows(d, 'senior_progress', cls, b.subjects, { optional_subject: null, science_path: null })
-          // plus any optional/scheme subject actually configured for this class
-          for (const n of names) if (!rows.some((r) => r.subject === n)) { const extra = resolveRows({ ...d, coreOrder: { [cls]: [n] } }, 'senior_progress', cls, b.subjects, null)[0]; if (extra?.sources.length) rows.push(extra) }
+          const names = [...new Set([...(d.coreOrder?.[cls] || []), ...seniorOptionals(d, cls)])]
+          rows = resolveSeniorNames(d, names, b.subjects).filter((r) => r.sources.length)
         } else rows = resolveRows(b.template.definition, b.template.family, cls, b.subjects, null)
         const termsByCode = Object.fromEntries(b.terms.map((t) => [t.short_code, t]))
         const specs = generatePaperSpecs(plan, rows, termsByCode)

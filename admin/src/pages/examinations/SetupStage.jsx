@@ -246,8 +246,8 @@ export default function SetupStage({ branch, sessionCode, className, config, ref
               <div style={{ ...card, padding: 0, overflow: 'hidden' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderBottom: '1px solid var(--gray-100)' }}>
                   <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: 13, fontWeight: 600 }}>Subjects on the card <span style={{ color: 'var(--text-muted)', fontWeight: 500 }}>· {cardRows.length}</span></div>
-                    <div style={{ fontSize: 11.5, color: 'var(--text-muted)' }}>Exactly what prints, in print order. Change rows in Scoring rules; set the subject teacher here for reference.</div>
+                    <div style={{ fontSize: 13, fontWeight: 600 }}>Subjects on the card <span style={{ color: 'var(--text-muted)', fontWeight: 500 }}>· {cardRows.some((r) => r.optional) ? `${cardRows.filter((r) => !r.optional).length} core + ${cardRows.filter((r) => r.optional).length} optional` : cardRows.length}</span></div>
+                    <div style={{ fontSize: 11.5, color: 'var(--text-muted)' }}>Exactly what prints, in print order. Change rows in Scoring rules; set the subject teacher here for reference.{cardRows.some((r) => r.optional) ? ' Optional subjects print only for the students who chose them in SMS.' : ''}</div>
                   </div>
                   {cardRows.some((r) => !(r.mapped || []).length) && <Btn kind="primary" small onClick={() => createForRows(cardRows.filter((r) => !(r.mapped || []).length))} disabled={busy === 'add'}>Create {cardRows.filter((r) => !(r.mapped || []).length).length} missing subject{cardRows.filter((r) => !(r.mapped || []).length).length === 1 ? '' : 's'}</Btn>}
                 </div>
@@ -260,9 +260,12 @@ export default function SetupStage({ branch, sessionCode, className, config, ref
                     <thead><tr><th style={th}>#</th><th style={th}>On the card</th><th style={th}>Exam subject</th><th style={th}>Subject teacher <span style={{ fontWeight: 400, textTransform: 'none', letterSpacing: 0 }}>(reference — marks are entered by the office)</span></th><th style={th}>Optional</th></tr></thead>
                     <tbody>{cardRows.map((r, i) => {
                       const members = (r.mapped || []).map((n) => byName[n]).filter(Boolean)
+                      const firstOptional = r.optional && !cardRows[i - 1]?.optional
                       return (
-                        <tr key={r.subject} style={{ background: members.length ? 'transparent' : 'var(--gold-light)' }}>
-                          <td style={{ ...td, color: 'var(--text-muted)', width: 30 }}>{i + 1}</td>
+                        <React.Fragment key={r.subject}>
+                        {firstOptional && <tr><td colSpan={5} style={{ ...td, background: 'var(--gray-50)', fontSize: 11, color: 'var(--text-muted)', letterSpacing: '.04em', textTransform: 'uppercase', fontWeight: 600 }}>Optional · one per student, chosen in SMS (science path PCM / PCB also drops Biology or Mathematics from the core)</td></tr>}
+                        <tr style={{ background: members.length ? 'transparent' : 'var(--gold-light)' }}>
+                          <td style={{ ...td, color: 'var(--text-muted)', width: 30 }}>{r.optional ? '•' : i + 1}</td>
                           <td style={{ ...td, fontWeight: 700, textTransform: 'uppercase', fontSize: 12 }}>{r.subject}{r.additional ? <span style={{ marginLeft: 6 }}><Pill tone="gold">additional</Pill></span> : null}</td>
                           <td style={td}>{members.length ? members.map((s) => <span key={s.id} style={{ marginRight: 6 }}>{s.subject_name}</span>) : <span style={{ color: 'var(--gold-dark)', fontSize: 12 }}>no subject yet → <button onClick={() => createForRows([r])} disabled={busy === 'add'} style={{ border: 'none', background: 'none', color: 'var(--green-dark)', textDecoration: 'underline', cursor: 'pointer', fontSize: 12, padding: 0 }}>create "{canonName(r.subject)}"</button></span>}{members.length > 1 && <div style={{ fontSize: 10.5, color: 'var(--green-dark)' }}>summed, then scaled to /100</div>}</td>
                           <td style={td}>{members.map((s) => <div key={s.id} style={{ marginBottom: members.length > 1 ? 4 : 0 }}><select value={s.assigned_teacher_id || ''} onChange={(e) => patchSubject(s, { teacherId: e.target.value || null })} style={{ ...inp, width: '100%', minWidth: 150, maxWidth: 260 }}>
@@ -271,6 +274,7 @@ export default function SetupStage({ branch, sessionCode, className, config, ref
                                 </select></div>)}</td>
                           <td style={td}>{members.map((s) => <input key={s.id} type="checkbox" checked={!!s.is_optional} onChange={(e) => patchSubject(s, { isOptional: e.target.checked })} title="Elective (Class 11/12 admission choice)" />)}</td>
                         </tr>
+                        </React.Fragment>
                       )
                     })}</tbody>
                   </table></div>
