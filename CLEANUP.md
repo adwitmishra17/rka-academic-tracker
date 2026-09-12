@@ -41,6 +41,7 @@ Also drop from `functions/index.js` once the six are gone: `ensurePapersForSubje
 | `admin/server.js` → `computeReportCard()` + `GET /api/exam/report-card` (~lines 403–520, 661–669) | Old three-copy card compute; the engine (`admin/lib/cardEngine.js`) replaced it. No client calls it. | Delete function + route + `CBSE_GRADES`/`gradeFor` if unused elsewhere. |
 | `admin/server.js` → `POST /api/exam/papers` (create) | Papers are generated from rules; the create button was removed from Marks Entry. | Delete route. `PATCH` stays (date sheet / max edits). |
 | `admin/src/lib/api.js` → `examApi.reportCard`, `examApi.createPaper` | No callers. | Delete the two lines. |
+| `admin/src/pages/ReportCardTemplates.jsx` (Card Designer) | Off the menu since 2026-09-13; everything it edited now lives in Examinations → Setup (binding, rename) and Scoring rules (rows, schemes, card areas). Kept reachable at `/report-card-templates` for super-admins as a raw-JSON repair tool. | Delete once nobody has needed the JSON editor for a term; drop `reportTemplateApi.assign` callers there. The per-area `owner` field in template definitions is unread anywhere — drop it from the seed + definitions when convenient. |
 | `admin/src/pages/MarksEntry.jsx` "Periodic" read-only paired column (`ptTerm`) | The card engine pairs terms now; the column is informational only. | Optional: remove to simplify. |
 | `documentation.md` sections describing `examSubjects`/`examTerms` Firestore config and the CF mirror | Stale. | Rewrite to point at Examinations + `admin/lib/*`. |
 

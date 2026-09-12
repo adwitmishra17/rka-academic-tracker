@@ -124,6 +124,7 @@ export const examApi = {
   published:          (params)                            => apiGet('/api/exam/published', params),
   publishedOne:       (id)                                => apiGet(`/api/exam/published/${id}`),
   unpublish:          (ids)                               => apiPost('/api/exam/unpublish', { ids }),
+  syncCardAreas:      (branchCode, sessionCode, templateId) => apiPost('/api/exam/card-areas/sync', { branchCode, sessionCode, templateId }),
 }
 
 export async function apiPut(path, body) {

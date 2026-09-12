@@ -365,6 +365,39 @@ export function registerExamRoutes(app, { supabase, admin, verifyAuth, branchIdF
     } catch (e) { err(res, e, 'GET /api/exam/rules') }
   })
 
+  // POST /api/exam/card-areas/sync { branchCode, sessionCode, templateId }
+  // Card areas (co-scholastic rows → RCA, graded subjects → RCG) live in the
+  // template; the class teacher enters their grades against exam_subjects rows
+  // of kind co_scholastic with that code. Make sure every class bound to the
+  // template has one row per area (insert-only: never renames or flips kinds).
+  app.post('/api/exam/card-areas/sync', verifyAuth, async (req, res) => {
+    try {
+      const { branchCode, sessionCode, templateId } = req.body || {}
+      if (!branchCode || !sessionCode || !templateId) return bad(res, 'branchCode, sessionCode, templateId required')
+      const bid = await branchIdForCode(branchCode)
+      const [{ data: tpl, error: tErr }, { data: bound, error: bErr }] = await Promise.all([
+        supabase.from('report_card_templates').select('id, definition').eq('id', templateId).single(),
+        supabase.from('report_card_template_classes').select('class_name').eq('session_code', sessionCode).eq('template_id', templateId),
+      ])
+      if (tErr) throw tErr
+      if (bErr) throw bErr
+      const d = tpl.definition || {}
+      const areas = [
+        ...(d.coScholastic?.rows || []).map((r) => ({ name: typeof r === 'string' ? r : r.name, code: 'RCA' })),
+        ...(d.gradedSubjects?.rows || []).map((r) => ({ name: typeof r === 'string' ? r : r.name, code: 'RCG' })),
+      ].filter((a) => a.name)
+      const classes = (bound || []).map((r) => r.class_name)
+      let created = 0
+      for (const cls of classes) {
+        const { data: existing } = await supabase.from('exam_subjects').select('subject_name').eq('branch_id', bid).eq('session_code', sessionCode).eq('class_name', cls)
+        const have = new Set((existing || []).map((x) => normName(x.subject_name)))
+        const rows = areas.filter((a) => !have.has(normName(a.name))).map((a, i) => ({ branch_id: bid, session_code: sessionCode, class_name: cls, subject_name: a.name, subject_code: a.code, kind: 'co_scholastic', is_optional: false, sort_order: 900 + i, created_by: 'rules-sync', updated_by: req.user.email }))
+        if (rows.length) { const { error } = await supabase.from('exam_subjects').insert(rows); if (error) throw error; created += rows.length }
+      }
+      res.json({ classes: classes.length, areas: areas.length, created })
+    } catch (e) { err(res, e, 'POST /api/exam/card-areas/sync') }
+  })
+
   // ═══════════════════════════════════════════════════════════════════════════
   // PAPERS — generated from the rules
   // ═══════════════════════════════════════════════════════════════════════════

@@ -1,3 +1,4 @@
+import { useAuth } from '../App'
 import React, { useState, useEffect, useMemo } from 'react'
 import { collection, getDocs } from 'firebase/firestore'
 import { db } from '../firebase/config'
@@ -311,7 +312,16 @@ function ClassAssigner({ unmapped, busy, onAssign }) {
 
 // ── Page ────────────────────────────────────────────────────────────────────
 
+// Off the menu since 2026-09-13: everyday card editing lives in Examinations →
+// Scoring rules. This page stays reachable at /report-card-templates for
+// super-admins as a raw-JSON repair tool.
 export default function ReportCardTemplates() {
+  const { isSuperAdmin } = useAuth()
+  if (!isSuperAdmin) return <div style={{ padding: 28, fontSize: 13, color: 'var(--text-muted)' }}>Template JSON repair tool — super-admin only. Everyday card editing lives in <b>Examinations → Scoring rules</b>.</div>
+  return <ReportCardTemplatesInner />
+}
+
+function ReportCardTemplatesInner() {
   const [sessions, setSessions] = useState([])
   const [sessionCode, setSessionCode] = useState('')
   const [templates, setTemplates] = useState([])

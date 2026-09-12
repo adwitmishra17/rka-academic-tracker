@@ -232,6 +232,7 @@ export default function SetupStage({ branch, sessionCode, className, config, ref
                     <div style={{ fontSize: 11, color: 'var(--crimson)', marginTop: 4 }}>This template does not fit {selected} — no rows or composites will resolve. Pick the matching card.</div>
                   )}
                 </div>
+                {classMap[selected] && <Btn small onClick={async () => { const t = templates.find((x) => x.id === classMap[selected]); const n = prompt('Template name (shown in the list; not printed):', t?.name || ''); if (!n || !n.trim() || n.trim() === t?.name) return; setBusy('tpl'); try { await reportTemplateApi.save(t.id, { name: n.trim() }); await refreshConfig(); say('Template renamed') } catch (e) { fail(e) } setBusy('') }} title="Rename this template">Rename</Btn>}
                 <Btn small onClick={() => setStage('rules')} disabled={!classMap[selected]}>Scoring rules →</Btn>
               </div>
 
