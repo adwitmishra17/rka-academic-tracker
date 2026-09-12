@@ -47,16 +47,45 @@ export default function CrosslistStage({ branch, sessionCode, className, config 
   const terms = config?.terms || []
   useEffect(() => { if (!termId && terms.length) setTermId(terms[0].id) }, [terms]) // eslint-disable-line
 
+  // ── rules ↔ papers sync gate: nothing downloads while the papers lag the rules ──
+  const [sync, setSync] = useState(null)      // { synced, missing[], stale[], changed[] } | null while loading
+  const [syncing, setSyncing] = useState(false)
+  const [reloadTick, setReloadTick] = useState(0)
+  const checkSync = () => examApi.paperSyncStatus(branch, sessionCode, className).then(setSync).catch((e) => setSync({ synced: false, reason: e.message, missing: [], stale: [], changed: [] }))
+  useEffect(() => { setSync(null); checkSync() }, [branch, sessionCode, className]) // eslint-disable-line
+  const syncIssues = sync && !sync.synced ? [...(sync.reason ? [sync.reason] : []), ...sync.missing.map((m) => `missing: ${m}`), ...sync.changed.map((c) => `max changed: ${c}`), ...sync.stale.map((x) => `no longer in the rules: ${x.label}${x.marks ? ` (${x.marks} marks entered)` : ''}`)] : []
+  async function syncNow() {
+    setSyncing(true); setErr('')
+    try {
+      const r = await examApi.generatePapers(branch, sessionCode, className)
+      const staleWithMarks = (sync?.stale || []).filter((x) => x.marks > 0)
+      const fresh = await examApi.paperSyncStatus(branch, sessionCode, className)
+      setSync(fresh); setReloadTick((n) => n + 1)
+      if (!fresh.synced && staleWithMarks.length) setErr(`Papers regenerated (${r.created} created, ${r.adopted} adopted), but ${staleWithMarks.length} old paper${staleWithMarks.length === 1 ? '' : 's'} still carr${staleWithMarks.length === 1 ? 'ies' : 'y'} marks and cannot be removed automatically: ${staleWithMarks.map((x) => x.label).join(', ')}. Move or clear those marks in Papers, then sync again.`)
+      return fresh.synced
+    } catch (e) { setErr(e.message); return false }
+    finally { setSyncing(false) }
+  }
+  /** Runs `download` only when papers match the rules; otherwise asks to sync first. */
+  async function guarded(download) {
+    let s = sync
+    if (!s) { s = await examApi.paperSyncStatus(branch, sessionCode, className).catch(() => null); setSync(s) }
+    if (s?.synced) return download()
+    const ok = window.confirm(`The scoring rules have changed since the papers were generated, so this download would not match the card.\n\n${syncIssues.slice(0, 6).join('\n')}${syncIssues.length > 6 ? `\n… and ${syncIssues.length - 6} more` : ''}\n\nSync the papers with the rules now?`)
+    if (!ok) return
+    if (await syncNow()) return download()
+  }
+
   useEffect(() => {
-    if (mode === 'card' && cards && cards.cardKey === cardKey && cards._section === section) return // server echoed the default key — no second fetch
+    if (mode === 'card' && cards && cards.cardKey === cardKey && cards._section === section && cards._tick === reloadTick) return // server echoed the default key — no second fetch
     setErr(''); setBusy(true)
     const p = mode === 'raw'
       ? (termId ? examApi.crosslist(branch, termId, className, section || undefined).then(setRaw) : Promise.resolve())
       : mode === 'sheets'
         ? (termId ? examApi.classGrid(branch, sessionCode, className, termId, section || undefined).then(setGrid) : Promise.resolve())
-        : examApi.classCards(branch, sessionCode, className, cardKey || undefined, section || undefined).then((d) => { setCards({ ...d, _section: section }); if (!cardKey) setCardKey(d.cardKey) })
+        : examApi.classCards(branch, sessionCode, className, cardKey || undefined, section || undefined).then((d) => { setCards({ ...d, _section: section, _tick: reloadTick }); if (!cardKey) setCardKey(d.cardKey) })
     p.catch((e) => { setErr(e.message); if (mode === 'raw') setRaw(null); else if (mode === 'sheets') setGrid(null); else setCards(null) }).finally(() => setBusy(false))
-  }, [mode, termId, cardKey, section, branch, sessionCode, className]) // eslint-disable-line
+  }, [mode, termId, cardKey, section, branch, sessionCode, className, reloadTick]) // eslint-disable-line
 
   const sections = useMemo(() => [...new Set(((mode === 'raw' ? raw?.students : mode === 'sheets' ? grid?.students : cards?.rows) || []).map((r) => r.section).filter(Boolean))].sort(), [raw, cards, grid, mode])
   const sheetArgs = (withMarks) => grid && { data: grid, groups: groupsOf(grid), vals: valsFromGrid(grid), withMarks, meta: { term: grid.term?.name, className, section, branch, session: sessionCode } }
@@ -95,15 +124,28 @@ export default function CrosslistStage({ branch, sessionCode, className, config 
         {sections.length > 1 && <div><span style={lbl}>Section</span><select value={section} onChange={(e) => setSection(e.target.value)} style={inp}><option value="">All</option>{sections.map((s) => <option key={s}>{s}</option>)}</select></div>}
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           {mode === 'sheets' ? (<>
-            <Btn onClick={() => exportSheetPDF(sheetArgs(false))} disabled={!grid?.papers?.length || busy} title="Student list with empty boxes for every paper of this term — for marking on paper">Blank sheet (PDF)</Btn>
-            <Btn onClick={() => exportSheetXLSX(sheetArgs(false))} disabled={!grid?.papers?.length || busy} title="Same list as an Excel file">Blank sheet (Excel)</Btn>
-            <Btn onClick={() => exportSheetPDF(sheetArgs(true))} disabled={!grid?.papers?.length || busy} title="Current entries, for checking against the answer sheets">With marks (PDF)</Btn>
+            <Btn onClick={() => guarded(() => exportSheetPDF(sheetArgs(false)))} disabled={!grid?.papers?.length || busy || syncing} title="Student list with empty boxes for every paper of this term — for marking on paper">Blank sheet (PDF)</Btn>
+            <Btn onClick={() => guarded(() => exportSheetXLSX(sheetArgs(false)))} disabled={!grid?.papers?.length || busy || syncing} title="Same list as an Excel file">Blank sheet (Excel)</Btn>
+            <Btn onClick={() => guarded(() => exportSheetPDF(sheetArgs(true)))} disabled={!grid?.papers?.length || busy || syncing} title="Current entries, for checking against the answer sheets">With marks (PDF)</Btn>
           </>) : (<>
-            <Btn onClick={() => exportPDF(exp)} disabled={!exp || busy}>PDF</Btn>
-            <Btn onClick={() => exportXLSX(exp)} disabled={!exp || busy}>Excel</Btn>
+            <Btn onClick={() => guarded(() => exportPDF(exp))} disabled={!exp || busy || syncing}>PDF</Btn>
+            <Btn onClick={() => guarded(() => exportXLSX(exp))} disabled={!exp || busy || syncing}>Excel</Btn>
           </>)}
         </div>
       </div>
+
+      {sync && !sync.synced && (
+        <Note tone="gold">
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+            <div style={{ flex: 1 }}>
+              <b>Papers are out of step with the scoring rules</b> — downloads are held until they match. {syncIssues.length} difference{syncIssues.length === 1 ? '' : 's'}:
+              <ul style={{ margin: '4px 0 0', paddingLeft: 18 }}>{syncIssues.slice(0, 8).map((x, i) => <li key={i}>{x}</li>)}{syncIssues.length > 8 && <li>… and {syncIssues.length - 8} more</li>}</ul>
+            </div>
+            <Btn kind="primary" onClick={syncNow} disabled={syncing}>{syncing ? 'Syncing…' : 'Sync papers with rules'}</Btn>
+          </div>
+        </Note>
+      )}
+      {sync?.synced && <div style={{ fontSize: 11.5, color: 'var(--green)', marginTop: -6 }}>✓ Papers match the scoring rules ({sync.papers} papers).{sync.notes?.length ? <span style={{ color: 'var(--text-muted)' }}> Note: {sync.notes.join('; ')} — marks are scaled from the paper's own max.</span> : null}</div>}
 
       {mode === 'sheets' && !busy && grid && (
         <div style={{ ...card }}>

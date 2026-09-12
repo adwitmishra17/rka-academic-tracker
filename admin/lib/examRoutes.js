@@ -396,6 +396,60 @@ export function registerExamRoutes(app, { supabase, admin, verifyAuth, branchIdF
   // PAPERS — generated from the rules
   // ═══════════════════════════════════════════════════════════════════════════
 
+  /** The papers the rules say a class needs (one per subject × exam term × component). */
+  function paperSpecsFor(b, cls) {
+    const plan = planCard(b.template.definition, b.template.family)
+    // Senior rows resolve per student; papers are needed for the class core plus every optional the class offers.
+    let rows
+    if (b.template.family === 'senior_progress') {
+      const d = b.template.definition || {}
+      const names = [...new Set([...(d.coreOrder?.[cls] || []), ...seniorOptionals(d, cls)])]
+      rows = resolveSeniorNames(d, names, b.subjects).filter((r) => r.sources.length)
+    } else rows = resolveRows(b.template.definition, b.template.family, cls, b.subjects, null)
+    const termsByCode = Object.fromEntries(b.terms.map((t) => [t.short_code, t]))
+    return { plan, rows, specs: generatePaperSpecs(plan, rows, termsByCode) }
+  }
+
+  // GET /api/exam/papers/sync-status?branchCode=&sessionCode=&className=
+  // Are the class's papers what the current rules ask for? Missing = rule has a
+  // slot with no paper; stale = a typed paper the rules no longer mention (e.g.
+  // a component moved to another term); changed = max differs from the rule.
+  app.get('/api/exam/papers/sync-status', verifyAuth, async (req, res) => {
+    try {
+      const { branchCode, sessionCode, className } = req.query
+      if (!branchCode || !sessionCode || !className) return bad(res, 'branchCode, sessionCode, className required')
+      const bid = await branchIdForCode(branchCode)
+      const b = await loadBundle(bid, sessionCode, className)
+      if (!b.template) return res.json({ synced: false, reason: 'no template bound', missing: [], stale: [], changed: [] })
+      if (!b.terms.length) return res.json({ synced: false, reason: 'no terms', missing: [], stale: [], changed: [] })
+      const { specs } = paperSpecsFor(b, className)
+      const termName = Object.fromEntries(b.terms.map((t) => [t.id, t.short_code]))
+      const subjName = Object.fromEntries(b.subjects.map((x) => [x.id, x.subject_name]))
+      const typed = new Map(b.papers.filter((p) => p.component_key).map((p) => [`${p.subject_id}|${p.term_id}|${p.component_key}`, p]))
+      const wanted = new Set(specs.map((sp) => `${sp.subjectId}|${sp.termId}|${sp.componentKey}`))
+      const label = (subjectId, termId, componentKey) => `${subjName[subjectId] || '?'} · ${termName[termId] || '?'} · ${componentKey}`
+      const missing = specs.filter((sp) => !typed.has(`${sp.subjectId}|${sp.termId}|${sp.componentKey}`)).map((sp) => label(sp.subjectId, sp.termId, sp.componentKey))
+      // Only subjects the card uses matter: a paper of an on-card subject that the rules no longer
+      // ask for (component moved to another term, component removed) would still show in the grid.
+      // Papers of subjects that left the card altogether are hidden everywhere — reported as leftovers, not blocking.
+      const onCard = new Set(specs.map((sp) => sp.subjectId))
+      const staleRows = [...typed.values()].filter((p) => onCard.has(p.subject_id) && !wanted.has(`${p.subject_id}|${p.term_id}|${p.component_key}`))
+      const leftover = [...typed.values()].filter((p) => !onCard.has(p.subject_id)).length
+      let markCount = new Map()
+      if (staleRows.length) { const m = await pagedAll(() => supabase.from('exam_marks').select('paper_id').in('paper_id', staleRows.map((p) => p.id))); for (const r of m) markCount.set(r.paper_id, (markCount.get(r.paper_id) || 0) + 1) }
+      const stale = staleRows.map((p) => ({ id: p.id, label: label(p.subject_id, p.term_id, p.component_key), marks: markCount.get(p.id) || 0 }))
+      // card max is what the rule controls and what a sync rewrites; a raw-max drift on a paper that already
+      // holds marks is deliberate (the marks are out of the old max) and is reported, not blocking
+      const changed = [], notes = []
+      for (const sp of specs) {
+        const p = typed.get(`${sp.subjectId}|${sp.termId}|${sp.componentKey}`); if (!p) continue
+        if (Number(p.card_max ?? p.max_marks) !== Number(sp.cardMax)) changed.push(`${label(sp.subjectId, sp.termId, sp.componentKey)} (on card /${Number(p.card_max ?? p.max_marks)} → /${sp.cardMax})`)
+        else if (Number(p.max_marks) !== Number(sp.maxMarks)) notes.push(`${label(sp.subjectId, sp.termId, sp.componentKey)} is conducted out of ${Number(p.max_marks)}, rules say ${sp.maxMarks}`)
+      }
+      res.json({ synced: !missing.length && !stale.length && !changed.length, missing, stale, changed, notes, leftover, papers: typed.size })
+    } catch (e) { err(res, e, 'GET /api/exam/papers/sync-status') }
+  })
+
   // POST /api/exam/papers/generate { branchCode, sessionCode, className? } (all bound classes when omitted)
   app.post('/api/exam/papers/generate', verifyAuth, async (req, res) => {
     try {
@@ -413,16 +467,7 @@ export function registerExamRoutes(app, { supabase, admin, verifyAuth, branchIdF
         const b = await loadBundle(bid, sessionCode, cls)
         if (!b.template) { summary.skipped.push({ className: cls, reason: 'no template bound' }); continue }
         if (!b.terms.length) { summary.skipped.push({ className: cls, reason: 'no terms — seed terms first' }); continue }
-        const plan = planCard(b.template.definition, b.template.family)
-        // Senior rows resolve per student; papers are needed for the class core plus every optional the class offers.
-        let rows
-        if (b.template.family === 'senior_progress') {
-          const d = b.template.definition || {}
-          const names = [...new Set([...(d.coreOrder?.[cls] || []), ...seniorOptionals(d, cls)])]
-          rows = resolveSeniorNames(d, names, b.subjects).filter((r) => r.sources.length)
-        } else rows = resolveRows(b.template.definition, b.template.family, cls, b.subjects, null)
-        const termsByCode = Object.fromEntries(b.terms.map((t) => [t.short_code, t]))
-        const specs = generatePaperSpecs(plan, rows, termsByCode)
+        const { rows, specs } = paperSpecsFor(b, cls)
         const per = { created: 0, adopted: 0, existing: 0, unmapped: rows.filter((r) => !r.sources.length).map((r) => r.subject) }
         const typed = new Map(b.papers.filter((p) => p.component_key).map((p) => [`${p.subject_id}|${p.term_id}|${p.component_key}`, p]))
         const untyped = b.papers.filter((p) => !p.component_key)

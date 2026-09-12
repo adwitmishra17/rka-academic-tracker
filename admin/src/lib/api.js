@@ -115,6 +115,7 @@ export const examApi = {
   deleteSubject:      (id)                                => apiDelete(`/api/exam/subjects/${id}`),
   rules:              (branchCode, sessionCode, className) => apiGet('/api/exam/rules', { branchCode, sessionCode, className }),
   generatePapers:     (branchCode, sessionCode, className) => apiPost('/api/exam/papers/generate', { branchCode, sessionCode, className }),
+  paperSyncStatus:    (branchCode, sessionCode, className) => apiGet('/api/exam/papers/sync-status', { branchCode, sessionCode, className }),
   classPapers:        (branchCode, sessionCode, className) => apiGet('/api/exam/class-papers', { branchCode, sessionCode, className }),
   deletePaper:        (id)                                => apiDelete(`/api/exam/papers/${id}`),
   status:             (branchCode, sessionCode, className) => apiGet('/api/exam/status', { branchCode, sessionCode, className }),
