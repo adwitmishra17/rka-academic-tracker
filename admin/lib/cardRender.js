@@ -95,7 +95,7 @@ function renderPrePrimary(card) {
   const attRow = a ? `<tr class="tot"><td class="l">ATTENDANCE</td>${shown.map((t) => { const x = a.byTerm?.[t.key]; return `<td colspan="6">${x ? `${x.present} / ${x.marked}, ${(100 * x.present / (x.marked || 1)).toFixed(2)} %` : dash}</td>` }).join('')}${both ? `<td colspan="3">${a.sessionTotal ? `${a.sessionTotal.present} / ${a.sessionTotal.marked}, ${(100 * a.sessionTotal.present / (a.sessionTotal.marked || 1)).toFixed(2)} %` : dash}</td>` : ''}</tr>` : ''
   const banner = `<div class="sec" style="background:#111;color:#fff;text-align:center;font-weight:700;font-size:12px;padding:5px 8px;letter-spacing:.04em">TOTAL MARKS : ${ov.max ? `${ov.obtained}/${ov.max}` : dash}, PER : ${ov.pct != null ? ov.pct.toFixed(2) + '%' : dash}, RANK : ${card.rank ?? dash} , OVERALL GRADE : ${ov.grade ? esc(ov.grade) : dash}</div>`
   const extra = [['Weight', card.session?.weightKg ? `${card.session.weightKg} K.G.` : null], ['Height', card.session?.heightCm ? `${card.session.heightCm} C.M.` : null]]
-  return `<div class="page">${stamp(card)}${header(card, `PROGRESS REPORT CARD ( SESSION : ${esc(card.sessionCode)} )${card.interim ? ' · ' + esc(shown[0].label) : ''}`)}${infoBlock(card, extra)}
+  return `<div class="page">${stamp(card)}${header(card, `SESSION : ${esc(card.sessionCode)}${card.interim ? ' · ' + esc(shown[0].label) : ''}`)}${infoBlock(card, extra)}
   <table><thead>${head1}${head2}</thead><tbody>${rowsHtml}${agg}${attRow}</tbody></table>
   ${banner}
   <div class="two">${gradeTable('CO - CURRICULAR ACTIVITIES', card.coScholastic, terms, card.showTerms)}<div class="sec"><h4>GRADING</h4>${gradeLegend(card)}</div></div>
