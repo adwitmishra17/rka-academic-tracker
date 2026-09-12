@@ -46,6 +46,29 @@ export default function RulesStage({ branch, sessionCode, className, config, ref
     return plan.components
   }, [def, plan, family])
 
+  // Does the on-card arithmetic add up to the card's subject total?
+  const arithmetic = useMemo(() => {
+    if (!plan) return { ok: true, text: '' }
+    const total = plan.subjectTotal || 100
+    if (family === 'performance_profile') {
+      const sum = comps.reduce((s, c) => s + Number(c.max || 0), 0)
+      const parts = comps.map((c) => `${c.label} ${c.max}`).join(' + ')
+      return { ok: sum === total, sum, text: `Each term column: ${parts} = ${sum} / ${total}`, problem: sum > total ? `exceeds ${total} by ${sum - total}. Reduce a component.` : `short by ${total - sum}. Add it to a component.` }
+    }
+    if (family === 'secondary_annual') {
+      const ia = comps.filter((c) => c.ia).reduce((s, c) => s + Number(c.max || 0), 0)
+      const exam = comps.find((c) => !c.ia)
+      const sum = ia + Number(exam?.max || 0)
+      return { ok: sum === total, sum, text: `Internal assessment ${comps.filter((c) => c.ia).map((c) => c.max).join(' + ')} = ${ia}, plus annual exam ${exam?.max || 0} = ${sum} / ${total}`, problem: sum > total ? `exceeds ${total} by ${sum - total}.` : `short by ${total - sum}.` }
+    }
+    if (family === 'senior_progress') {
+      const perTerm = (plan.subjectTotal || 200) / Math.max(1, cardTerms.length)
+      const bad = Object.entries(def?.schemes || {}).filter(([, sc]) => Number(sc.theory || 0) + Number(sc.practical || 0) !== perTerm).map(([n]) => n)
+      return { ok: bad.length === 0, sum: perTerm, text: `Each subject per term: theory + practical = ${perTerm}`, problem: `these schemes do not add up to ${perTerm}: ${bad.join(', ')}` }
+    }
+    return { ok: true, text: '' }
+  }, [comps, plan, family, def, cardTerms])
+
   function setComp(key, patch) {
     upd((d) => {
       if (family === 'performance_profile') {
@@ -127,51 +150,68 @@ export default function RulesStage({ branch, sessionCode, className, config, ref
           </div>
         </div>
         <Btn onClick={load} disabled={busy}>Discard</Btn>
-        <Btn kind="primary" onClick={save} disabled={!dirty || busy}>{busy ? 'Saving…' : 'Save rules'}</Btn>
+        <Btn kind="primary" onClick={save} disabled={!dirty || busy || (arithmetic.sum > (plan?.subjectTotal || 100) && family !== 'senior_progress')} title={arithmetic.ok ? '' : arithmetic.problem}>{busy ? 'Saving…' : 'Save rules'}</Btn>
       </div>
 
-      {unmapped.length > 0 && <Note tone="gold"><b>{unmapped.join(', ')}</b> — these card rows don't match any subject in {className}. Set their sources below (tick the class subjects that feed the row), or rename the row.</Note>}
+      {classSubjects.length === 0 ? (
+        <Note tone="red"><b>{className} has no scholastic subjects in {branch} yet.</b> Add them in <button onClick={() => setStage('setup')} style={{ border: 'none', background: 'none', color: 'var(--crimson)', textDecoration: 'underline', cursor: 'pointer', fontSize: 12.5, padding: 0 }}>Setup</button> (import from the timetable) — the card rows below will then match automatically.</Note>
+      ) : unmapped.length > 0 && <Note tone="gold"><b>{unmapped.join(', ')}</b> — these card rows don't match any subject in {className}. Set their sources below (tick the class subjects that feed the row), or rename the row.</Note>}
       {family !== 'senior_progress' && unusedSubjects.length > 0 && <Note tone="muted">Not on the card (no row uses them): <b>{unusedSubjects.join(', ')}</b>. Fine for activities like ECA or Karate; if one is an examined subject, tick it under a row or add a row.</Note>}
 
-      {/* Card terms + components */}
+      {/* Components — plain-language rules + arithmetic check */}
       <div style={{ ...card, padding: 0, overflow: 'hidden' }}>
-        <div style={{ padding: '10px 14px', borderBottom: '1px solid var(--gray-100)', fontSize: 13, fontWeight: 600 }}>Components — what makes a subject's marks on the card</div>
-        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-          <thead><tr>
-            <th style={th}>Component</th><th style={th}>Source</th><th style={th}>Raw paper max</th><th style={th}>On the card</th>
-            {family === 'secondary_annual' ? <th style={th}>Paper term(s)</th> : cardTerms.map((t) => <th key={t.key} style={th}>{t.label} ← exam term</th>)}
-          </tr></thead>
-          <tbody>
-            {comps.map((c) => (
-              <tr key={c.key}>
-                <td style={{ ...td, fontWeight: 600 }}>
-                  <input value={c.label} onChange={(e) => setComp(c.key, { label: e.target.value })} style={{ ...inp, width: 170 }} disabled={family === 'senior_progress'} />
-                  <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 2 }}>key: {c.key}</div>
-                </td>
-                <td style={td}>
-                  <Pill tone={c.kind === 'monthlyAvg' ? 'gold' : c.kind === 'sheet' ? 'muted' : 'green'}>{c.kind === 'monthlyAvg' ? 'monthly-test average' : c.kind === 'sheet' ? 'sheet (office/teacher enters)' : c.agg === 'avg' ? 'exam paper · average of PTs' : c.split ? 'exam paper · theory + practical' : 'exam paper'}</Pill>
-                </td>
-                <td style={td}>{c.kind === 'monthlyAvg' || c.split ? <span style={{ color: 'var(--text-muted)' }}>{c.split ? 'per subject scheme' : '% of each test'}</span> : c.key === 'exam' && family === 'secondary_annual' ? <span style={{ color: 'var(--text-muted)' }}>per row (written + practical)</span> : <input type="number" value={c.rawMax ?? ''} onChange={(e) => setComp(c.key, { rawMax: e.target.value })} style={{ ...inp, width: 70 }} />}</td>
-                <td style={td}>{c.split ? <span style={{ color: 'var(--text-muted)' }}>theory + practical</span> : <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>/<input type="number" value={c.max ?? ''} onChange={(e) => setComp(c.key, { max: e.target.value })} style={{ ...inp, width: 64 }} disabled={c.key === 'exam' && family === 'secondary_annual'} /></span>}</td>
-                {family === 'secondary_annual' ? (
-                  <td style={td}>{c.agg === 'avg' ? <span>{(c.terms || []).map((t) => <Pill key={t} tone="muted">{t}</Pill>)} <span style={{ fontSize: 10.5, color: 'var(--text-muted)' }}>averaged</span></span> : c.kind === 'monthlyAvg' ? <span style={{ fontSize: 11.5, color: 'var(--text-muted)' }}>Tests &amp; Marks (monthly)</span> : (
-                    <select value={c.termMap?.annual || 'AN'} onChange={(e) => setComp(c.key, { termMap: { annual: e.target.value } })} style={inp}>{EXAM_CODES.map((x) => <option key={x}>{x}</option>)}</select>
-                  )}</td>
-                ) : cardTerms.map((t) => (
-                  <td key={t.key} style={td}>
-                    {c.kind === 'monthlyAvg' ? <span style={{ color: 'var(--text-muted)' }}>—</span> : (
-                      <select value={c.termMap?.[t.key] || ''} onChange={(e) => family === 'senior_progress' ? setCardTermExam(t.key, e.target.value) : setComp(c.key, { termMap: { ...c.termMap, [t.key]: e.target.value } })} style={inp}>
-                        {EXAM_CODES.map((x) => <option key={x} value={x}>{x} · {termName(x)}</option>)}
-                      </select>
-                    )}
-                  </td>
-                ))}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        <div style={{ padding: '8px 14px', fontSize: 11, color: 'var(--text-muted)', borderTop: '1px solid var(--gray-100)' }}>
-          A component's paper is entered against its exam term at the raw max (e.g. PA-1 /40 under Term 1) and lands on the card scaled to "on the card" (…/10). Periodic tests: T1 feeds the Half-Yearly card column, T2 feeds the Annual one.
+        <div style={{ padding: '10px 14px', borderBottom: '1px solid var(--gray-100)' }}>
+          <div style={{ fontSize: 13, fontWeight: 600 }}>How a subject's marks are built{family === 'secondary_annual' ? '' : ' for each term column'}</div>
+          <div style={{ fontSize: 11.5, color: 'var(--text-muted)', marginTop: 2 }}>
+            Read each line left to right: what the teacher enters (raw marks, in which exam term) → what it becomes on the card. Rounding is half-up (6.5 → 7).
+          </div>
+        </div>
+        <div style={{ padding: '6px 14px 2px' }}>
+          {comps.map((c) => {
+            const badge = c.kind === 'monthlyAvg' ? ['gold', 'Monthly-test average', 'Taken automatically from Tests & Marks (monthly tests) — nothing to enter here.']
+              : c.kind === 'sheet' ? ['muted', 'Sheet', 'A small assessment (portfolio, notebook…) the teacher scores per student in Enter Exam Marks; it has no exam date.']
+              : c.agg === 'avg' ? ['green', 'Exam paper · averaged', 'The periodic-test papers of the listed terms are averaged (as %), then scaled to the card marks.']
+              : c.split ? ['green', 'Exam paper · theory + practical', 'One paper per term with a theory and a practical part; the split per subject is set in the schemes below.']
+              : ['green', 'Exam paper', 'A scheduled paper in the date sheet; the subject teacher enters marks per student out of the raw max.']
+            const scaled = c.kind !== 'monthlyAvg' && !c.split && c.rawMax != null && Number(c.rawMax) !== Number(c.max)
+            const fixedCard = c.split || (c.key === 'exam' && family === 'secondary_annual')
+            return (
+              <div key={c.key} style={{ display: 'grid', gridTemplateColumns: '210px 1fr', gap: 12, alignItems: 'start', padding: '10px 0', borderBottom: '1px solid var(--gray-50)' }}>
+                <div>
+                  <input value={c.label} onChange={(e) => setComp(c.key, { label: e.target.value })} disabled={family === 'senior_progress'} style={{ ...inp, width: '100%', fontWeight: 600 }} />
+                  <div style={{ marginTop: 4 }}><Pill tone={badge[0]} title={badge[2]}>{badge[1]}</Pill></div>
+                </div>
+                <div style={{ fontSize: 12.5, lineHeight: 2.1, color: 'var(--text)' }}>
+                  {c.kind === 'monthlyAvg' ? (
+                    <>Average % of the class's monthly tests for the subject, scaled to <b>/<input type="number" value={c.max ?? ''} onChange={(e) => setComp(c.key, { max: e.target.value })} style={{ ...inp, width: 56, padding: '2px 6px' }} /></b> on the card. Nothing to enter.</>
+                  ) : c.split ? (
+                    <>Teacher enters theory and practical marks out of the subject's scheme (below); the total goes on the card as is.
+                      {cardTerms.map((t) => <span key={t.key} style={{ display: 'inline-block', marginLeft: 10 }}>{t.label} column ← <select value={c.termMap?.[t.key] || ''} onChange={(e) => setCardTermExam(t.key, e.target.value)} style={{ ...inp, padding: '2px 6px' }}>{EXAM_CODES.map((x) => <option key={x} value={x}>{x} · {termName(x)}</option>)}</select></span>)}
+                    </>
+                  ) : c.agg === 'avg' ? (
+                    <>Teacher enters the periodic test out of <b><input type="number" value={c.rawMax ?? ''} onChange={(e) => setComp(c.key, { rawMax: e.target.value })} style={{ ...inp, width: 60, padding: '2px 6px' }} /></b> in {(c.terms || []).map((t) => <Pill key={t} tone="muted">{t} · {termName(t)}</Pill>)}; the average of those tests becomes <b>/<input type="number" value={c.max ?? ''} onChange={(e) => setComp(c.key, { max: e.target.value })} style={{ ...inp, width: 56, padding: '2px 6px' }} /></b> on the card.</>
+                  ) : (
+                    <>Teacher enters marks out of <b><input type="number" value={c.rawMax ?? ''} onChange={(e) => setComp(c.key, { rawMax: e.target.value })} style={{ ...inp, width: 60, padding: '2px 6px' }} /></b>
+                      {family === 'secondary_annual' ? (
+                        <> in <select value={c.termMap?.annual || 'AN'} onChange={(e) => setComp(c.key, { termMap: { annual: e.target.value } })} style={{ ...inp, padding: '2px 6px' }}>{EXAM_CODES.map((x) => <option key={x} value={x}>{x} · {termName(x)}</option>)}</select></>
+                      ) : cardTerms.map((t) => (
+                        <span key={t.key}> {t.key === cardTerms[0].key ? 'in' : 'and'} <select value={c.termMap?.[t.key] || ''} onChange={(e) => setComp(c.key, { termMap: { ...c.termMap, [t.key]: e.target.value } })} style={{ ...inp, padding: '2px 6px' }}>{EXAM_CODES.map((x) => <option key={x} value={x}>{x} · {termName(x)}</option>)}</select> <span style={{ color: 'var(--text-muted)' }}>for the {t.label} column</span></span>
+                      ))}
+                      ; {fixedCard ? <>it goes on the card as <b>written + practical</b> from the row (below).</> : <>it {scaled ? 'is scaled to' : 'goes on the card as'} <b>/<input type="number" value={c.max ?? ''} onChange={(e) => setComp(c.key, { max: e.target.value })} style={{ ...inp, width: 56, padding: '2px 6px' }} /></b>{scaled ? ' on the card' : ''}.</>}
+                      {scaled && <span style={{ color: 'var(--text-muted)' }}> &nbsp;e.g. {Math.round(Number(c.rawMax) * 0.675)}/{c.rawMax} → {Math.floor(Math.round(Number(c.rawMax) * 0.675) * Number(c.max) / Number(c.rawMax) + 0.5)}/{c.max}</span>}
+                    </>
+                  )}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+        {/* arithmetic check */}
+        <div style={{ padding: '10px 14px', borderTop: '1px solid var(--gray-100)', background: arithmetic.ok ? 'var(--green-light)' : 'var(--crimson-light)', fontSize: 12.5, color: arithmetic.ok ? 'var(--green-dark)' : 'var(--crimson)' }}>
+          <b>{arithmetic.text}</b>{!arithmetic.ok && <> — {arithmetic.problem}</>}
+          <div style={{ fontSize: 11, marginTop: 2, color: arithmetic.ok ? 'var(--green-dark)' : 'var(--crimson)', opacity: 0.85 }}>
+            Composite rows (e.g. SCIENCE = Physics + Chemistry + Biology) add their members' raw marks together first and are then scaled to the same {plan.subjectTotal || 100} — a composite never exceeds a single subject.
+          </div>
         </div>
       </div>
 
@@ -209,7 +249,7 @@ export default function RulesStage({ branch, sessionCode, className, config, ref
                       })}
                     </div>
                     {chosen && <button onClick={() => setRow(i, { sources: undefined })} style={{ ...arrow, fontSize: 10, marginTop: 3 }}>reset to auto</button>}
-                    {!chosen && auto.length > 1 && <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 3 }}>composite — papers of all ticked subjects are summed, then scaled</div>}
+                    {(chosen || auto).length > 1 && <div style={{ fontSize: 10.5, color: 'var(--green-dark)', marginTop: 3 }}>Composite: {(chosen || auto).join(' + ')} — raw marks are added together, then scaled to /{plan.subjectTotal || 100} like any single subject.</div>}
                   </td>
                   <td style={{ ...td, textAlign: 'right' }}><Btn small kind="danger" onClick={() => removeRow(i)}>✕</Btn></td>
                 </tr>
