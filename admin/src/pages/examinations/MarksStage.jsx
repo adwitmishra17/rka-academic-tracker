@@ -184,6 +184,7 @@ function ClassGrid({ branch, sessionCode, className, config }) {
           </div>
         )
       )}
+      {data?.hiddenSubjects?.length > 0 && <div style={{ fontSize: 11.5, color: 'var(--text-muted)' }}>Not on the card, so not entered here: {data.hiddenSubjects.join(', ')}.</div>}
       {data && papers.length > 0 && (
         <div style={{ fontSize: 11.5, color: 'var(--text-muted)' }}>
           Type the raw marks as on the answer sheet (the card scales them). <b>AB</b> = absent for that paper. Enter or ↓ moves down the column. Changed cells turn gold until saved. {data.students.length} students · {papers.length} papers.

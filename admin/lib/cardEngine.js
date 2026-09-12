@@ -60,10 +60,12 @@ export const DEFAULT_COMPOSITES = {
   'SCIENCE':        ['PHYSICS', 'CHEMISTRY', 'BIOLOGY'],
   'SOCIAL SCIENCE': ['HISTORY', 'GEOGRAPHY', 'POLITICAL SCIENCE', 'ECONOMICS'],
 }
+// Office-driven entry (2026-09-13): the office enters the COMBINED mark for
+// Science / Social Science / Hindi directly, so rows map to one subject each.
+// Explicit row.sources still allow a composite when a school wants one.
 export function rowSourceNames(rowSubject, opts = {}) {
   const key = normName(rowSubject)
   if (opts.sources?.length) return opts.sources.map(normName)
-  if (opts.composite && DEFAULT_COMPOSITES[key]) return DEFAULT_COMPOSITES[key]
   return ALIASES[key] || [key]
 }
 /** Resolve a template row to exam_subjects ids. Composite rows return several. */
@@ -72,11 +74,8 @@ export function resolveRowSubjects(row, subjects, { composite }) {
   const byNorm = new Map(subjects.map((s) => [normName(s.subject_name), s]))
   const hits = []
   for (const w of wanted) { const s = byNorm.get(w); if (s && !hits.includes(s)) hits.push(s) }
-  // A composite that resolved to nothing may exist as a single unified subject
-  // (lower classes have "Science" itself).
-  if (!hits.length && composite) { const s = byNorm.get(normName(row.subject)); if (s) hits.push(s) }
-  // Alias rows (non-composite) should match ONE subject — the first hit wins.
-  return (row.sources?.length || (composite && DEFAULT_COMPOSITES[normName(row.subject)])) ? hits : hits.slice(0, 1)
+  // Alias rows match ONE subject — the first hit wins; explicit sources may list several.
+  return row.sources?.length ? hits : hits.slice(0, 1)
 }
 
 // ── Plan: card terms + components for a family, with rule defaults ──────────

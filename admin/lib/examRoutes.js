@@ -538,7 +538,14 @@ export function registerExamRoutes(app, { supabase, admin, verifyAuth, branchIdF
       if (!branchCode || !sessionCode || !className || !termId) return bad(res, 'branchCode, sessionCode, className, termId required')
       const bid = await branchIdForCode(branchCode)
       const [b, students] = await Promise.all([loadBundle(bid, sessionCode, className), roster(bid, className, section || undefined)])
-      const subjects = b.subjects.filter((x) => (x.kind || 'scholastic') === 'scholastic')
+      let subjects = b.subjects.filter((x) => (x.kind || 'scholastic') === 'scholastic')
+      // Only subjects that feed a row on the card are entered; the rest (timetable-only) are listed as hidden.
+      let hidden = []
+      if (b.template) {
+        const onCard = new Set(resolveRows(b.template.definition, b.template.family, className, b.subjects, null).flatMap((r) => r.subjectIds))
+        hidden = subjects.filter((x) => !onCard.has(x.id)).map((x) => x.subject_name)
+        subjects = subjects.filter((x) => onCard.has(x.id))
+      }
       const subjOrder = new Map(subjects.map((x, i) => [x.id, i]))
       const ORDER = ['oral', 'written', 'pt', 'portfolio', 'se', 'notebook', 'exam']
       const papers = b.papers.filter((p) => p.term_id === termId && p.component_key && subjOrder.has(p.subject_id))
@@ -547,6 +554,7 @@ export function registerExamRoutes(app, { supabase, admin, verifyAuth, branchIdF
       const marks = papers.length && sids.length ? await pagedAll(() => supabase.from('exam_marks').select('paper_id, student_id, marks_obtained, theory_obtained, practical_obtained, is_absent, source').in('paper_id', papers.map((p) => p.id)).in('student_id', sids)) : []
       res.json({
         term: b.terms.find((t) => t.id === termId) || null,
+        hiddenSubjects: hidden,
         subjects: subjects.map((x) => ({ id: x.id, name: x.subject_name, teacher: x.assigned_teacher_name || null })),
         papers: papers.map((p) => ({ id: p.id, subjectId: p.subject_id, componentKey: p.component_key, name: p.paper_name, max: Number(p.max_marks), cardMax: p.card_max != null ? Number(p.card_max) : null, hasPractical: !!p.has_practical, theoryMax: p.theory_max != null ? Number(p.theory_max) : null, practicalMax: p.practical_max != null ? Number(p.practical_max) : null })),
         students: students.map((x) => ({ id: x.id, name: x.full_name, roll: x.roll_number, section: x.section, admissionNo: x.admission_no })),
@@ -568,7 +576,8 @@ export function registerExamRoutes(app, { supabase, admin, verifyAuth, branchIdF
       const [b, students, cts, tlist] = await Promise.all([loadBundle(bid, sessionCode, className), roster(bid, className), classTeachers(branchCode), activeTeachers(null)])
       const tName = new Map(tlist.map((t) => [t.id, t.name]))
       const sids = new Set(students.map((s) => s.id))
-      const typedPapers = b.papers.filter((p) => p.component_key)
+      const onCard = b.template ? new Set(resolveRows(b.template.definition, b.template.family, className, b.subjects, null).flatMap((r) => r.subjectIds)) : null
+      const typedPapers = b.papers.filter((p) => p.component_key && (!onCard || onCard.has(p.subject_id)))
       const marks = typedPapers.length ? await pagedAll(() => supabase.from('exam_marks').select('paper_id, student_id, is_absent, source, entered_at, updated_at').in('paper_id', typedPapers.map((p) => p.id))) : []
       const agg = new Map()
       for (const m of marks) {
@@ -579,7 +588,7 @@ export function registerExamRoutes(app, { supabase, admin, verifyAuth, branchIdF
         const t = m.updated_at || m.entered_at; if (t && (!a.lastAt || t > a.lastAt)) a.lastAt = t
       }
       const termName = Object.fromEntries(b.terms.map((t) => [t.id, t]))
-      const items = b.subjects.filter((s) => (s.kind || 'scholastic') === 'scholastic').map((s) => ({
+      const items = b.subjects.filter((s) => (s.kind || 'scholastic') === 'scholastic' && (!onCard || onCard.has(s.id))).map((s) => ({
         subjectId: s.id, subjectName: s.subject_name, teacher: s.assigned_teacher_name || tName.get(s.assigned_teacher_id) || s.assigned_teacher_email || null, teacherEmail: s.assigned_teacher_email || null,
         papers: typedPapers.filter((p) => p.subject_id === s.id).sort((a, c) => (termName[a.term_id]?.sort_order || 0) - (termName[c.term_id]?.sort_order || 0)).map((p) => {
           const a = agg.get(p.id) || { entered: 0, absent: 0, manual: 0, lastAt: null }
