@@ -256,7 +256,7 @@ export default function SetupStage({ branch, sessionCode, className, config, ref
                 ) : cardRows.length === 0 ? (
                   <div style={{ padding: 20, fontSize: 12.5, color: 'var(--text-muted)' }}>This template has no rows for {selected} yet. Add them in <button onClick={() => setStage('rules')} style={{ border: 'none', background: 'none', color: 'var(--green-dark)', textDecoration: 'underline', cursor: 'pointer', fontSize: 12.5, padding: 0 }}>Scoring rules</button>.</div>
                 ) : (
-                  <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                  <div style={{ overflowX: 'auto' }}><table style={{ width: '100%', borderCollapse: 'collapse' }}>
                     <thead><tr><th style={th}>#</th><th style={th}>On the card</th><th style={th}>Exam subject</th><th style={th}>Subject teacher <span style={{ fontWeight: 400, textTransform: 'none', letterSpacing: 0 }}>(reference — marks are entered by the office)</span></th><th style={th}>Optional</th></tr></thead>
                     <tbody>{cardRows.map((r, i) => {
                       const members = (r.mapped || []).map((n) => byName[n]).filter(Boolean)
@@ -265,7 +265,7 @@ export default function SetupStage({ branch, sessionCode, className, config, ref
                           <td style={{ ...td, color: 'var(--text-muted)', width: 30 }}>{i + 1}</td>
                           <td style={{ ...td, fontWeight: 700, textTransform: 'uppercase', fontSize: 12 }}>{r.subject}{r.additional ? <span style={{ marginLeft: 6 }}><Pill tone="gold">additional</Pill></span> : null}</td>
                           <td style={td}>{members.length ? members.map((s) => <span key={s.id} style={{ marginRight: 6 }}>{s.subject_name}</span>) : <span style={{ color: 'var(--gold-dark)', fontSize: 12 }}>no subject yet → <button onClick={() => createForRows([r])} disabled={busy === 'add'} style={{ border: 'none', background: 'none', color: 'var(--green-dark)', textDecoration: 'underline', cursor: 'pointer', fontSize: 12, padding: 0 }}>create "{canonName(r.subject)}"</button></span>}{members.length > 1 && <div style={{ fontSize: 10.5, color: 'var(--green-dark)' }}>summed, then scaled to /100</div>}</td>
-                          <td style={td}>{members.map((s) => <div key={s.id} style={{ marginBottom: members.length > 1 ? 4 : 0 }}><select value={s.assigned_teacher_id || ''} onChange={(e) => patchSubject(s, { teacherId: e.target.value || null })} style={{ ...inp, minWidth: 220 }}>
+                          <td style={td}>{members.map((s) => <div key={s.id} style={{ marginBottom: members.length > 1 ? 4 : 0 }}><select value={s.assigned_teacher_id || ''} onChange={(e) => patchSubject(s, { teacherId: e.target.value || null })} style={{ ...inp, width: '100%', minWidth: 150, maxWidth: 260 }}>
                                   {!s.assigned_teacher_id && s.assigned_teacher_email && <option value="">{s.assigned_teacher_email}</option>}
                                   {teacherOpts}
                                 </select></div>)}</td>
@@ -273,7 +273,7 @@ export default function SetupStage({ branch, sessionCode, className, config, ref
                         </tr>
                       )
                     })}</tbody>
-                  </table>
+                  </table></div>
                 )}
                 {areaRows.length > 0 && (
                   <div style={{ padding: '8px 14px', borderTop: '1px solid var(--gray-100)', fontSize: 11.5, color: 'var(--text-muted)' }}>
@@ -289,20 +289,20 @@ export default function SetupStage({ branch, sessionCode, className, config, ref
                   <Btn small onClick={(e) => { e.preventDefault(); openBuild() }} disabled={busy === 'build' || terms.length === 0}>Import from timetable</Btn>
                 </summary>
                 {otherSubjects.length > 0 && (
-                  <table style={{ width: '100%', borderCollapse: 'collapse', borderTop: '1px solid var(--gray-100)' }}>
+                  <div style={{ overflowX: 'auto' }}><table style={{ width: '100%', borderCollapse: 'collapse', borderTop: '1px solid var(--gray-100)' }}>
                     <thead><tr><th style={th}>Subject</th><th style={th}>Kind</th><th style={th}>Teacher</th><th style={th}></th></tr></thead>
                     <tbody>{otherSubjects.map((s) => (
                       <tr key={s.id} style={{ opacity: busy === s.id ? 0.5 : 1 }}>
                         <td style={{ ...td, fontWeight: 600 }}>{s.subject_name}</td>
                         <td style={td}><button onClick={() => patchSubject(s, { kind: s.kind === 'co_scholastic' ? 'scholastic' : 'co_scholastic' })} title="Click to flip" style={{ border: 'none', background: 'none', cursor: 'pointer', padding: 0 }}><Pill tone={s.kind === 'co_scholastic' ? 'gold' : 'green'}>{s.kind === 'co_scholastic' ? 'co-scholastic' : 'scholastic'}</Pill></button></td>
-                        <td style={td}><select value={s.assigned_teacher_id || ''} onChange={(e) => patchSubject(s, { teacherId: e.target.value || null })} style={{ ...inp, minWidth: 220 }}>
+                        <td style={td}><select value={s.assigned_teacher_id || ''} onChange={(e) => patchSubject(s, { teacherId: e.target.value || null })} style={{ ...inp, width: '100%', minWidth: 150, maxWidth: 260 }}>
                                   {!s.assigned_teacher_id && s.assigned_teacher_email && <option value="">{s.assigned_teacher_email}</option>}
                                   {teacherOpts}
                                 </select></td>
-                        <td style={{ ...td, textAlign: 'right' }}><Btn small kind="danger" onClick={() => removeSubject(s)}>✕</Btn></td>
+                        <td style={{ ...td, textAlign: 'right', whiteSpace: 'nowrap' }}><Btn small kind="danger" onClick={() => removeSubject(s)}>✕ remove</Btn></td>
                       </tr>
                     ))}</tbody>
-                  </table>
+                  </table></div>
                 )}
                 <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', padding: '10px 14px', borderTop: '1px solid var(--gray-100)', flexWrap: 'wrap' }}>
                   <div><span style={lbl}>Add subject</span><input value={newSub.subjectName} onChange={(e) => setNewSub((x) => ({ ...x, subjectName: e.target.value, kind: guessKind(e.target.value) }))} placeholder="e.g. Sanskrit" style={{ ...inp, width: 180 }} /></div>
