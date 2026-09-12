@@ -119,7 +119,16 @@ function ClassGrid({ branch, sessionCode, className, config }) {
   const compKeys = useMemo(() => [...new Set((data?.papers || []).map((p) => p.componentKey))], [data])
   const sections = useMemo(() => [...new Set((data?.students || []).map((s) => s.section).filter(Boolean))].sort(), [data])
 
-  function clamp(v, max) { if (v === '' || isAB(v)) return isAB(v) ? 'AB' : ''; const n = Number(v); if (Number.isNaN(n)) return ''; return String(Math.min(Math.max(n, 0), max > 0 ? max : Infinity)) }
+  // Keep what is being typed: "A" is a half-typed "AB", so leave it (blur turns it into AB); anything starting AB is AB.
+  function clamp(v, max) {
+    const t = String(v ?? '').trim().toUpperCase()
+    if (t === '') return ''
+    if (t === 'A') return 'A'
+    if (t.startsWith('AB')) return 'AB'
+    const n = Number(t); if (Number.isNaN(n)) return ''
+    return String(Math.min(Math.max(n, 0), max > 0 ? max : Infinity))
+  }
+  const tidyAB = (v) => (isAB(v) ? 'AB' : v)
   function set(sid, p, patch) {
     const k = `${sid}|${p.id}`
     setVals((x) => ({ ...x, [k]: { ...x[k], ...patch } })); setDirty((d) => new Set([...d, k]))
@@ -213,11 +222,11 @@ function ClassGrid({ branch, sessionCode, className, config }) {
                           <td key={p.id} style={{ ...td, padding: 3, textAlign: 'center', borderLeft: i === 0 ? '1px solid var(--gray-100)' : 'none', background: bg }} title={c.src ? `entered by ${c.src === 'manual' ? 'office' : 'teacher'}` : ''}>
                             {p.hasPractical ? (
                               <span style={{ display: 'inline-flex', gap: 3 }}>
-                                <input data-cell={`${ri}:${ci}`} value={c.th} placeholder="Th" onKeyDown={(e) => onKey(e, ri, ci)} onChange={(e) => set(s.id, p, { th: clamp(e.target.value, p.theoryMax) })} style={{ ...cellStyle, width: 46, color: isAB(c.th) ? 'var(--crimson)' : 'var(--text)', fontWeight: isAB(c.th) ? 700 : 400 }} />
+                                <input data-cell={`${ri}:${ci}`} value={c.th} placeholder="Th" onKeyDown={(e) => onKey(e, ri, ci)} onChange={(e) => set(s.id, p, { th: clamp(e.target.value, p.theoryMax) })} onBlur={(e) => { if (e.target.value !== tidyAB(e.target.value)) set(s.id, p, { th: 'AB' }) }} style={{ ...cellStyle, width: 46, color: isAB(c.th) ? 'var(--crimson)' : 'var(--text)', fontWeight: isAB(c.th) ? 700 : 400 }} />
                                 <input value={c.pr} placeholder="Pr" disabled={isAB(c.th)} onChange={(e) => set(s.id, p, { pr: clamp(e.target.value, p.practicalMax) })} style={{ ...cellStyle, width: 46 }} />
                               </span>
                             ) : (
-                              <input data-cell={`${ri}:${ci}`} value={c.v} onKeyDown={(e) => onKey(e, ri, ci)} onChange={(e) => set(s.id, p, { v: clamp(e.target.value, p.max) })} style={{ ...cellStyle, color: isAB(c.v) ? 'var(--crimson)' : 'var(--text)', fontWeight: isAB(c.v) ? 700 : 400 }} />
+                              <input data-cell={`${ri}:${ci}`} value={c.v} onKeyDown={(e) => onKey(e, ri, ci)} onChange={(e) => set(s.id, p, { v: clamp(e.target.value, p.max) })} onBlur={(e) => { if (e.target.value !== tidyAB(e.target.value)) set(s.id, p, { v: 'AB' }) }} style={{ ...cellStyle, color: isAB(c.v) ? 'var(--crimson)' : 'var(--text)', fontWeight: isAB(c.v) ? 700 : 400 }} />
                             )}
                           </td>
                         )
