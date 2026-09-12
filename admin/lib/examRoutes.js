@@ -139,14 +139,16 @@ export function registerExamRoutes(app, { supabase, admin, verifyAuth, branchIdF
    *  class-wide set is the union over the roster and `applicable` says which
    *  subjects each student actually takes (null for every other family). */
   function cardSubjects(b, className, students) {
-    if (!b.template) return { onCard: null, applicable: null }
+    if (!b.template) return { onCard: null, applicable: null, order: [] }
     const def = b.template.definition, fam = b.template.family
     if (fam === 'senior_progress' && students?.length) {
       const onCard = new Set(), applicable = {}
       for (const st of students) { const ids = resolveRows(def, fam, className, b.subjects, st).flatMap((r) => r.subjectIds); applicable[st.id] = ids; for (const id of ids) onCard.add(id) }
-      return { onCard, applicable }
+      const order = resolveSeniorNames(def, [...(def.coreOrder?.[className] || []), ...seniorOptionals(def, className)], b.subjects).flatMap((r) => r.subjectIds)
+      return { onCard, applicable, order }
     }
-    return { onCard: new Set(resolveRows(def, fam, className, b.subjects, null).flatMap((r) => r.subjectIds)), applicable: null }
+    const order = resolveRows(def, fam, className, b.subjects, null).flatMap((r) => r.subjectIds)
+    return { onCard: new Set(order), applicable: null, order }
   }
   async function computeClass({ branchId, branchCode, sessionCode, className, cardKey, section, studentIds }) {
     const b = await loadBundle(branchId, sessionCode, className)
@@ -531,10 +533,12 @@ export function registerExamRoutes(app, { supabase, admin, verifyAuth, branchIdF
       let subjects = b.subjects.filter((x) => (x.kind || 'scholastic') === 'scholastic')
       // Only subjects that feed a row on the card are entered; the rest (timetable-only) are listed as hidden.
       let hidden = []
-      const { onCard, applicable } = cardSubjects(b, className, students)
+      const { onCard, applicable, order } = cardSubjects(b, className, students)
       if (onCard) {
         hidden = subjects.filter((x) => !onCard.has(x.id)).map((x) => x.subject_name)
-        subjects = subjects.filter((x) => onCard.has(x.id))
+        // print order = card order (Hindi, English, Maths … as the rows are laid out), not creation order
+        const pos = new Map(order.map((id, i) => [id, i]))
+        subjects = subjects.filter((x) => onCard.has(x.id)).sort((a, c) => (pos.get(a.id) ?? 999) - (pos.get(c.id) ?? 999))
       }
       const subjOrder = new Map(subjects.map((x, i) => [x.id, i]))
       const ORDER = ['oral', 'written', 'pt', 'portfolio', 'se', 'notebook', 'exam']

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react'
 import { examApi } from '../../lib/api'
 import { inp, lbl, card, th, td, Btn, Pill, Note, Spinner } from './ui.jsx'
-import { COMP, valsFromGrid, groupsOf, exportSheetPDF, exportSheetXLSX } from './entrySheets.js'
+import { COMP, valsFromGrid, groupsOf, exportSheetPDF, exportSheetXLSX, loadImage } from './entrySheets.js'
 
 /* Stage 5 — Crosslist. Two views of the same class:
      · Raw   — one exam term, every paper summed per subject (as entered)
@@ -13,17 +13,9 @@ import { COMP, valsFromGrid, groupsOf, exportSheetPDF, exportSheetXLSX } from '.
 
 const cellText = (c) => (!c || !c.entered ? '—' : c.absent ? 'AB' : String(c.obtained))
 
-function loadImage(src) {
-  return new Promise((resolve) => {
-    const img = new Image()
-    img.onload = () => { const cv = document.createElement('canvas'); cv.width = img.naturalWidth; cv.height = img.naturalHeight; cv.getContext('2d').drawImage(img, 0, 0); resolve({ data: cv.toDataURL('image/png'), w: img.naturalWidth, h: img.naturalHeight }) }
-    img.onerror = () => resolve(null)
-    img.src = src
-  })
-}
 async function exportPDF({ title, subtitle, head, body, fileName }) {
   const [{ default: jsPDF }, { default: autoTable }] = await Promise.all([import('jspdf'), import('jspdf-autotable')])
-  const [banner, crest] = await Promise.all([loadImage('/banner-light.png'), loadImage('/crest.png')])
+  const [banner, crest] = await Promise.all([loadImage('/banner-light.png', 480), loadImage('/crest.png', 96)])
   const doc = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'landscape' })
   const pageW = doc.internal.pageSize.getWidth()
   let y = 10
