@@ -75,7 +75,7 @@ export default function CardEntries({ embedded = false, ctx = null }) {
   const template = useMemo(() => templates.find(t => t.id === classMap[className]) || null, [templates, classMap, className])
   const def = template?.definition || {}
   const areaScale   = def.coScholastic?.scale || ['A', 'B', 'C']
-  const gradedScale = def.gradedSubjects?.scale || ['A']
+  const gradedScale = (def.gradedSubjects?.scale?.length > 1 ? def.gradedSubjects.scale : null) || areaScale
   const discScale   = def.discipline?.scale || areaScale
 
   // load pack
@@ -159,10 +159,10 @@ export default function CardEntries({ embedded = false, ctx = null }) {
             <option value="">Select…</option>
             {classNames.map(c => <option key={c}>{c}</option>)}
           </select></div>}
-        <div><span style={lbl}>Term</span>
+        {!embedded && <div><span style={lbl}>Term</span>
           <select value={termId} onChange={e => setTermId(e.target.value)} style={inp}>
             {terms.map(t => <option key={t.id} value={t.id}>{t.name || t.label}</option>)}
-          </select></div>
+          </select></div>}
         {sections.length > 1 && (
           <div><span style={lbl}>Section</span>
             <select value={section} onChange={e => setSection(e.target.value)} style={inp}>
