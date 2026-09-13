@@ -24,6 +24,12 @@ import { useNavigate, Link } from 'react-router-dom'
 // /api/students) plus one query: today's studentAttendance.
 // ============================================================================
 
+// School time is IST regardless of where the admin is sitting.
+const IST_PARTS = new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: false, weekday: 'long' })
+const istNow = () => {
+  const parts = Object.fromEntries(IST_PARTS.formatToParts(new Date()).map(p => [p.type, p.value]))
+  return { minutes: (Number(parts.hour) % 24) * 60 + Number(parts.minute), weekday: parts.weekday }
+}
 const initials = (n) => (n || '?').split(' ').filter(Boolean).map(w => w[0]).join('').slice(0, 2).toUpperCase()
 const shortName = (n) => (n || '').split(' ').slice(0, 2).join(' ')
 const CARD = { background: 'var(--white)', border: '1px solid var(--gray-100)', borderRadius: 14, overflow: 'hidden', display: 'flex', flexDirection: 'column' }
@@ -89,7 +95,7 @@ export default function Dashboard() {
   const [weekView, setWeekView] = useState(false)
 
   const today = format(new Date(), 'EEEE, d MMMM yyyy')
-  const todayName = format(new Date(), 'EEEE')
+  const todayName = istNow().weekday
   const { user, effectiveBranches, currentBranch, allowedBranches } = useAuth()
   const [adminProfile, setAdminProfile] = useState(null)
   useEffect(() => {
@@ -103,7 +109,7 @@ export default function Dashboard() {
                  || (user?.displayName || '').split(' ')[0]
                  || (user?.email || '').split('@')[0]
                  || 'Admin'
-  const greeting = (() => { const h = new Date().getHours(); return h<12?'Good morning':h<17?'Good afternoon':'Good evening' })()
+  const greeting = (() => { const h = Math.floor(istNow().minutes / 60); return h<12?'Good morning':h<17?'Good afternoon':'Good evening' })()
   const threeDaysAgo = format(subDays(new Date(), 3), 'yyyy-MM-dd')
 
   useEffect(() => {
@@ -250,7 +256,7 @@ export default function Dashboard() {
   }, [effectiveBranches, currentBranch])
 
   // ---------------------------------------------------------------- coverage
-  const minutesNow = () => { const d = new Date(); return d.getHours() * 60 + d.getMinutes() }
+  const minutesNow = () => istNow().minutes
   const [nowMin, setNowMin] = useState(minutesNow)
   useEffect(() => { const id = setInterval(() => setNowMin(minutesNow()), 30 * 1000); return () => clearInterval(id) }, [])
   const periodEnd = (s) => { const m = /–(\d{2}):(\d{2})$/.exec(s.label || ''); return m ? Number(m[1]) * 60 + Number(m[2]) : null }
