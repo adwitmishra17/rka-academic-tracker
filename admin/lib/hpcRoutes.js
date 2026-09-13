@@ -19,7 +19,14 @@ export function registerHpcRoutes(app, { supabase, verifyAuth, branchIdForCode }
     if (error) throw error
     if (data?.length) return data[0]
     if (!seed) return null
-    const ins = await supabase.from('report_card_templates').insert({ session_code: sessionCode, family: 'hpc', name: 'Holistic Progress Card', definition: DEFAULT_HPC_DEFINITION, is_active: true, updated_by: 'hpc-seed' }).select('id, name, definition, updated_at, updated_by').single()
+    // New session: carry last session's setup forward (domains, scale, classes), else the built-in default
+    const prevCode = (() => { const y = parseInt(String(sessionCode).slice(0, 4), 10); return Number.isFinite(y) ? `${y - 1}-${String(y % 100).padStart(2, '0')}` : null })()
+    let definition = DEFAULT_HPC_DEFINITION, from = 'hpc-seed'
+    if (prevCode) {
+      const prev = await supabase.from('report_card_templates').select('definition').eq('session_code', prevCode).eq('family', 'hpc').eq('is_active', true).limit(1)
+      if (prev.data?.[0]?.definition?.domains?.length) { definition = prev.data[0].definition; from = `hpc-seed:copied-from-${prevCode}` }
+    }
+    const ins = await supabase.from('report_card_templates').insert({ session_code: sessionCode, family: 'hpc', name: 'Holistic Progress Card', definition, is_active: true, updated_by: from }).select('id, name, definition, updated_at, updated_by').single()
     if (ins.error) throw ins.error
     return ins.data
   }

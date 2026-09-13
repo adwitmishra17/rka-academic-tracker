@@ -35,7 +35,7 @@ export default function HpcCards() {
   const [template, setTemplate] = useState(null)
   const [error, setError] = useState(null)
 
-  useEffect(() => { examApi.sessions().then(({ sessions }) => { setSessions(sessions); if (sessions[0]) setSession(s => s || sessions[0]) }).catch(e => setError(e.message)) }, [])
+  useEffect(() => { examApi.sessions().then(({ sessions, current }) => { setSessions(sessions); const pick = current && sessions.includes(current) ? current : sessions[0]; if (pick) setSession(s => s || pick) }).catch(e => setError(e.message)) }, [])
   const loadTemplate = () => { if (!sessionCode) return; hpcApi.setup(sessionCode).then(({ template }) => setTemplate(template)).catch(e => setError(e.message)) }
   useEffect(() => { setTemplate(null); loadTemplate() }, [sessionCode]) // eslint-disable-line
   const def = template?.definition || DEFAULT_HPC_DEFINITION

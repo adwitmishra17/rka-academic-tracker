@@ -59,10 +59,11 @@ export default function Examinations() {
   const [sessions, setSessions] = useState([])
 
   useEffect(() => {
-    examApi.sessions().then(({ sessions: s }) => {
+    examApi.sessions().then(({ sessions: s, current }) => {
       const list = (s || []).filter(Boolean)
       setSessions(list)
-      if (!sessionCode) setParam({ session: list[0] || defaultSession() })
+      // default = the ACTIVE session (SMS sessions.is_current), not the newest one with terms
+      if (!sessionCode) setParam({ session: current || list[0] || defaultSession() })
     }).catch(() => { if (!sessionCode) setParam({ session: defaultSession() }) })
   }, []) // eslint-disable-line
 

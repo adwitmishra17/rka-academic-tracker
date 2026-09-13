@@ -524,10 +524,16 @@ async function computeReportCard(studentId, sessionCode) {
 // GET /api/exam/sessions — distinct session codes (for the picker).
 app.get('/api/exam/sessions', verifyAuth, async (_req, res) => {
   try {
-    const { data, error } = await supabase.from('exam_terms').select('session_code')
+    const [{ data, error }, cur] = await Promise.all([
+      supabase.from('exam_terms').select('session_code'),
+      // the ACTIVE session is the SMS sessions row flagged is_current (falls back to the calendar Apr–Mar session)
+      supabase.from('sessions').select('name').eq('is_current', true).limit(1).then((r) => r.data?.[0]?.name || null).catch(() => null),
+    ])
     if (error) throw error
-    const sessions = [...new Set((data || []).map(r => r.session_code).filter(Boolean))].sort().reverse()
-    res.json({ sessions })
+    const d = new Date(), y = d.getMonth() >= 3 ? d.getFullYear() : d.getFullYear() - 1
+    const current = cur || `${y}-${String(y + 1).slice(2)}`
+    const sessions = [...new Set([...(data || []).map(r => r.session_code).filter(Boolean), current])].sort().reverse()
+    res.json({ sessions, current })
   } catch (e) { console.error('[admin] GET /api/exam/sessions:', e); res.status(500).json({ error: e.message }) }
 })
 
