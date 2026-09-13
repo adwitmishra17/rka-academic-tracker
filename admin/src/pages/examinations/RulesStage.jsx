@@ -165,19 +165,12 @@ export default function RulesStage({ branch, sessionCode, className, config, ref
   const unusedSubjects = useMemo(() => classSubjects.filter((s) => !claimedBy[s]), [classSubjects, claimedBy])
 
   // ── card areas (co-scholastic, graded subjects, discipline) ──
-  const SCALES = { 'A, B, C': ['A', 'B', 'C'], 'A, B, C, D, E': ['A', 'B', 'C', 'D', 'E'], 'A+, A, B, C, D': ['A+', 'A', 'B', 'C', 'D'], 'A only': ['A'] }
-  const scaleKey = (arr) => Object.keys(SCALES).find((k) => JSON.stringify(SCALES[k]) === JSON.stringify(arr || [])) || 'A, B, C'
-  const rowName = (r) => (typeof r === 'string' ? r : r?.name || '')
-  function areaList(path) { return (def?.[path]?.rows || []).map(rowName) }
-  function setAreaList(path, names) { upd((d) => { d[path] = d[path] || { scale: SCALES['A, B, C'], rows: [] }; d[path].rows = path === 'gradedSubjects' ? names : names.map((n) => ({ name: n, owner: { type: 'classTeacher' } })) }) }
-  function setScale(path, key) { upd((d) => { d[path] = d[path] || { rows: [] }; d[path].scale = SCALES[key] }) }
   const [savedOnce, setSavedOnce] = useState(false)
   async function save() {
     setBusy(true); setErr('')
     try {
       await reportTemplateApi.save(data.template.id, { definition: def })
-      const areas = await examApi.syncCardAreas(branch, sessionCode, data.template.id).catch(() => null)
-      setFlash(`Rules saved.${areas?.created ? ` ${areas.created} card-area row${areas.created === 1 ? '' : 's'} created for the class teacher's entries.` : ''}`); setSavedOnce(true)
+      setFlash('Rules saved.'); setSavedOnce(true)
       await refreshConfig(); load()
     } catch (e) { setErr(e.message) }
     setBusy(false)
@@ -361,40 +354,6 @@ export default function RulesStage({ branch, sessionCode, className, config, ref
           {unusedSchemes.length > 0 && <div style={{ padding: '8px 14px', fontSize: 11.5, color: 'var(--text-muted)' }}>Schemes on this template not used by {className}: {unusedSchemes.join(' · ')} — add one above to put it on this class's card.</div>}
         </div>
       )}
-
-      {/* Card areas — the non-marks side of the card (was Card Designer) */}
-      <div style={{ ...card, padding: 0, overflow: 'hidden' }}>
-        <div style={{ padding: '10px 14px', borderBottom: '1px solid var(--gray-100)' }}>
-          <div style={{ fontSize: 13, fontWeight: 600 }}>Card areas — graded by the class teacher</div>
-          <div style={{ fontSize: 11.5, color: 'var(--text-muted)', marginTop: 2 }}>Everything on the card that is a grade, not a mark. Entered in the PWA under Co-scholastic Entries (Report card), or by the office in Entry status. Saving creates the matching entry rows for every class on this template.</div>
-        </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 0 }}>
-          {[['coScholastic', 'Co-scholastic areas', 'e.g. Activity Assessment, Music & Dance, Games & Sports'], ['gradedSubjects', 'Graded subjects', 'e.g. Art & Activity, Conversation — subjects that print a grade, not marks']].map(([path, title, hint]) => (
-            <div key={path} style={{ padding: '12px 14px', borderRight: '1px solid var(--gray-100)' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-                <div style={{ fontSize: 12.5, fontWeight: 600, flex: 1 }}>{title}</div>
-                <select value={scaleKey(def?.[path]?.scale)} onChange={(e) => setScale(path, e.target.value)} style={{ ...inp, padding: '3px 6px', fontSize: 11.5 }} title="Grade scale">{Object.keys(SCALES).map((k) => <option key={k}>{k}</option>)}</select>
-              </div>
-              {areaList(path).length === 0 && <div style={{ fontSize: 11.5, color: 'var(--text-muted)', marginBottom: 6 }}>None on this card. {hint}</div>}
-              {areaList(path).map((name, i) => (
-                <div key={i} style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 5 }}>
-                  <input value={name} onChange={(e) => { const l = areaList(path); l[i] = e.target.value.toUpperCase(); setAreaList(path, l) }} style={{ ...inp, flex: 1, fontWeight: 600 }} />
-                  <button onClick={() => setAreaList(path, areaList(path).filter((_, j) => j !== i))} title="Remove" style={{ border: 'none', background: 'none', color: 'var(--crimson)', cursor: 'pointer', fontSize: 12 }}>✕</button>
-                </div>
-              ))}
-              <Btn small onClick={() => { const n = prompt(`${title.replace(/s$/, '')} name as it prints on the card:`); if (n && n.trim()) setAreaList(path, [...areaList(path), n.trim().toUpperCase()]) }}>+ Add</Btn>
-            </div>
-          ))}
-          <div style={{ padding: '12px 14px' }}>
-            <div style={{ fontSize: 12.5, fontWeight: 600, marginBottom: 6 }}>Discipline</div>
-            <label style={{ fontSize: 11.5, color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: 8 }}>
-              <input type="checkbox" checked={!!def?.discipline} onChange={(e) => upd((d) => { if (e.target.checked) d.discipline = d.discipline || { scale: SCALES['A, B, C'], owner: { type: 'classTeacher' } }; else delete d.discipline })} /> Printed on the card, one grade per term
-            </label>
-            {def?.discipline && <div style={{ marginTop: 8 }}><span style={lbl}>Scale</span><select value={scaleKey(def.discipline.scale)} onChange={(e) => setScale('discipline', e.target.value)} style={inp}>{Object.keys(SCALES).map((k) => <option key={k}>{k}</option>)}</select></div>}
-            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 10 }}>Remarks, achievement, height and weight are always available to the class teacher and print when filled.</div>
-          </div>
-        </div>
-      </div>
 
       <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
         <Btn onClick={() => setStage('papers')}>Papers →</Btn>

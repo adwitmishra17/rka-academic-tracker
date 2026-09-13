@@ -2,6 +2,7 @@ import React, { useState, useMemo, useEffect } from 'react'
 import { examApi, reportTemplateApi } from '../../lib/api'
 import { compareClasses } from '../../lib/classes'
 import { inp, lbl, card, th, td, Btn, Pill, Note, Spinner } from './ui.jsx'
+import CardAreasEditor from './CardAreasEditor.jsx'
 
 /* Stage 1 — Setup: terms (per branch+session), subjects + teachers per class,
    class-teacher (read-only, from Teachers), and the report-card template bound
@@ -49,7 +50,6 @@ export default function SetupStage({ branch, sessionCode, className, config, ref
   const classSubjects = useMemo(() => (config?.subjects || []).filter((s) => s.class_name === selected), [config, selected])
   const byName = useMemo(() => Object.fromEntries(classSubjects.map((s) => [s.subject_name, s])), [classSubjects])
   const onCardNames = useMemo(() => new Set(cardRows.flatMap((r) => r.mapped || [])), [cardRows])
-  const areaRows = useMemo(() => classSubjects.filter((s) => ['RCA', 'RCG'].includes(s.subject_code)), [classSubjects])
   const otherSubjects = useMemo(() => classSubjects.filter((s) => !onCardNames.has(s.subject_name) && !['RCA', 'RCG'].includes(s.subject_code)).sort((a, b) => (a.kind === b.kind ? a.subject_name.localeCompare(b.subject_name) : a.kind === 'co_scholastic' ? 1 : -1)), [classSubjects, onCardNames])
   const subjects = classSubjects
   // canonical exam-subject name for a card row that has no subject yet
@@ -279,12 +279,10 @@ export default function SetupStage({ branch, sessionCode, className, config, ref
                     })}</tbody>
                   </table></div>
                 )}
-                {areaRows.length > 0 && (
-                  <div style={{ padding: '8px 14px', borderTop: '1px solid var(--gray-100)', fontSize: 11.5, color: 'var(--text-muted)' }}>
-                    Card areas (class teacher, grades): {areaRows.map((s) => s.subject_name).join(' · ')}
-                  </div>
-                )}
               </div>
+
+              {/* Card areas — grades, not marks; template-wide */}
+              {classMap[selected] && <CardAreasEditor template={templates.find((t) => t.id === classMap[selected])} sharedClasses={Object.entries(classMap).filter(([, id]) => id === classMap[selected]).map(([c]) => c).sort(compareClasses)} branch={branch} sessionCode={sessionCode} refreshConfig={refreshConfig} onSaved={() => setRulesTick((n) => n + 1)} />}
 
               {/* Other subjects — timetable/lesson-log only, not on the card */}
               <details style={{ ...card, padding: 0, overflow: 'hidden' }}>
