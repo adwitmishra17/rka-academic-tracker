@@ -97,3 +97,14 @@ ones can be deleted from Examinations → Papers → Legacy papers, or in bulk:
 delete from exam_papers p where p.component_key is null
   and not exists (select 1 from exam_marks m where m.paper_id = p.id);
 ```
+
+## HPC (Holistic Progress Card) — office-driven since 2026-09-14
+
+| What | Where | Why dead | Action |
+|---|---|---|---|
+| `routes/hpc.js` | teacher PWA | POST /api/hpc unmounted; server answers 410 | delete file |
+| `client/src/pages/HpcEntry.jsx` | teacher PWA | route redirects home, menu card removed | delete file |
+| Firestore `hpcTemplates` collection | Firebase | never written by anything (PWA fallback served its own default); PWA lookup deleted | nothing to delete (empty) |
+| `syncHpcAssessments` CF | Firebase functions | already listed above; PWA no longer writes | undeploy |
+| SMS `DOMAINS` / `RATINGS` / `HPC_CLASSES` in `src/lib/hpc.js` | SMS | only a fallback for sessions with no `hpc` template; every session now seeds one on first open of HPC Cards | remove once 2025-26 cards are no longer printed |
+| Old `hpc_assessments` rows with `source='teacher_pwa'` | SMS DB | none exist for 2026-27 (0 rows) | nothing |
