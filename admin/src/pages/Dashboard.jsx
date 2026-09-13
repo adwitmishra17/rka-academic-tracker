@@ -1,82 +1,71 @@
-import React, { useState, useEffect } from 'react'
-import { createPortal } from 'react-dom'
+import React, { useState, useEffect, useMemo } from 'react'
 import { collection, doc, getDoc, getDocs, query, where, limit } from 'firebase/firestore'
 import { useAuth } from '../App'
 import { fetchStudents } from '../lib/api'
 import { branchConstraints, branchConstraintsArray } from '../lib/branchQuery'
 import { db } from '../firebase/config'
 import { useClasses } from '../hooks/useClasses'
+import { todayIST } from '../lib/attendanceDates'
 import { format, subDays, startOfWeek } from 'date-fns'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, Link } from 'react-router-dom'
 
-function StatCard({ label, value, sub, color, onClick, icon }) {
+// ============================================================================
+// DASHBOARD — Direction A "Command centre" (Sep 2026)
+//
+//   1. Page head: date · greeting · quick actions
+//   2. KPI strip: lessons logged today · attendance · teachers absent ·
+//      plans due · not-logged-in-3-days
+//   3. Today's coverage grid (teacher × period): logged / scheduled /
+//      not logged (past) / arrangement / uncovered
+//   4. Right rail: "Needs attention" queue → the page that fixes it,
+//      then test absentees. Below the grid: latest lessons.
+//
+// Data loading is unchanged from the previous dashboard (Firestore +
+// /api/students) plus one query: today's studentAttendance.
+// ============================================================================
+
+const initials = (n) => (n || '?').split(' ').filter(Boolean).map(w => w[0]).join('').slice(0, 2).toUpperCase()
+const shortName = (n) => (n || '').split(' ').slice(0, 2).join(' ')
+const CARD = { background: 'var(--white)', border: '1px solid var(--gray-100)', borderRadius: 14, overflow: 'hidden', display: 'flex', flexDirection: 'column' }
+const CARD_HEAD = { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '14px 18px', borderBottom: '1px solid var(--gray-100)' }
+
+function Kpi({ label, value, unit, sub, tone, bar, onClick }) {
+  const color = tone === 'red' ? 'var(--crimson)' : tone === 'gold' ? 'var(--gold-dark)' : tone === 'green' ? 'var(--green)' : 'var(--text)'
   return (
-    <div className="fade-in gemini-border" onClick={onClick} style={{ background:'var(--white)', borderRadius:'var(--radius-lg)', padding:'24px', cursor:onClick?'pointer':'default', border:'1px solid var(--gray-100)', boxShadow:'var(--shadow-sm)', position:'relative', overflow:'hidden' }}>
-      <div style={{ position:'absolute', top:0, left:0, right:0, height:3, background:color, borderRadius:'var(--radius-lg) var(--radius-lg) 0 0' }} />
-      <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', marginBottom:12 }}>
-        <div style={{ width:40, height:40, borderRadius:10, background:`${color}22`, display:'flex', alignItems:'center', justifyContent:'center', color }}>{icon}</div>
-        {sub && <span style={{ fontSize:11, color:'var(--text-muted)', background:'var(--gray-50)', padding:'3px 8px', borderRadius:20, border:'1px solid var(--gray-100)' }}>{sub}</span>}
+    <div className="fade-in" onClick={onClick} style={{ ...CARD, padding: '16px 18px', gap: 10, cursor: onClick ? 'pointer' : 'default' }}>
+      <div style={{ fontSize: 12, color: 'var(--text-muted)', fontWeight: 500 }}>{label}</div>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
+        {value === undefined || value === null
+          ? <span style={{ width: 48, height: 28, background: 'var(--gray-100)', borderRadius: 4, display: 'inline-block', animation: 'pulse 1.5s ease infinite' }} />
+          : <span style={{ fontSize: 30, fontWeight: 700, letterSpacing: '-0.03em', lineHeight: 1, color }}>{value}</span>}
+        {unit && <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>{unit}</span>}
       </div>
-      <div style={{ fontFamily:'var(--font-display)', fontSize:32, fontWeight:600, color:'var(--text)', lineHeight:1 }}>{value ?? <span style={{ width:48, height:28, background:'var(--gray-100)', borderRadius:4, display:'inline-block', animation:'pulse 1.5s ease infinite' }} />}</div>
-      <div style={{ fontSize:13, color:'var(--text-muted)', marginTop:6 }}>{label}</div>
+      {bar !== undefined
+        ? <div style={{ height: 5, background: 'var(--gray-100)', borderRadius: 99, overflow: 'hidden' }}><div style={{ width: `${Math.max(0, Math.min(100, bar))}%`, height: '100%', background: color === 'var(--text)' ? 'var(--green)' : color, borderRadius: 99, transition: 'width 0.4s' }} /></div>
+        : <div style={{ fontSize: 11.5, color: 'var(--text-muted)', minHeight: 14 }}>{sub}</div>}
     </div>
   )
 }
 
-function ActivityRow({ name, action, time, status }) {
+function Attention({ tone, title, sub, to, action }) {
+  const dot = { red: 'var(--crimson)', gold: 'var(--gold)', muted: 'var(--gray-400)', green: 'var(--green)' }[tone] || 'var(--gray-400)'
   return (
-    <div style={{ display:'flex', alignItems:'center', gap:12, padding:'12px 0', borderBottom:'1px solid var(--gray-50)' }}>
-      <div style={{ width:36, height:36, borderRadius:'50%', background:'var(--green-light)', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
-        <span style={{ fontSize:13, fontWeight:600, color:'var(--green)' }}>{name?.[0] || '?'}</span>
+    <div style={{ display: 'flex', gap: 12, padding: '12px 18px', borderBottom: '1px solid var(--gray-50)', alignItems: 'flex-start' }}>
+      <span style={{ width: 8, height: 8, borderRadius: '50%', background: dot, marginTop: 6, flexShrink: 0 }} />
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>{title}</div>
+        {sub && <div style={{ fontSize: 12, color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={typeof sub === 'string' ? sub : undefined}>{sub}</div>}
       </div>
-      <div style={{ flex:1, minWidth:0 }}>
-        <div style={{ fontSize:13, fontWeight:500, color:'var(--text)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{name}</div>
-        <div style={{ fontSize:12, color:'var(--text-muted)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{action}</div>
-      </div>
-      <div style={{ textAlign:'right', flexShrink:0 }}>
-        <div style={{ fontSize:11, color:'var(--text-muted)' }}>{time}</div>
-        {status && <div style={{ fontSize:11, padding:'2px 7px', borderRadius:10, background:status==='absent'?'var(--crimson-light)':'var(--green-light)', color:status==='absent'?'var(--crimson)':'var(--green)', marginTop:3 }}>{status}</div>}
-      </div>
+      {to && <Link to={to} style={{ fontSize: 12, fontWeight: 600, color: 'var(--green)', textDecoration: 'none', whiteSpace: 'nowrap' }}>{action || 'Open'}</Link>}
     </div>
   )
 }
 
-// Tooltip rendered via portal — completely outside any overflow container
-function HoverTooltip({ tooltip }) {
-  if (!tooltip) return null
-  const x = Math.min(tooltip.x + 16, window.innerWidth - 280)
-  const y = Math.max(8, tooltip.y - 8)
-  return createPortal(
-    <div style={{
-      position: 'fixed', left: x, top: y,
-      zIndex: 999999,
-      background: '#162518',
-      color: 'white',
-      borderRadius: 10,
-      padding: '12px 16px',
-      pointerEvents: 'none',
-      maxWidth: 280,
-      boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
-      border: '1px solid rgba(255,255,255,0.12)',
-      lineHeight: 1.9,
-      fontSize: 12,
-    }}>
-      {tooltip.lines.map((line, i) => (
-        <div key={i} style={{
-          color: line.color || (line.bold ? '#fff' : 'rgba(255,255,255,0.78)'),
-          fontWeight: line.bold ? 700 : 400,
-          fontSize: line.bold ? 13 : 12,
-          borderBottom: line.divider ? '1px solid rgba(255,255,255,0.12)' : 'none',
-          paddingBottom: line.divider ? 6 : 0,
-          marginBottom: line.divider ? 6 : 0,
-        }}>
-          {line.icon ? `${line.icon} ${line.text}` : (line.bold || line.text)}
-        </div>
-      ))}
-    </div>,
-    document.body
-  )
-}
+const Legend = ({ items }) => (
+  <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', fontSize: 11.5, color: 'var(--text-muted)', alignItems: 'center' }}>
+    {items.map(([label, style]) => <span key={label} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><span style={{ width: 12, height: 12, borderRadius: 3, display: 'inline-block', ...style }} />{label}</span>)}
+  </div>
+)
 
 export default function Dashboard() {
   const navigate = useNavigate()
@@ -90,12 +79,13 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true)
   const [timetable, setTimetable] = useState([])
   const [timetableTeachers, setTimetableTeachers] = useState([])
-  const [timetableView, setTimetableView] = useState('teacher')
   const [schedule, setSchedule] = useState([])
-  const [tooltip, setTooltip] = useState(null)
   const [todayArrangements, setTodayArrangements] = useState([])
+  const [attendance, setAttendance] = useState(null)
+  const [todayLessonList, setTodayLessonList] = useState([])
 
   const today = format(new Date(), 'EEEE, d MMMM yyyy')
+  const todayName = format(new Date(), 'EEEE')
   const { user, effectiveBranches, currentBranch, allowedBranches } = useAuth()
   const [adminProfile, setAdminProfile] = useState(null)
   useEffect(() => {
@@ -152,10 +142,27 @@ export default function Dashboard() {
 
         setStats({ teachers: teachersSnap.size, todayLessons: todayLessons.length, tests: testsSnap.size, absentees: validAbsentees.length })
         setRecentLessons(sortedLessons.slice(0,8))
+        setTodayLessonList(lessonsSnap.docs.map(d => d.data()).filter(l => l.date === todayStr))
         setAlerts(validAbsentees.slice(0,5))
         setMissedAlerts(missedSnap.docs.map(d => ({ id:d.id, ...d.data() })))
         setTimetable(ttSnap.docs.map(d => ({ id:d.id, ...d.data() })))
         setTodayArrangements(arrSnap.docs.map(d => ({ id:d.id, ...d.data() })))
+        // Today's student attendance (Firestore mirror) — present % of MARKED, never of roster.
+        try {
+          const attSnap = await getDocs(query(collection(db, 'studentAttendance'), where('date', '==', todayIST()), ...branchConstraints('branchCode', effectiveBranches)))
+          const active = new Map(studentsList.filter(s => s.isActive).map(s => [s.id, s]))
+          const classTotals = {}
+          for (const s of active.values()) { const k = (s.className || '?') + '||' + (s.branchCode || '?'); classTotals[k] = (classTotals[k] || 0) + 1 }
+          const markedByClass = {}
+          let marked = 0, absent = 0
+          attSnap.forEach(d => {
+            const x = d.data(); if (!active.has(x.studentId)) return
+            marked += 1; if (x.status === 'absent') absent += 1
+            const k = (x.className || '?') + '||' + (x.branchCode || '?'); markedByClass[k] = (markedByClass[k] || 0) + 1
+          })
+          const unmarked = Object.keys(classTotals).filter(k => !markedByClass[k]).map(k => k.split('||')[0])
+          setAttendance({ marked, present: marked - absent, absent, students: active.size, classes: Object.keys(classTotals).length, unmarked })
+        } catch (e) { console.warn('attendance today:', e.code || e.message) }
 
         // Build schedule
         if (periodsDoc?.exists()) {
@@ -230,289 +237,205 @@ export default function Dashboard() {
     load()
   }, [effectiveBranches, currentBranch])
 
+  // ---------------------------------------------------------------- coverage
+  const nowMin = (() => { const d = new Date(); return d.getHours() * 60 + d.getMinutes() })()
+  const periodEnd = (s) => { const m = /–(\d{2}):(\d{2})$/.exec(s.label || ''); return m ? Number(m[1]) * 60 + Number(m[2]) : null }
+
+  const coverage = useMemo(() => {
+    const sched = schedule.length ? schedule : Array.from({ length: 8 }, (_, i) => ({ period: i + 1, label: '' }))
+    const slotsToday = timetable.filter(s => s.day === todayName)
+    const lessonKey = (tid, name, p) => `${tid || ''}|${(name || '').toLowerCase().trim()}|${Number(p)}`
+    const logged = new Set()
+    for (const l of todayLessonList) { logged.add(lessonKey(l.teacherId, '', l.period)); logged.add(lessonKey('', l.teacherName, l.period)) }
+    const absentIds = new Set(todayArrangements.map(a => a.absentTeacherId).filter(Boolean))
+    const arrFor = (tid, p) => todayArrangements.find(a => a.absentTeacherId === tid && Number(a.period) === Number(p))
+    const rows = timetableTeachers
+      .filter(t => slotsToday.some(s => s.teacherId === t.id))
+      .map(t => {
+        const cells = sched.map(s => {
+          const slot = slotsToday.find(sl => sl.teacherId === t.id && Number(sl.period) === Number(s.period))
+          if (!slot) return { kind: 'none' }
+          const cls = (slot.classNames?.length ? slot.classNames.join('+') : slot.className || '').replace(/Class /g, '')
+          const arr = arrFor(t.id, s.period)
+          if (arr) return { kind: 'arranged', cls, who: arr.arrangementTeacherName, slot }
+          if (absentIds.has(t.id)) return { kind: 'uncovered', cls, slot }
+          const isLogged = logged.has(lessonKey(t.id, '', s.period)) || logged.has(lessonKey('', t.fullName, s.period))
+          if (isLogged) return { kind: 'logged', cls, slot }
+          const end = periodEnd(s)
+          return { kind: end !== null && nowMin > end ? 'missed' : 'scheduled', cls, slot }
+        })
+        const score = cells.filter(c => c.kind === 'uncovered').length * 100 + cells.filter(c => c.kind === 'arranged').length * 10 + cells.filter(c => c.kind === 'missed').length
+        return { t, cells, absent: absentIds.has(t.id), score }
+      })
+      .sort((a, b) => b.score - a.score || (a.t.fullName || '').localeCompare(b.t.fullName || ''))
+    const totalSlots = slotsToday.length
+    const uncovered = rows.reduce((n, r) => n + r.cells.filter(c => c.kind === 'uncovered').length, 0)
+    return { sched, rows, totalSlots, uncovered, absentTeachers: absentIds.size }
+  }, [schedule, timetable, timetableTeachers, todayLessonList, todayArrangements, todayName, nowMin])
+
+  const isSunday = todayName === 'Sunday'
+  const presentPct = attendance && attendance.marked > 0 ? Math.round((attendance.present / attendance.marked) * 1000) / 10 : null
+  const plansTotal = missingPlanTeachers.length + (timetableTeachers.filter(t => timetable.some(s => s.teacherId === t.id)).length - missingPlanTeachers.length)
+
+  const attention = []
+  if (coverage.uncovered > 0) attention.push({ tone: 'red', title: `${coverage.uncovered} period${coverage.uncovered > 1 ? 's' : ''} uncovered today`, sub: coverage.rows.filter(r => r.cells.some(c => c.kind === 'uncovered')).map(r => `${shortName(r.t.fullName)} · P${r.cells.map((c, i) => c.kind === 'uncovered' ? coverage.sched[i].period : null).filter(Boolean).join(', P')}`).join(' · '), to: '/arrangement', action: 'Assign' })
+  if (attendance && attendance.unmarked.length > 0 && !isSunday) attention.push({ tone: 'gold', title: `${attendance.unmarked.length} class${attendance.unmarked.length > 1 ? 'es' : ''} not marked for attendance yet`, sub: attendance.unmarked.slice(0, 8).join(', ') + (attendance.unmarked.length > 8 ? ` +${attendance.unmarked.length - 8} more` : ''), to: '/attendance', action: 'View' })
+  if (missedAlerts.length > 0) attention.push({ tone: 'red', title: `${missedAlerts.length} lesson${missedAlerts.length > 1 ? 's' : ''} not logged today`, sub: missedAlerts.slice(0, 8).map(a => a.className).join(', '), to: '/lessons', action: 'Open' })
+  if (inactiveTeachers.length > 0) attention.push({ tone: 'gold', title: `${inactiveTeachers.length} teacher${inactiveTeachers.length > 1 ? 's have' : ' has'} not logged a lesson in 3+ days`, sub: inactiveTeachers.map(t => shortName(t.fullName)).join(', '), to: '/lessons', action: 'Review' })
+  if (missingPlanTeachers.length > 0) attention.push({ tone: 'gold', title: `${missingPlanTeachers.length} lesson plan${missingPlanTeachers.length > 1 ? 's' : ''} not submitted this week`, sub: missingPlanTeachers.map(t => shortName(t.fullName)).join(', '), to: '/lesson-plans', action: 'Remind' })
+  if (stats.absentees > 0) attention.push({ tone: 'muted', title: `${stats.absentees} test absence${stats.absentees > 1 ? 's' : ''} recorded this session`, sub: alerts.slice(0, 3).map(a => `${a.studentName} · ${a.testName || 'Test'}`).join(' · '), to: '/absentees', action: 'View' })
+
+  const cellStyle = (c) => {
+    const base = { height: 30, borderRadius: 6, fontSize: 10.5, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', whiteSpace: 'nowrap', padding: '0 4px', cursor: 'default' }
+    switch (c.kind) {
+      case 'logged': return { ...base, background: 'var(--green)', color: '#fff' }
+      case 'scheduled': return { ...base, background: 'var(--green-light)', color: 'var(--green-dark)' }
+      case 'missed': return { ...base, background: 'var(--gold-light)', color: 'var(--gold-dark)' }
+      case 'arranged': return { ...base, background: '#E07B00', color: '#fff' }
+      case 'uncovered': return { ...base, background: 'transparent', border: '1.5px dashed var(--crimson)', color: 'var(--crimson)' }
+      default: return { ...base, background: 'var(--gray-50)' }
+    }
+  }
+  const cellText = (c) => c.kind === 'arranged' ? `→ ${initials(c.who)}` : c.kind === 'uncovered' ? 'Uncovered' : c.kind === 'none' ? '' : c.cls
+  const cellTitle = (c, s, t) => c.kind === 'none' ? '' : `${t.fullName} · P${s.period}${s.label ? ' (' + s.label + ')' : ''} · ${c.slot?.subject || ''} · ${c.slot?.className || c.cls}${c.kind === 'arranged' ? ` · covered by ${c.who}` : c.kind === 'uncovered' ? ' · teacher absent, nobody assigned' : c.kind === 'logged' ? ' · lesson logged' : c.kind === 'missed' ? ' · period over, no lesson logged' : ' · scheduled'}`
+
+  const btn = (label, to, primary) => (
+    <button key={label} onClick={() => navigate(to)} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 14px', borderRadius: 10, border: primary ? '1px solid var(--text)' : '1px solid var(--gray-200)', background: primary ? 'var(--text)' : 'var(--white)', color: primary ? 'var(--white)' : 'var(--text)', fontSize: 12.5, fontWeight: 600, fontFamily: 'inherit', cursor: 'pointer' }}>{label}</button>
+  )
+
   return (
-    <div style={{ padding:'24px 28px' }}>
-      <HoverTooltip tooltip={tooltip} />
-
-      {/* Header */}
-      <div className="fade-in" style={{ marginBottom:28 }}>
-        <p style={{ fontSize:13, color:'var(--text-muted)', marginBottom:4 }}>{today}</p>
-        <h1 style={{ fontFamily:'var(--font-display)', fontSize:28, fontWeight:600, color:'var(--green-dark)' }}>{greeting}, {adminName}</h1>
-        <div style={{ width:48, height:2, background:'linear-gradient(90deg,var(--gold),transparent)', marginTop:10, borderRadius:1 }} />
-      </div>
-
-      {/* Missed lessons alert */}
-      {missedAlerts.length > 0 && (
-        <div className="fade-in" style={{ background:'linear-gradient(135deg,#7a1818,var(--crimson))', borderRadius:'var(--radius-lg)', padding:'16px 20px', marginBottom:16, display:'flex', alignItems:'flex-start', gap:14, position:'relative', overflow:'hidden' }}>
-          <div style={{ position:'absolute', top:0, right:0, bottom:0, width:120, background:'rgba(255,255,255,0.04)', borderLeft:'1px solid rgba(255,255,255,0.08)' }} />
-          <div style={{ width:38,height:38,borderRadius:'50%',background:'rgba(255,255,255,0.15)',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0 }}>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-          </div>
-          <div style={{ flex:1 }}>
-            <div style={{ fontSize:13,fontWeight:600,color:'white',marginBottom:6 }}>{missedAlerts.length} lesson{missedAlerts.length>1?'s':''} not logged today</div>
-            <div style={{ display:'flex',flexWrap:'wrap',gap:6 }}>
-              {missedAlerts.slice(0,6).map(a => <span key={a.id} style={{ fontSize:12,padding:'2px 10px',borderRadius:16,background:'rgba(255,255,255,0.15)',color:'rgba(255,255,255,0.9)' }}>{a.className}</span>)}
-              {missedAlerts.length>6 && <span style={{ fontSize:12,color:'rgba(255,255,255,0.7)' }}>+{missedAlerts.length-6} more</span>}
-            </div>
-          </div>
-          <span style={{ fontSize:11,color:'rgba(255,255,255,0.5)',flexShrink:0 }}>After 5 PM</span>
+    <div style={{ padding: '24px 28px', display: 'flex', flexDirection: 'column', gap: 20, maxWidth: 1600 }}>
+      {/* Page head */}
+      <div className="fade-in" style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
+        <div>
+          <div style={{ fontSize: 12.5, color: 'var(--text-muted)', fontWeight: 500, marginBottom: 4 }}>{today}{currentBranch ? ` · ${currentBranch === 'MAIN' ? 'Main campus' : 'City branch'}` : allowedBranches.length > 1 ? ' · Both branches' : ''}</div>
+          <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 26, fontWeight: 700, letterSpacing: '-0.02em', color: 'var(--text)' }}>{greeting}, {adminName}</h1>
         </div>
-      )}
-
-      {/* Inactive teachers alert */}
-      {inactiveTeachers.length > 0 && (
-        <div className="fade-in" style={{ background:'linear-gradient(135deg,#7a5a00,var(--gold-dark))',borderRadius:'var(--radius-lg)',padding:'14px 20px',marginBottom:16,display:'flex',alignItems:'flex-start',gap:14 }}>
-          <div style={{ width:36,height:36,borderRadius:'50%',background:'rgba(255,255,255,0.15)',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0 }}>
-            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="23" y1="11" x2="17" y2="11"/></svg>
-          </div>
-          <div style={{ flex:1 }}>
-            <div style={{ fontSize:13,fontWeight:600,color:'white',marginBottom:5 }}>{inactiveTeachers.length} teacher{inactiveTeachers.length>1?'s have':' has'} not logged a lesson in 3+ days</div>
-            <div style={{ display:'flex',flexWrap:'wrap',gap:5 }}>
-              {inactiveTeachers.map(t => <span key={t.id} style={{ fontSize:12,padding:'2px 9px',borderRadius:16,background:'rgba(255,255,255,0.15)',color:'rgba(255,255,255,0.9)' }}>{t.fullName}</span>)}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Missing lesson plan alert */}
-      {missingPlanTeachers.length > 0 && (
-        <div className="fade-in" style={{ background:'var(--white)',borderRadius:'var(--radius-lg)',border:'1px solid rgba(139,26,26,0.2)',padding:'14px 20px',marginBottom:16,display:'flex',alignItems:'flex-start',gap:14 }}>
-          <div style={{ width:36,height:36,borderRadius:'50%',background:'var(--crimson-light)',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0 }}>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--crimson)" strokeWidth="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-          </div>
-          <div style={{ flex:1 }}>
-            <div style={{ fontSize:13,fontWeight:600,color:'var(--crimson)',marginBottom:5 }}>{missingPlanTeachers.length} teacher{missingPlanTeachers.length>1?'s have':' has'} not submitted a lesson plan this week</div>
-            <div style={{ display:'flex',flexWrap:'wrap',gap:5 }}>
-              {missingPlanTeachers.map(t => <span key={t.id} style={{ fontSize:12,padding:'2px 9px',borderRadius:16,background:'var(--crimson-light)',color:'var(--crimson)',border:'1px solid rgba(139,26,26,0.15)' }}>{t.fullName}</span>)}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Stat cards */}
-      <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(200px,1fr))', gap:16, marginBottom:24 }}>
-        <StatCard label="Total teachers" value={stats.teachers} color="var(--green)" icon={<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>} onClick={() => navigate('/teacher-management')} />
-        <StatCard label="Lessons logged today" value={stats.todayLessons} sub="today" color="var(--green)" icon={<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>} onClick={() => navigate('/lessons')} />
-        <StatCard label="Tests conducted" value={stats.tests} color="var(--gold-dark)" icon={<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>} onClick={() => navigate('/tests')} />
-        <StatCard label="Absentees in tests" value={stats.absentees} sub={stats.absentees>0?"needs attention":undefined} color="var(--crimson)" icon={<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>} onClick={() => navigate('/absentees')} />
-      </div>
-
-      {/* Two column panels */}
-      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:20, marginBottom:24 }}>
-        {/* Recent lessons */}
-        <div style={{ background:'var(--white)',borderRadius:'var(--radius-lg)',border:'1px solid var(--gray-100)',boxShadow:'var(--shadow-sm)',overflow:'hidden' }}>
-          <div style={{ padding:'20px 24px',borderBottom:'1px solid var(--gray-100)',display:'flex',alignItems:'center',justifyContent:'space-between' }}>
-            <div><h2 style={{ fontFamily:'var(--font-display)',fontSize:16,fontWeight:600,color:'var(--text)' }}>Recent lessons</h2><p style={{ fontSize:12,color:'var(--text-muted)',marginTop:2 }}>Latest entries from teachers</p></div>
-            <div style={{ width:8,height:8,borderRadius:'50%',background:recentLessons.length>0?'var(--green-mid)':'var(--gray-200)',boxShadow:recentLessons.length>0?'0 0 0 3px var(--green-light)':'none' }} />
-          </div>
-          <div style={{ padding:'0 24px' }}>
-            {loading ? Array(5).fill(0).map((_,i)=><div key={i} style={{ padding:'14px 0',borderBottom:'1px solid var(--gray-50)',display:'flex',gap:12 }}><div style={{ width:36,height:36,borderRadius:'50%',background:'var(--gray-100)',animation:'pulse 1.5s ease infinite' }} /><div style={{ flex:1 }}><div style={{ height:12,background:'var(--gray-100)',borderRadius:4,marginBottom:6,width:'60%',animation:'pulse 1.5s ease infinite' }} /><div style={{ height:10,background:'var(--gray-100)',borderRadius:4,width:'40%',animation:'pulse 1.5s ease infinite' }} /></div></div>)
-            : recentLessons.length===0 ? <div style={{ padding:'32px 0',textAlign:'center',color:'var(--text-muted)',fontSize:13 }}>No lessons logged yet.</div>
-            : recentLessons.map(l => <ActivityRow key={l.id} name={l.teacherName||'Teacher'} action={`${l.className} · ${l.subject} · ${l.topicNames||'Topics covered'}`} time={l.date||''} />)}
-          </div>
-        </div>
-
-        {/* Absentee alerts */}
-        <div style={{ background:'var(--white)',borderRadius:'var(--radius-lg)',border:'1px solid var(--gray-100)',boxShadow:'var(--shadow-sm)',overflow:'hidden' }}>
-          <div style={{ padding:'20px 24px',borderBottom:'1px solid var(--gray-100)',display:'flex',alignItems:'center',justifyContent:'space-between' }}>
-            <div><h2 style={{ fontFamily:'var(--font-display)',fontSize:16,fontWeight:600,color:'var(--text)' }}>Absentee alerts</h2><p style={{ fontSize:12,color:'var(--text-muted)',marginTop:2 }}>Students who missed tests</p></div>
-            {alerts.length>0 && <span style={{ fontSize:11,fontWeight:600,background:'var(--crimson)',color:'white',padding:'3px 9px',borderRadius:20 }}>{alerts.length}</span>}
-          </div>
-          <div style={{ padding:'0 24px' }}>
-            {loading ? Array(4).fill(0).map((_,i)=><div key={i} style={{ padding:'14px 0',borderBottom:'1px solid var(--gray-50)',display:'flex',gap:12 }}><div style={{ width:36,height:36,borderRadius:'50%',background:'var(--gray-100)',animation:'pulse 1.5s ease infinite' }} /><div style={{ flex:1 }}><div style={{ height:12,background:'var(--gray-100)',borderRadius:4,marginBottom:6,width:'60%',animation:'pulse 1.5s ease infinite' }} /></div></div>)
-            : alerts.length===0 ? <div style={{ padding:'32px 0',textAlign:'center',color:'var(--text-muted)',fontSize:13 }}><div style={{ fontSize:28,marginBottom:8 }}>✓</div>No absentees recorded yet.</div>
-            : alerts.map((a,i) => <ActivityRow key={i} name={a.studentName||'Student'} action={`${a.testName||'Test'} · ${a.className||''} · ${a.subject||''}`} time={a.testDate||''} status="absent" />)}
-          </div>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          {btn('Mark arrangement', '/arrangement')}
+          {btn('Open timetable', '/timetable')}
+          {btn('Lesson log', '/lessons', true)}
         </div>
       </div>
 
-      {/* Timetable Heatmap */}
-      <div className="fade-in gemini-border" style={{ marginBottom:24, background:'var(--white)', borderRadius:'var(--radius-lg)', border:'1px solid var(--gray-100)', overflow:'hidden' }}>
-        <div style={{ padding:'16px 24px', borderBottom:'1px solid var(--gray-100)', display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap:10 }}>
-          <div>
-            <h2 style={{ fontFamily:'var(--font-display)', fontSize:16, fontWeight:600, color:'var(--text)' }}>Timetable</h2>
-            <p style={{ fontSize:12, color:'var(--text-muted)', marginTop:2 }}>{timetable.length} periods assigned · hover any cell for details</p>
-          </div>
-          <div style={{ display:'flex', background:'var(--gray-50)', borderRadius:'var(--radius-md)', padding:3, border:'1px solid var(--gray-100)' }}>
-            {[['teacher','By Teacher'],['class','By Class']].map(([k,l]) => (
-              <button key={k} onClick={() => setTimetableView(k)} style={{ padding:'6px 16px', borderRadius:'var(--radius-sm)', border:'none', fontSize:12, fontWeight:500, cursor:'pointer', background:timetableView===k?'var(--white)':'transparent', color:timetableView===k?'var(--green)':'var(--text-muted)', boxShadow:timetableView===k?'var(--shadow-sm)':'none', transition:'all 0.15s' }}>{l}</button>
-            ))}
-          </div>
-        </div>
+      {/* KPI strip */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 12 }}>
+        <Kpi label="Lessons logged today" value={loading ? undefined : stats.todayLessons} unit={isSunday ? '' : `/ ${coverage.totalSlots}`} bar={isSunday || !coverage.totalSlots ? 0 : (stats.todayLessons / coverage.totalSlots) * 100} onClick={() => navigate('/lessons')} />
+        <Kpi label="Student attendance today" value={loading ? undefined : (presentPct === null ? '—' : `${presentPct}%`)} sub={attendance ? (attendance.marked ? `${attendance.present} present of ${attendance.marked} marked` : 'Nothing marked yet') : ''} tone={presentPct !== null && presentPct < 85 ? 'red' : undefined} onClick={() => navigate('/attendance')} />
+        <Kpi label="Teachers absent today" value={loading ? undefined : coverage.absentTeachers} unit={`of ${stats.teachers ?? '—'}`} sub={coverage.uncovered ? `${coverage.uncovered} period${coverage.uncovered > 1 ? 's' : ''} still uncovered` : coverage.absentTeachers ? 'All periods covered' : 'From today’s arrangements'} tone={coverage.uncovered ? 'red' : undefined} onClick={() => navigate('/arrangement')} />
+        <Kpi label="Plans due this week" value={loading ? undefined : missingPlanTeachers.length} unit="missing" sub={plansTotal ? `${plansTotal - missingPlanTeachers.length} of ${plansTotal} teachers submitted` : ''} tone={missingPlanTeachers.length ? 'gold' : undefined} onClick={() => navigate('/lesson-plans')} />
+        <Kpi label="No lesson in 3+ days" value={loading ? undefined : inactiveTeachers.length} unit="teachers" sub={inactiveTeachers.length ? inactiveTeachers.slice(0, 3).map(t => shortName(t.fullName)).join(', ') + (inactiveTeachers.length > 3 ? '…' : '') : 'Everyone is logging'} tone={inactiveTeachers.length ? 'gold' : undefined} onClick={() => navigate('/lessons')} />
+      </div>
 
-        <div style={{ overflowX:'auto', padding:'16px 20px 20px' }}>
-          {(() => {
-            const DAYS = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday']
-            const sched = schedule.length > 0 ? schedule : Array.from({length:8},(_,i)=>({period:i+1,label:''}))
-
-            function slotClasses(slot) {
-              if (slot.classNames?.length) return slot.classNames
-              if (slot.className) return slot.className.split('+').map(s=>s.trim()).filter(Boolean)
-              return []
-            }
-
-            // Cell component — uses td directly, hover shows tooltip beside cursor
-            function Cell({ color, abbr, lines, borderLeft }) {
-              return (
-                <td
-                  style={{ padding:'3px 2px', textAlign:'center', borderLeft:borderLeft?'2px solid var(--gray-100)':'none', cursor:'pointer' }}
-                  onMouseEnter={e => {
-                    const rect = e.currentTarget.getBoundingClientRect()
-                    setTooltip({ x: rect.right, y: rect.top + rect.height/2, lines })
-                    e.currentTarget.querySelector('div').style.filter = 'brightness(1.25)'
-                  }}
-                  onMouseLeave={e => {
-                    setTooltip(null)
-                    e.currentTarget.querySelector('div').style.filter = ''
-                  }}
-                >
-                  <div style={{ width:32, height:32, borderRadius:6, background:color, display:'flex', alignItems:'center', justifyContent:'center', margin:'0 auto', transition:'filter 0.12s', pointerEvents:'none' }}>
-                    <span style={{ fontSize:8, fontWeight:700, color:'white', display:'block', textAlign:'center', overflow:'hidden', maxWidth:28, lineHeight:1 }}>{abbr}</span>
-                  </div>
-                </td>
-              )
-            }
-
-            function EmptyCell({ borderLeft }) {
-              return <td style={{ padding:'3px 2px', borderLeft:borderLeft?'2px solid var(--gray-100)':'none' }}><div style={{ width:32, height:32, borderRadius:6, background:'var(--gray-100)', margin:'0 auto' }} /></td>
-            }
-
-            const allTeachersWithSlots = timetableTeachers.filter(t => t.isActive!==false && timetable.some(s=>s.teacherId===t.id))
-            const ALL_CLASSES = ALL_CLASSES_NAMES
-            const classesWithSlots = ALL_CLASSES.filter(cls => timetable.some(t=>slotClasses(t).includes(cls)))
-
-            if (timetableView==='teacher' && allTeachersWithSlots.length===0) return <div style={{ textAlign:'center', padding:48, color:'var(--text-muted)', fontSize:13 }}>No timetable assigned yet. Go to <strong>Timetable</strong> to assign periods.</div>
-            if (timetableView==='class' && classesWithSlots.length===0) return <div style={{ textAlign:'center', padding:48, color:'var(--text-muted)', fontSize:13 }}>No timetable assigned yet. Go to <strong>Timetable</strong> to assign periods.</div>
-
-            return (
-              <table style={{ borderCollapse:'collapse', fontSize:12, width:'100%' }}>
-                <thead>
-                  <tr>
-                    <th style={{ padding:'5px 12px', textAlign:'left', fontSize:11, fontWeight:600, color:'var(--text-muted)', minWidth:130 }}>
-                      {timetableView==='teacher' ? 'Teacher' : 'Class'}
-                    </th>
-                    {DAYS.map(day => (
-                      <th key={day} colSpan={sched.length} style={{ padding:'5px 4px', textAlign:'center', fontSize:11, fontWeight:600, color:'var(--text-muted)', borderLeft:'2px solid var(--gray-100)' }}>
-                        {day.slice(0,3)}
-                      </th>
-                    ))}
-                  </tr>
-                  <tr>
-                    <th />
-                    {DAYS.map(day => sched.map(s => (
-                      <th key={`${day}-${s.period}`} style={{ padding:'2px 1px', fontSize:9, color:'var(--gray-300)', fontWeight:400, textAlign:'center', minWidth:36, borderLeft:s.period===1?'2px solid var(--gray-100)':'none' }}>
-                        P{s.period}
-                      </th>
-                    )))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {timetableView==='teacher'
-                    ? allTeachersWithSlots.map((t, ti) => (
-                        <tr key={t.id} style={{ borderTop:'1px solid var(--gray-50)', background:ti%2===0?'var(--white)':'var(--gray-50)' }}>
-                          <td style={{ padding:'5px 12px', whiteSpace:'nowrap' }}>
-                            <div style={{ display:'flex', alignItems:'center', gap:7 }}>
-                              <div style={{ width:26, height:26, borderRadius:'50%', background:'var(--green-light)', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
-                                <span style={{ fontSize:9, fontWeight:700, color:'var(--green)' }}>{t.fullName?.split(' ').map(n=>n[0]).join('').slice(0,2)}</span>
-                              </div>
-                              <span style={{ fontSize:11, fontWeight:500, color:'var(--text)' }}>{t.fullName?.split(' ').slice(0,2).join(' ')}</span>
+      {/* Body */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 360px', gap: 16, alignItems: 'start' }} className="dash-body">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16, minWidth: 0 }}>
+          {/* Today's coverage */}
+          <section className="fade-in" style={CARD}>
+            <div style={CARD_HEAD}>
+              <div>
+                <div style={{ fontSize: 14, fontWeight: 700 }}>Today's coverage</div>
+                <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>{isSunday ? 'No school today' : `${todayName} · ${coverage.rows.length} teachers timetabled · hover a cell for details`}</div>
+              </div>
+              <Link to="/timetable" style={{ fontSize: 12, fontWeight: 600, color: 'var(--green)', textDecoration: 'none' }}>Full timetable →</Link>
+            </div>
+            {loading ? (
+              <div style={{ padding: 18, display: 'flex', flexDirection: 'column', gap: 8 }}>{Array(5).fill(0).map((_, i) => <div key={i} style={{ height: 30, background: 'var(--gray-50)', borderRadius: 6, animation: 'pulse 1.5s ease infinite' }} />)}</div>
+            ) : isSunday || coverage.rows.length === 0 ? (
+              <div style={{ padding: '40px 18px', textAlign: 'center', color: 'var(--text-muted)', fontSize: 13 }}>{isSunday ? 'Sunday — enjoy the day off.' : <>No timetable for {todayName}. Assign periods in <Link to="/timetable">Timetable</Link>.</>}</div>
+            ) : (
+              <div style={{ padding: '10px 18px 14px', overflowX: 'auto' }}>
+                <div style={{ maxHeight: 420, overflowY: 'auto' }}>
+                  <table style={{ borderCollapse: 'separate', borderSpacing: '6px 4px', width: '100%', minWidth: 640 }}>
+                    <thead>
+                      <tr>
+                        <th style={{ textAlign: 'left', fontSize: 10.5, color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', padding: '0 0 2px', position: 'sticky', top: 0, background: 'var(--white)', minWidth: 170 }}>Teacher</th>
+                        {coverage.sched.map(s => <th key={s.period} title={s.label} style={{ fontSize: 10.5, color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', padding: '0 0 2px', textAlign: 'center', position: 'sticky', top: 0, background: 'var(--white)' }}>P{s.period}</th>)}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {coverage.rows.map(({ t, cells, absent }) => (
+                        <tr key={t.id}>
+                          <td style={{ padding: 0 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, fontWeight: 500, whiteSpace: 'nowrap' }}>
+                              <span style={{ width: 24, height: 24, borderRadius: '50%', background: absent ? 'var(--crimson-light)' : 'var(--green-light)', color: absent ? 'var(--crimson)' : 'var(--green-dark)', fontSize: 10, fontWeight: 700, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{initials(t.fullName)}</span>
+                              <Link to={`/teacher-management/${t.id}`} style={{ color: 'var(--text)', textDecoration: 'none' }}>{shortName(t.fullName)}</Link>
+                              {absent && <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--crimson)', background: 'var(--crimson-light)', padding: '1px 6px', borderRadius: 99 }}>Absent</span>}
                             </div>
                           </td>
-                          {DAYS.map(day => sched.map(s => {
-                            const slot = timetable.find(sl => sl.teacherId===t.id && sl.day===day && sl.period===s.period)
-                            const bl = s.period===1
-                            if (!slot) return <EmptyCell key={`${day}-${s.period}`} borderLeft={bl} />
-                            // Check today's arrangements for this teacher+period
-                            const todayDayName = format(new Date(), 'EEEE')
-                            const arr = day === todayDayName
-                              ? todayArrangements.find(a => a.absentTeacherId === t.id && a.period === s.period)
-                              : null
-                            return (
-                              <Cell key={`${day}-${s.period}`}
-                                color={arr ? '#e07b00' : 'var(--green)'}
-                                abbr={arr ? (arr.arrangementTeacherName?.split(' ').map(n=>n[0]).join('').slice(0,2)) : slot.subject?.slice(0,4)}
-                                borderLeft={bl}
-                                lines={arr ? [
-                                  { bold:'🔄 Arrangement', color:'#ffcc88' },
-                                  { divider:true },
-                                  { icon:'❌', text:`${t.fullName} — Absent` },
-                                  { icon:'✅', text:`${arr.arrangementTeacherName} — Covering` },
-                                  { icon:'📅', text:`${day} · P${s.period}${s.label?' ('+s.label+')':''}` },
-                                  { icon:'🏫', text: slot.className },
-                                ] : [
-                                  { bold: t.fullName },
-                                  { divider: true },
-                                  { icon:'📅', text:`${day} · P${s.period}${s.label?' ('+s.label+')':''}` },
-                                  { icon:'📚', text: slot.subject },
-                                  { icon:'🏫', text: slot.className },
-                                ]}
-                              />
-                            )
-                          }))}
+                          {cells.map((c, i) => <td key={i} style={{ padding: 0, minWidth: 54 }}><div title={cellTitle(c, coverage.sched[i], t)} style={cellStyle(c)}>{cellText(c)}</div></td>)}
                         </tr>
-                      ))
-                    : classesWithSlots.map((cls, ci) => (
-                        <tr key={cls} style={{ borderTop:'1px solid var(--gray-50)', background:ci%2===0?'var(--white)':'var(--gray-50)' }}>
-                          <td style={{ padding:'5px 12px', whiteSpace:'nowrap', fontSize:11, fontWeight:500, color:'var(--text)' }}>{cls.replace('Class ','')}</td>
-                          {DAYS.map(day => sched.map(s => {
-                            const slots = timetable.filter(sl => slotClasses(sl).includes(cls) && sl.day===day && sl.period===s.period)
-                            const bl = s.period===1
-                            if (slots.length===0) return <EmptyCell key={`${day}-${s.period}`} borderLeft={bl} />
-                            const multi = slots.length > 1
-                            return (
-                              <Cell key={`${day}-${s.period}`}
-                                color={multi?'var(--crimson)':'var(--green)'}
-                                abbr={multi?'!!':slots[0].subject?.slice(0,4)}
-                                borderLeft={bl}
-                                lines={multi
-                                  ? [
-                                      { bold:'⚠ Conflict', color:'#ffcc55' },
-                                      { text:`${slots.length} teachers assigned` },
-                                      { divider:true },
-                                      { icon:'📅', text:`${day} · P${s.period}${s.label?' ('+s.label+')':''}` },
-                                      { icon:'🏫', text:cls },
-                                      ...slots.map((sl,i)=>({ icon:`${i+1}.`, text:`${sl.teacherName} — ${sl.subject}` }))
-                                    ]
-                                  : [
-                                      { bold: cls },
-                                      { divider:true },
-                                      { icon:'📅', text:`${day} · P${s.period}${s.label?' ('+s.label+')':''}` },
-                                      { icon:'👤', text: slots[0].teacherName },
-                                      { icon:'📚', text: slots[0].subject },
-                                    ]
-                                }
-                              />
-                            )
-                          }))}
-                        </tr>
-                      ))
-                  }
-                </tbody>
-              </table>
-            )
-          })()}
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <div style={{ paddingTop: 10 }}>
+                  <Legend items={[['Logged', { background: 'var(--green)' }], ['Scheduled', { background: 'var(--green-light)' }], ['Period over, not logged', { background: 'var(--gold-light)' }], ['Arrangement', { background: '#E07B00' }], ['Uncovered', { border: '1.5px dashed var(--crimson)' }]]} />
+                </div>
+              </div>
+            )}
+          </section>
 
-          {/* Legend */}
-          <div style={{ display:'flex', gap:16, marginTop:16, paddingTop:12, borderTop:'1px solid var(--gray-100)', flexWrap:'wrap', alignItems:'center' }}>
-            <div style={{ display:'flex', alignItems:'center', gap:6 }}><div style={{ width:14, height:14, borderRadius:3, background:'var(--green)' }} /><span style={{ fontSize:11, color:'var(--text-muted)' }}>Assigned</span></div>
-            <div style={{ display:'flex', alignItems:'center', gap:6 }}><div style={{ width:14, height:14, borderRadius:3, background:'var(--gray-200)' }} /><span style={{ fontSize:11, color:'var(--text-muted)' }}>Free</span></div>
-            <div style={{ display:'flex', alignItems:'center', gap:6 }}><div style={{ width:14, height:14, borderRadius:3, background:'#e07b00' }} /><span style={{ fontSize:11, color:'var(--text-muted)' }}>Arrangement (today)</span></div>
-            {timetableView==='class' && <div style={{ display:'flex', alignItems:'center', gap:6 }}><div style={{ width:14, height:14, borderRadius:3, background:'var(--crimson)' }} /><span style={{ fontSize:11, color:'var(--text-muted)' }}>Conflict</span></div>}
-            <span style={{ fontSize:11, color:'var(--gray-400)', marginLeft:'auto' }}>Hover any cell to see teacher & subject</span>
-          </div>
+          {/* Recent lessons */}
+          <section className="fade-in" style={CARD}>
+            <div style={CARD_HEAD}>
+              <div>
+                <div style={{ fontSize: 14, fontWeight: 700 }}>Latest from teachers</div>
+                <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>Most recent lesson log entries</div>
+              </div>
+              <Link to="/lessons" style={{ fontSize: 12, fontWeight: 600, color: 'var(--green)', textDecoration: 'none' }}>Lesson log →</Link>
+            </div>
+            <div style={{ padding: '0 18px' }}>
+              {loading ? Array(4).fill(0).map((_, i) => <div key={i} style={{ padding: '12px 0', borderBottom: '1px solid var(--gray-50)', display: 'flex', gap: 12 }}><div style={{ width: 28, height: 28, borderRadius: '50%', background: 'var(--gray-100)', animation: 'pulse 1.5s ease infinite' }} /><div style={{ flex: 1 }}><div style={{ height: 12, background: 'var(--gray-100)', borderRadius: 4, marginBottom: 6, width: '60%' }} /><div style={{ height: 10, background: 'var(--gray-100)', borderRadius: 4, width: '40%' }} /></div></div>)
+              : recentLessons.length === 0 ? <div style={{ padding: '28px 0', textAlign: 'center', color: 'var(--text-muted)', fontSize: 13 }}>No lessons logged yet.</div>
+              : recentLessons.map(l => (
+                <div key={l.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', borderBottom: '1px solid var(--gray-50)' }}>
+                  <span style={{ width: 28, height: 28, borderRadius: '50%', background: 'var(--green-light)', color: 'var(--green-dark)', fontSize: 10.5, fontWeight: 700, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{initials(l.teacherName)}</span>
+                  <div style={{ flex: 1, minWidth: 0, fontSize: 12.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}><b style={{ fontWeight: 600 }}>{l.teacherName || 'Teacher'}</b> <span style={{ color: 'var(--text-muted)' }}>· {l.className} · {l.subject}{l.topicNames ? ` · ${l.topicNames}` : ''}</span></div>
+                  <span style={{ fontSize: 11.5, color: 'var(--text-muted)', flexShrink: 0 }}>{l.date === format(new Date(), 'yyyy-MM-dd') ? 'Today' : l.date}{l.period ? ` · P${l.period}` : ''}</span>
+                </div>
+              ))}
+            </div>
+          </section>
+        </div>
+
+        {/* Right rail */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16, minWidth: 0 }}>
+          <section className="fade-in" style={CARD}>
+            <div style={CARD_HEAD}>
+              <div style={{ fontSize: 14, fontWeight: 700 }}>Needs attention</div>
+              <span style={{ fontSize: 11, fontWeight: 700, background: attention.length ? 'var(--text)' : 'var(--gray-100)', color: attention.length ? 'var(--white)' : 'var(--text-muted)', padding: '2px 8px', borderRadius: 99 }}>{loading ? '…' : attention.length}</span>
+            </div>
+            {loading ? <div style={{ padding: 18, display: 'flex', flexDirection: 'column', gap: 10 }}>{Array(4).fill(0).map((_, i) => <div key={i} style={{ height: 36, background: 'var(--gray-50)', borderRadius: 8, animation: 'pulse 1.5s ease infinite' }} />)}</div>
+            : attention.length === 0 ? <div style={{ padding: '32px 18px', textAlign: 'center', color: 'var(--text-muted)', fontSize: 13 }}><div style={{ fontSize: 24, color: 'var(--green)', marginBottom: 6 }}>✓</div>Nothing needs you right now.</div>
+            : attention.map((a, i) => <Attention key={i} {...a} />)}
+          </section>
+
+          <section className="fade-in" style={CARD}>
+            <div style={CARD_HEAD}>
+              <div>
+                <div style={{ fontSize: 14, fontWeight: 700 }}>Test absentees</div>
+                <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>Students who missed a test</div>
+              </div>
+              {alerts.length > 0 && <Link to="/absentees" style={{ fontSize: 12, fontWeight: 600, color: 'var(--green)', textDecoration: 'none' }}>All →</Link>}
+            </div>
+            <div style={{ padding: '0 18px' }}>
+              {loading ? null : alerts.length === 0 ? <div style={{ padding: '24px 0', textAlign: 'center', color: 'var(--text-muted)', fontSize: 13 }}>No absentees recorded.</div>
+              : alerts.map((a, i) => (
+                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 0', borderBottom: '1px solid var(--gray-50)' }}>
+                  <span style={{ width: 26, height: 26, borderRadius: '50%', background: 'var(--crimson-light)', color: 'var(--crimson)', fontSize: 10, fontWeight: 700, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{initials(a.studentName)}</span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 12.5, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.studentName || 'Student'}</div>
+                    <div style={{ fontSize: 11.5, color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.testName || 'Test'} · {a.className || ''}{a.subject ? ` · ${a.subject}` : ''}</div>
+                  </div>
+                  <span style={{ fontSize: 11, color: 'var(--text-muted)', flexShrink: 0 }}>{a.testDate || ''}</span>
+                </div>
+              ))}
+            </div>
+          </section>
         </div>
       </div>
-
-      {/* Firebase Console footer */}
-      <div className="fade-in" style={{ marginTop:24, padding:'20px 24px', background:'linear-gradient(135deg,var(--green-dark),var(--green))', borderRadius:'var(--radius-lg)', display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap:16 }}>
-        <div>
-          <h3 style={{ fontFamily:'var(--font-display)', fontSize:16, fontWeight:600, color:'white', marginBottom:4 }}>Firebase Console</h3>
-          <p style={{ fontSize:12, color:'rgba(255,255,255,0.6)' }}>Manage your data, authentication, and settings</p>
-        </div>
-        <a href="https://console.firebase.google.com/project/rka-academic-tracker" target="_blank" rel="noopener noreferrer" style={{ padding:'10px 20px', background:'rgba(201,162,39,0.2)', border:'1px solid rgba(201,162,39,0.4)', borderRadius:'var(--radius-md)', color:'var(--gold)', fontSize:13, fontWeight:500, textDecoration:'none', whiteSpace:'nowrap' }}>
-          Open Console →
-        </a>
-      </div>
+      <style>{`@media (max-width: 1100px) { .dash-body { grid-template-columns: 1fr !important; } }`}</style>
     </div>
   )
 }
