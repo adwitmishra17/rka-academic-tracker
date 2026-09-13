@@ -83,6 +83,10 @@ export default function Dashboard() {
   const [todayArrangements, setTodayArrangements] = useState([])
   const [attendance, setAttendance] = useState(null)
   const [todayLessonList, setTodayLessonList] = useState([])
+  const [lastDay, setLastDay] = useState(null)          // { date, dayName, logged } — last school day before today
+  const [teacherQuery, setTeacherQuery] = useState('')
+  const [focusId, setFocusId] = useState(null)
+  const [weekView, setWeekView] = useState(false)
 
   const today = format(new Date(), 'EEEE, d MMMM yyyy')
   const todayName = format(new Date(), 'EEEE')
@@ -143,6 +147,14 @@ export default function Dashboard() {
         setStats({ teachers: teachersSnap.size, todayLessons: todayLessons.length, tests: testsSnap.size, absentees: validAbsentees.length })
         setRecentLessons(sortedLessons.slice(0,8))
         setTodayLessonList(lessonsSnap.docs.map(d => d.data()).filter(l => l.date === todayStr))
+        {
+          // Last school day = walk back from yesterday, skipping Sundays and days with no timetable slots.
+          const ttDays = new Set(ttSnap.docs.map(d => d.data().day))
+          let d = subDays(new Date(), 1), tries = 0
+          while (tries < 7 && (format(d, 'EEEE') === 'Sunday' || (ttDays.size && !ttDays.has(format(d, 'EEEE'))))) { d = subDays(d, 1); tries++ }
+          const date = format(d, 'yyyy-MM-dd'), dayName = format(d, 'EEEE')
+          setLastDay({ date, dayName, logged: lessonsSnap.docs.filter(x => x.data().date === date).length })
+        }
         setAlerts(validAbsentees.slice(0,5))
         setMissedAlerts(missedSnap.docs.map(d => ({ id:d.id, ...d.data() })))
         setTimetable(ttSnap.docs.map(d => ({ id:d.id, ...d.data() })))
@@ -270,8 +282,19 @@ export default function Dashboard() {
       .sort((a, b) => b.score - a.score || (a.t.fullName || '').localeCompare(b.t.fullName || ''))
     const totalSlots = slotsToday.length
     const uncovered = rows.reduce((n, r) => n + r.cells.filter(c => c.kind === 'uncovered').length, 0)
-    return { sched, rows, totalSlots, uncovered, absentTeachers: absentIds.size }
-  }, [schedule, timetable, timetableTeachers, todayLessonList, todayArrangements, todayName, nowMin])
+    const q = teacherQuery.trim().toLowerCase()
+    const visible = q ? rows.filter(r => (r.t.fullName || '').toLowerCase().includes(q)) : rows
+    return { sched, rows, visible, totalSlots, uncovered, absentTeachers: absentIds.size }
+  }, [schedule, timetable, timetableTeachers, todayLessonList, todayArrangements, todayName, nowMin, teacherQuery])
+
+  const lastDaySlots = lastDay ? timetable.filter(s => s.day === lastDay.dayName).length : 0
+  const focusTeacher = focusId ? timetableTeachers.find(t => t.id === focusId) : null
+  const focus = focusId ? (coverage.rows.find(r => r.t.id === focusId) || (focusTeacher ? { t: focusTeacher, cells: coverage.sched.map(() => ({ kind: 'none' })), absent: false, offToday: true } : null)) : null
+  const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
+  const weekFor = (tid) => DAYS.map(day => ({ day, cells: coverage.sched.map(s => { const sl = timetable.find(x => x.teacherId === tid && x.day === day && Number(x.period) === Number(s.period)); return sl ? { cls: (sl.classNames?.length ? sl.classNames.join('+') : sl.className || '').replace(/Class /g, ''), subject: sl.subject } : null }) }))
+  const kindLabel = { logged: 'Logged', scheduled: 'Scheduled', missed: 'Not logged', arranged: 'Arrangement', uncovered: 'Uncovered', none: 'Free' }
+  const kindTone = { logged: 'green', scheduled: 'muted', missed: 'gold', arranged: 'orange', uncovered: 'red', none: 'muted' }
+  const pillStyle = (tone) => ({ display: 'inline-block', padding: '2px 8px', borderRadius: 99, fontSize: 10.5, fontWeight: 600, ...( { green: { background: 'var(--green-light)', color: 'var(--green-dark)' }, gold: { background: 'var(--gold-light)', color: 'var(--gold-dark)' }, red: { background: 'var(--crimson-light)', color: 'var(--crimson)' }, orange: { background: '#E07B00', color: '#fff' }, muted: { background: 'var(--gray-50)', color: 'var(--text-muted)' } }[tone] ) })
 
   const isSunday = todayName === 'Sunday'
   const presentPct = attendance && attendance.marked > 0 ? Math.round((attendance.present / attendance.marked) * 1000) / 10 : null
@@ -320,7 +343,7 @@ export default function Dashboard() {
 
       {/* KPI strip */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 12 }}>
-        <Kpi label="Lessons logged today" value={loading ? undefined : stats.todayLessons} unit={isSunday ? '' : `/ ${coverage.totalSlots}`} bar={isSunday || !coverage.totalSlots ? 0 : (stats.todayLessons / coverage.totalSlots) * 100} onClick={() => navigate('/lessons')} />
+        <Kpi label={lastDay ? `Lessons logged ${lastDay.date === format(subDays(new Date(), 1), 'yyyy-MM-dd') ? 'yesterday' : 'on ' + lastDay.dayName}` : 'Lessons logged yesterday'} value={loading || !lastDay ? undefined : lastDay.logged} unit={lastDaySlots ? `/ ${lastDaySlots}` : ''} sub={isSunday ? 'No school today' : <span>Today so far: <b style={{ fontWeight: 600, color: 'var(--text)' }}>{stats.todayLessons ?? 0}</b>{coverage.totalSlots ? ` of ${coverage.totalSlots}` : ''}</span>} tone={lastDay && lastDaySlots && lastDay.logged / lastDaySlots < 0.6 ? 'gold' : undefined} onClick={() => navigate('/lessons')} />
         <Kpi label="Student attendance today" value={loading ? undefined : (presentPct === null ? '—' : `${presentPct}%`)} sub={attendance ? (attendance.marked ? `${attendance.present} present of ${attendance.marked} marked` : 'Nothing marked yet') : ''} tone={presentPct !== null && presentPct < 85 ? 'red' : undefined} onClick={() => navigate('/attendance')} />
         <Kpi label="Teachers absent today" value={loading ? undefined : coverage.absentTeachers} unit={`of ${stats.teachers ?? '—'}`} sub={coverage.uncovered ? `${coverage.uncovered} period${coverage.uncovered > 1 ? 's' : ''} still uncovered` : coverage.absentTeachers ? 'All periods covered' : 'From today’s arrangements'} tone={coverage.uncovered ? 'red' : undefined} onClick={() => navigate('/arrangement')} />
         <Kpi label="Plans due this week" value={loading ? undefined : missingPlanTeachers.length} unit="missing" sub={plansTotal ? `${plansTotal - missingPlanTeachers.length} of ${plansTotal} teachers submitted` : ''} tone={missingPlanTeachers.length ? 'gold' : undefined} onClick={() => navigate('/lesson-plans')} />
@@ -337,10 +360,73 @@ export default function Dashboard() {
                 <div style={{ fontSize: 14, fontWeight: 700 }}>Today's coverage</div>
                 <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>{isSunday ? 'No school today' : `${todayName} · ${coverage.rows.length} teachers timetabled · hover a cell for details`}</div>
               </div>
-              <Link to="/timetable" style={{ fontSize: 12, fontWeight: 600, color: 'var(--green)', textDecoration: 'none' }}>Full timetable →</Link>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, height: 34, width: 240, background: 'var(--gray-50)', border: '1px solid var(--gray-100)', borderRadius: 9, padding: '0 10px' }}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" strokeWidth="2"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                  <input value={teacherQuery} onChange={e => { setTeacherQuery(e.target.value); const q = e.target.value.trim().toLowerCase(); const hits = q ? coverage.rows.filter(r => (r.t.fullName || '').toLowerCase().includes(q)) : []; setFocusId(hits.length === 1 ? hits[0].t.id : null) }} placeholder="Search a teacher…" style={{ flex: 1, border: 'none', outline: 'none', background: 'transparent', fontSize: 12.5, fontFamily: 'inherit', color: 'var(--text)', minWidth: 0 }} />
+                  {teacherQuery && <button onClick={() => { setTeacherQuery(''); setFocusId(null); setWeekView(false) }} style={{ border: 'none', background: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 0, display: 'flex' }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6L6 18M6 6l12 12"/></svg></button>}
+                </div>
+                <Link to="/timetable" style={{ fontSize: 12, fontWeight: 600, color: 'var(--green)', textDecoration: 'none', whiteSpace: 'nowrap' }}>Full timetable →</Link>
+              </div>
             </div>
+
+            {focus && (
+              <div style={{ borderBottom: '1px solid var(--gray-100)', background: 'var(--gray-50)', padding: '14px 18px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                  <span style={{ width: 32, height: 32, borderRadius: '50%', background: focus.absent ? 'var(--crimson-light)' : 'var(--green-light)', color: focus.absent ? 'var(--crimson)' : 'var(--green-dark)', fontSize: 12, fontWeight: 700, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>{initials(focus.t.fullName)}</span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 14, fontWeight: 700 }}>{focus.t.fullName} {focus.absent && <span style={pillStyle('red')}>Absent today</span>}</div>
+                    <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{weekView ? 'Weekly timetable' : focus.offToday ? `No periods on ${todayName}` : `${todayName} · ${focus.cells.filter(c => c.kind !== 'none').length} periods · ${focus.cells.filter(c => c.kind === 'logged').length} logged`}</div>
+                  </div>
+                  <div style={{ display: 'flex', background: 'var(--white)', border: '1px solid var(--gray-100)', borderRadius: 9, padding: 3, gap: 2 }}>
+                    {[[false, 'Today'], [true, 'This week']].map(([v, l]) => <button key={l} onClick={() => setWeekView(v)} style={{ padding: '5px 12px', fontSize: 12, fontWeight: weekView === v ? 600 : 500, fontFamily: 'inherit', border: 'none', borderRadius: 7, cursor: 'pointer', background: weekView === v ? 'var(--gray-50)' : 'transparent', color: weekView === v ? 'var(--text)' : 'var(--text-muted)', boxShadow: weekView === v ? 'var(--shadow-sm)' : 'none' }}>{l}</button>)}
+                  </div>
+                  <Link to={`/teacher-management/${focus.t.id}`} style={{ fontSize: 12, fontWeight: 600, color: 'var(--green)', textDecoration: 'none' }}>Profile →</Link>
+                  <button onClick={() => { setFocusId(null); setWeekView(false) }} title="Close" style={{ border: '1px solid var(--gray-100)', background: 'var(--white)', borderRadius: 8, width: 28, height: 28, cursor: 'pointer', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
+                </div>
+                {!weekView ? (
+                  <div style={{ display: 'grid', gridTemplateColumns: `repeat(${coverage.sched.length}, minmax(0, 1fr))`, gap: 8 }}>
+                    {focus.cells.map((c, i) => {
+                      const s = coverage.sched[i]
+                      const free = c.kind === 'none'
+                      return (
+                        <div key={i} title={cellTitle(c, s, focus.t)} style={{ background: 'var(--white)', border: `1px solid ${c.kind === 'uncovered' ? 'var(--crimson)' : 'var(--gray-100)'}`, borderRadius: 10, padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 6, minHeight: 92, opacity: free ? 0.6 : 1 }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}><span style={{ fontSize: 12, fontWeight: 700 }}>P{s.period}</span><span style={{ fontSize: 10.5, color: 'var(--text-muted)' }}>{(s.label || '').split('–')[0]}</span></div>
+                          <div style={{ fontSize: 13, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{free ? 'Free' : (c.slot?.className || c.cls)}</div>
+                          <div style={{ fontSize: 11.5, color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{free ? '' : (c.slot?.subject || '')}</div>
+                          <div style={{ marginTop: 'auto' }}>{!free && <span style={pillStyle(kindTone[c.kind])}>{c.kind === 'arranged' ? `→ ${shortName(c.who)}` : kindLabel[c.kind]}</span>}</div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                ) : (
+                  <div style={{ overflowX: 'auto' }}>
+                    <table style={{ borderCollapse: 'separate', borderSpacing: '6px 4px', width: '100%', minWidth: 640 }}>
+                      <thead><tr><th style={{ textAlign: 'left', fontSize: 10.5, color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', width: 90 }}>Day</th>{coverage.sched.map(s => <th key={s.period} title={s.label} style={{ fontSize: 10.5, color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', textAlign: 'center' }}>P{s.period}</th>)}</tr></thead>
+                      <tbody>
+                        {weekFor(focus.t.id).map(({ day, cells }) => (
+                          <tr key={day}>
+                            <td style={{ padding: 0, fontSize: 12.5, fontWeight: day === todayName ? 700 : 500, color: day === todayName ? 'var(--text)' : 'var(--text-muted)' }}>{day.slice(0, 3)}{day === todayName && <span style={{ marginLeft: 6, ...pillStyle('green') }}>Today</span>}</td>
+                            {cells.map((c, i) => <td key={i} style={{ padding: 0 }}>{c ? <div title={`${day} · P${coverage.sched[i].period} · ${c.subject || ''} · ${c.cls}`} style={{ background: day === todayName ? 'var(--green-light)' : 'var(--white)', border: '1px solid var(--gray-100)', borderRadius: 8, padding: '6px 8px', display: 'flex', flexDirection: 'column', gap: 1, minHeight: 44 }}><span style={{ fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.cls}</span><span style={{ fontSize: 10.5, color: 'var(--text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.subject}</span></div> : <div style={{ height: 44, borderRadius: 8, background: 'var(--gray-100)', opacity: 0.6 }} />}</td>)}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            )}
             {loading ? (
               <div style={{ padding: 18, display: 'flex', flexDirection: 'column', gap: 8 }}>{Array(5).fill(0).map((_, i) => <div key={i} style={{ height: 30, background: 'var(--gray-50)', borderRadius: 6, animation: 'pulse 1.5s ease infinite' }} />)}</div>
+            ) : !isSunday && coverage.rows.length > 0 && coverage.visible.length === 0 ? (
+              <div style={{ padding: '24px 18px', textAlign: 'center', color: 'var(--text-muted)', fontSize: 13, display: 'flex', flexDirection: 'column', gap: 10, alignItems: 'center' }}>
+                <span>No teacher matching “{teacherQuery}” is timetabled today.</span>
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'center' }}>
+                  {timetableTeachers.filter(t => (t.fullName || '').toLowerCase().includes(teacherQuery.trim().toLowerCase())).slice(0, 8).map(t => (
+                    <button key={t.id} onClick={() => { setFocusId(t.id); setWeekView(true) }} style={{ padding: '6px 12px', borderRadius: 99, border: '1px solid var(--gray-200)', background: 'var(--white)', fontSize: 12, fontWeight: 600, fontFamily: 'inherit', cursor: 'pointer', color: 'var(--text)' }}>{t.fullName} · week</button>
+                  ))}
+                </div>
+              </div>
             ) : isSunday || coverage.rows.length === 0 ? (
               <div style={{ padding: '40px 18px', textAlign: 'center', color: 'var(--text-muted)', fontSize: 13 }}>{isSunday ? 'Sunday — enjoy the day off.' : <>No timetable for {todayName}. Assign periods in <Link to="/timetable">Timetable</Link>.</>}</div>
             ) : (
@@ -354,12 +440,12 @@ export default function Dashboard() {
                       </tr>
                     </thead>
                     <tbody>
-                      {coverage.rows.map(({ t, cells, absent }) => (
-                        <tr key={t.id}>
+                      {coverage.visible.map(({ t, cells, absent }) => (
+                        <tr key={t.id} style={{ background: focusId === t.id ? 'var(--green-light)' : 'transparent' }}>
                           <td style={{ padding: 0 }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, fontWeight: 500, whiteSpace: 'nowrap' }}>
                               <span style={{ width: 24, height: 24, borderRadius: '50%', background: absent ? 'var(--crimson-light)' : 'var(--green-light)', color: absent ? 'var(--crimson)' : 'var(--green-dark)', fontSize: 10, fontWeight: 700, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{initials(t.fullName)}</span>
-                              <Link to={`/teacher-management/${t.id}`} style={{ color: 'var(--text)', textDecoration: 'none' }}>{shortName(t.fullName)}</Link>
+                              <button onClick={() => { setFocusId(focusId === t.id ? null : t.id); setWeekView(false) }} title="Show this teacher's day" style={{ border: 'none', background: 'none', padding: 0, font: 'inherit', color: 'var(--text)', cursor: 'pointer', textDecoration: focusId === t.id ? 'underline' : 'none' }}>{shortName(t.fullName)}</button>
                               {absent && <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--crimson)', background: 'var(--crimson-light)', padding: '1px 6px', borderRadius: 99 }}>Absent</span>}
                             </div>
                           </td>
