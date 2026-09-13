@@ -213,9 +213,10 @@ export function registerExamRoutes(app, { supabase, admin, verifyAuth, branchIdF
       const subjIds = (subjects.data || []).map((s) => s.id)
       let paperCounts = {}
       if (subjIds.length) {
-        const papers = await pagedAll(() => supabase.from('exam_papers').select('subject_id, component_key').in('subject_id', subjIds))
+        const papers = await pagedAll(() => supabase.from('exam_papers').select('subject_id, component_key, term_id').in('subject_id', subjIds))
         const cls = Object.fromEntries((subjects.data || []).map((s) => [s.id, s.class_name]))
-        for (const p of papers) { const c = cls[p.subject_id]; const o = (paperCounts[c] ||= { typed: 0, legacy: 0 }); if (p.component_key) o.typed += 1; else o.legacy += 1 }
+        // byTerm: typed papers per exam term — lets the grid open on a term that actually has papers
+        for (const p of papers) { const c = cls[p.subject_id]; const o = (paperCounts[c] ||= { typed: 0, legacy: 0, byTerm: {} }); if (p.component_key) { o.typed += 1; o.byTerm[p.term_id] = (o.byTerm[p.term_id] || 0) + 1 } else o.legacy += 1 }
       }
       res.json({
         sessions: [...new Set((sessions.data || []).map((r) => r.session_code).filter(Boolean))].sort().reverse(),

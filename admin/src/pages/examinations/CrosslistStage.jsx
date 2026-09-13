@@ -45,7 +45,11 @@ export default function CrosslistStage({ branch, sessionCode, className, config 
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState('')
   const terms = config?.terms || []
-  useEffect(() => { if (!termId && terms.length) setTermId(terms[0].id) }, [terms]) // eslint-disable-line
+  // default to the first term that has typed papers for this class (pre-primary has none under T1/T2)
+  const byTerm = config?.paperCounts?.[className]?.byTerm || {}
+  const firstWithPapers = terms.find((t) => byTerm[t.id]) || terms[0]
+  const termLabel = (t) => `${t.name}${byTerm[t.id] ? '' : ' · no papers'}`
+  useEffect(() => { if (!termId && firstWithPapers) setTermId(firstWithPapers.id) }, [terms, config]) // eslint-disable-line
 
   // ── rules ↔ papers sync gate: nothing downloads while the papers lag the rules ──
   const [sync, setSync] = useState(null)      // { synced, missing[], stale[], changed[] } | null while loading
@@ -117,7 +121,7 @@ export default function CrosslistStage({ branch, sessionCode, className, config 
             {[['card', 'As on card'], ['raw', 'Raw per term'], ['sheets', 'Entry sheets']].map(([k, l]) => <button key={k} onClick={() => setMode(k)} style={{ padding: '6px 14px', border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer', background: mode === k ? 'var(--text)' : 'var(--white)', color: mode === k ? 'var(--white)' : 'var(--text-muted)' }}>{l}</button>)}
           </div></div>
         {mode === 'raw' || mode === 'sheets' ? (
-          <div><span style={lbl}>Term</span><select value={termId} onChange={(e) => setTermId(e.target.value)} style={inp}>{terms.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}</select></div>
+          <div><span style={lbl}>Term</span><select value={termId} onChange={(e) => setTermId(e.target.value)} style={inp}>{terms.map((t) => <option key={t.id} value={t.id}>{termLabel(t)}</option>)}</select></div>
         ) : (
           <div><span style={lbl}>Card</span><select value={cardKey} onChange={(e) => setCardKey(e.target.value)} style={inp}>{(cards?.cardKeys || []).map((k) => <option key={k.key} value={k.key}>{k.label}</option>)}</select></div>
         )}

@@ -32,11 +32,15 @@ export default function MarksStage(props) {
 function CardEntriesTab({ branch, sessionCode, className, config }) {
   const terms = config?.terms || []
   const [termId, setTermId] = useState('')
-  useEffect(() => { if (!termId && terms.length) setTermId(terms[0].id) }, [terms]) // eslint-disable-line
+  // default to the first term that has typed papers for this class (pre-primary has none under T1/T2)
+  const byTerm = config?.paperCounts?.[className]?.byTerm || {}
+  const firstWithPapers = terms.find((t) => byTerm[t.id]) || terms[0]
+  const termLabel = (t) => `${t.name}${byTerm[t.id] ? '' : ' · no papers'}`
+  useEffect(() => { if (!termId && firstWithPapers) setTermId(firstWithPapers.id) }, [terms, config]) // eslint-disable-line
   return (
     <div style={{ ...card, padding: 0 }}>
       <div style={{ display: 'flex', alignItems: 'flex-end', gap: 12, padding: '12px 16px', borderBottom: '1px solid var(--gray-100)' }}>
-        <div><span style={lbl}>Term</span><select value={termId} onChange={(e) => setTermId(e.target.value)} style={inp}>{terms.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}</select></div>
+        <div><span style={lbl}>Term</span><select value={termId} onChange={(e) => setTermId(e.target.value)} style={inp}>{terms.map((t) => <option key={t.id} value={t.id}>{termLabel(t)}</option>)}</select></div>
         <div style={{ fontSize: 11.5, color: 'var(--text-muted)', paddingBottom: 8 }}>Co-scholastic area grades, discipline and remarks are per term; height and weight are per session. Promotion appears with the last term and defaults to the next class.</div>
       </div>
       {termId && <CardEntries key={termId} embedded ctx={{ branch, sessionCode, className, termId }} />}
@@ -56,7 +60,11 @@ function ClassGrid({ branch, sessionCode, className, config }) {
   const [err, setErr] = useState('')
   const [flash, setFlash] = useState('')
   const gridRef = useRef(null)
-  useEffect(() => { if (!termId && terms.length) setTermId(terms[0].id) }, [terms]) // eslint-disable-line
+  // default to the first term that has typed papers for this class (pre-primary has none under T1/T2)
+  const byTerm = config?.paperCounts?.[className]?.byTerm || {}
+  const firstWithPapers = terms.find((t) => byTerm[t.id]) || terms[0]
+  const termLabel = (t) => `${t.name}${byTerm[t.id] ? '' : ' · no papers'}`
+  useEffect(() => { if (!termId && firstWithPapers) setTermId(firstWithPapers.id) }, [terms, config]) // eslint-disable-line
 
   const load = () => {
     if (!termId) return
@@ -120,7 +128,7 @@ function ClassGrid({ branch, sessionCode, className, config }) {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
       {err && <Note tone="red">{err}</Note>}
       <div style={{ ...card, display: 'flex', gap: 12, alignItems: 'flex-end', flexWrap: 'wrap' }}>
-        <div><span style={lbl}>Term</span><select value={termId} onChange={(e) => setTermId(e.target.value)} style={inp}>{terms.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}</select></div>
+        <div><span style={lbl}>Term</span><select value={termId} onChange={(e) => setTermId(e.target.value)} style={inp}>{terms.map((t) => <option key={t.id} value={t.id}>{termLabel(t)}</option>)}</select></div>
         {sections.length > 1 && <div><span style={lbl}>Section</span><select value={section} onChange={(e) => setSection(e.target.value)} style={inp}><option value="">All</option>{sections.map((s) => <option key={s}>{s}</option>)}</select></div>}
         {compKeys.length > 1 && <div><span style={lbl}>Show</span><select value={only} onChange={(e) => setOnly(e.target.value)} style={inp}><option value="">All papers</option>{compKeys.map((k) => <option key={k} value={k}>{COMP[k] || k} only</option>)}</select></div>}
         <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
@@ -131,7 +139,7 @@ function ClassGrid({ branch, sessionCode, className, config }) {
       </div>
 
       {busy === 'load' && !data ? <Spinner /> : data && (
-        papers.length === 0 ? <Note tone="gold">No papers for {data.term?.name} yet — generate them in <b>Papers</b>.</Note> : (
+        papers.length === 0 ? <Note tone="gold">{Object.keys(byTerm).length ? <>Nothing is entered under <b>{data.term?.name}</b> for {className} — this card's papers are under {terms.filter((t) => byTerm[t.id]).map((t) => t.name).join(' and ')}. Pick that term above.</> : <>No papers for {data.term?.name} yet — generate them in <b>Papers</b>.</>}</Note> : (
           <div style={{ ...card, padding: 0, overflow: 'auto', maxHeight: '70vh' }} ref={gridRef}>
             <table style={{ borderCollapse: 'separate', borderSpacing: 0, minWidth: 420 + papers.length * 70 }}>
               <thead style={{ position: 'sticky', top: 0, zIndex: 3 }}>
