@@ -1,0 +1,135 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&display=swap" rel="stylesheet">
+  <style>
+    body { margin: 0; font-family: 'DM Sans', system-ui, -apple-system, sans-serif; -webkit-font-smoothing: antialiased; font-variant-numeric: tabular-nums; }
+    a { color: #3E8E5A; } a:hover { color: #2C4A38; }
+    * { box-sizing: border-box; }
+  </style>
+</helmet>
+<div style="width: 1440px; height: 900px; display: flex; background: #F3F3EE; color: #26251F; overflow: hidden;">
+
+  <!-- Sidebar (collapsed to icons to give the workflow room) -->
+  <aside style="width: 64px; flex-shrink: 0; background: #FFFFFF; border-right: 1px solid #E9E8E0; display: flex; flex-direction: column; align-items: center; padding: 14px 0; gap: 6px;">
+    <img src="crest.png" alt="" style="width: 34px; height: 34px; border-radius: 50%; border: 1px solid #DBDAD0; background: #F5F5F0; padding: 2px; margin-bottom: 10px;">
+    <div style="width: 40px; height: 40px; border-radius: 10px; color: #75746B; display: flex; align-items: center; justify-content: center;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg></div>
+    <div style="width: 40px; height: 40px; border-radius: 10px; color: #75746B; display: flex; align-items: center; justify-content: center;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg></div>
+    <div style="width: 40px; height: 40px; border-radius: 10px; background: #E4EFE8; color: #2C4A38; display: flex; align-items: center; justify-content: center;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><path d="M9 15l2 2 4-4"/></svg></div>
+    <div style="width: 40px; height: 40px; border-radius: 10px; color: #75746B; display: flex; align-items: center; justify-content: center;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></div>
+    <div style="width: 40px; height: 40px; border-radius: 10px; color: #75746B; display: flex; align-items: center; justify-content: center;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="3" y1="10" x2="21" y2="10"/><line x1="9" y1="4" x2="9" y2="22"/></svg></div>
+    <div style="width: 40px; height: 40px; border-radius: 10px; color: #75746B; display: flex; align-items: center; justify-content: center;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14"/></svg></div>
+    <div style="flex: 1;"></div>
+    <div style="width: 40px; height: 40px; border-radius: 10px; color: #75746B; display: flex; align-items: center; justify-content: center;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><polyline points="13 17 18 12 13 7"/><polyline points="6 17 11 12 6 7"/></svg></div>
+    <div style="width: 32px; height: 32px; border-radius: 50%; background: #E4EFE8; color: #2C4A38; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700;">AM</div>
+  </aside>
+
+  <div style="flex: 1; min-width: 0; display: flex; flex-direction: column;">
+    <!-- Context header: breadcrumb + the three selectors as segmented chips -->
+    <header style="background: #FFFFFF; border-bottom: 1px solid #E9E8E0; padding: 14px 28px 0; display: flex; flex-direction: column; gap: 14px;">
+      <div style="display: flex; align-items: center; gap: 16px;">
+        <div style="display: flex; flex-direction: column; gap: 2px;">
+          <div style="font-size: 12px; color: #75746B;">Assessment</div>
+          <h1 style="margin: 0; font-size: 22px; font-weight: 700; letter-spacing: -0.02em;">Examinations</h1>
+        </div>
+        <div style="flex: 1;"></div>
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <div style="display: flex; align-items: center; gap: 8px; height: 36px; padding: 0 12px; border: 1px solid #DBDAD0; border-radius: 10px; background: #FFFFFF; font-size: 12.5px; font-weight: 600;"><span style="color: #75746B; font-weight: 500;">Branch</span>Main<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9C9B90" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg></div>
+          <div style="display: flex; align-items: center; gap: 8px; height: 36px; padding: 0 12px; border: 1px solid #DBDAD0; border-radius: 10px; background: #FFFFFF; font-size: 12.5px; font-weight: 600;"><span style="color: #75746B; font-weight: 500;">Session</span>2026–27<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9C9B90" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg></div>
+          <div style="display: flex; align-items: center; gap: 8px; height: 36px; padding: 0 12px; border: 1px solid #26251F; border-radius: 10px; background: #26251F; color: #FFFFFF; font-size: 12.5px; font-weight: 600;"><span style="color: #C9C8BE; font-weight: 500;">Class</span>Class 10-A<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#C9C8BE" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg></div>
+        </div>
+      </div>
+      <!-- Horizontal stepper doubling as progress -->
+      <div style="display: flex; gap: 0; align-items: stretch;">
+        <div style="display: flex; align-items: center; gap: 8px; padding: 10px 16px 12px 0; border-bottom: 2px solid transparent; font-size: 13px; color: #3B3A32;"><span style="width: 20px; height: 20px; border-radius: 50%; background: #3E8E5A; color: #FFFFFF; font-size: 11px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center;">✓</span>Setup</div>
+        <div style="display: flex; align-items: center; gap: 8px; padding: 10px 16px 12px; border-bottom: 2px solid transparent; font-size: 13px; color: #3B3A32;"><span style="width: 20px; height: 20px; border-radius: 50%; background: #3E8E5A; color: #FFFFFF; font-size: 11px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center;">✓</span>Scoring rules</div>
+        <div style="display: flex; align-items: center; gap: 8px; padding: 10px 16px 12px; border-bottom: 2px solid transparent; font-size: 13px; color: #3B3A32;"><span style="width: 20px; height: 20px; border-radius: 50%; background: #3E8E5A; color: #FFFFFF; font-size: 11px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center;">✓</span>Papers <span style="font-size: 11px; color: #75746B;">14 typed</span></div>
+        <div style="display: flex; align-items: center; gap: 8px; padding: 10px 16px 12px; border-bottom: 2px solid #26251F; font-size: 13px; font-weight: 700; color: #26251F;"><span style="width: 20px; height: 20px; border-radius: 50%; background: #26251F; color: #FFFFFF; font-size: 11px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center;">4</span>Marks entry <span style="font-size: 11px; font-weight: 600; color: #8A670E; background: #F5EBD8; padding: 1px 7px; border-radius: 99px;">9 / 12 subjects</span></div>
+        <div style="display: flex; align-items: center; gap: 8px; padding: 10px 16px 12px; border-bottom: 2px solid transparent; font-size: 13px; color: #9C9B90;"><span style="width: 20px; height: 20px; border-radius: 50%; border: 1.5px solid #DBDAD0; color: #9C9B90; font-size: 11px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center;">5</span>Crosslist</div>
+        <div style="display: flex; align-items: center; gap: 8px; padding: 10px 16px 12px; border-bottom: 2px solid transparent; font-size: 13px; color: #9C9B90;"><span style="width: 20px; height: 20px; border-radius: 50%; border: 1.5px solid #DBDAD0; color: #9C9B90; font-size: 11px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center;">6</span>Report cards <span style="font-size: 11px; color: #B5372A;">gate: 3 missing</span></div>
+      </div>
+    </header>
+
+    <main style="flex: 1; overflow: hidden; padding: 20px 28px; display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 16px; align-items: start;">
+      <!-- Subject status table -->
+      <section style="background: #FFFFFF; border: 1px solid #E9E8E0; border-radius: 14px; overflow: hidden; display: flex; flex-direction: column;">
+        <div style="display: flex; align-items: center; gap: 10px; padding: 12px 18px; border-bottom: 1px solid #E9E8E0;">
+          <div style="font-size: 14px; font-weight: 700;">Half-yearly · Class 10-A</div>
+          <div style="font-size: 12px; color: #75746B;">42 students · 12 subjects</div>
+          <div style="flex: 1;"></div>
+          <div style="display: flex; background: #F5F5F0; border: 1px solid #E9E8E0; border-radius: 9px; padding: 3px; gap: 2px;">
+            <div style="padding: 5px 12px; font-size: 12px; font-weight: 600; background: #FFFFFF; border-radius: 7px; box-shadow: 0 1px 3px rgba(38,37,31,0.08);">Half-yearly</div>
+            <div style="padding: 5px 12px; font-size: 12px; font-weight: 500; color: #75746B;">Annual</div>
+          </div>
+          <div style="display: flex; align-items: center; gap: 6px; padding: 7px 12px; border-radius: 9px; border: 1px solid #DBDAD0; font-size: 12px; font-weight: 600;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>Export</div>
+        </div>
+        <div style="display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1.1fr) 120px minmax(0, 1fr) 110px 90px; gap: 12px; padding: 8px 18px; font-size: 10.5px; color: #75746B; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; background: #FAFAF7; border-bottom: 1px solid #E9E8E0;"><div>Subject</div><div>Teacher</div><div>Papers</div><div>Entered</div><div>Last edit</div><div></div></div>
+
+        <div style="display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1.1fr) 120px minmax(0, 1fr) 110px 90px; gap: 12px; padding: 11px 18px; font-size: 12.5px; border-bottom: 1px solid #F5F5F0; align-items: center;"><div style="font-weight: 600;">English</div><div style="color: #3B3A32;">Ritu Singh</div><div style="color: #75746B;">Theory 80 · Int 20</div><div style="display: flex; align-items: center; gap: 8px;"><div style="flex: 1; height: 6px; background: #E9E8E0; border-radius: 99px; overflow: hidden;"><div style="width: 100%; height: 100%; background: #3E8E5A;"></div></div><span style="font-size: 11.5px; color: #75746B; width: 48px;">42 / 42</span></div><div style="color: #9C9B90; font-size: 11.5px;">12 Sep 14:20</div><div style="text-align: right;"><span style="font-size: 11px; font-weight: 600; color: #2C4A38; background: #E4EFE8; padding: 2px 8px; border-radius: 99px;">Locked</span></div></div>
+        <div style="display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1.1fr) 120px minmax(0, 1fr) 110px 90px; gap: 12px; padding: 11px 18px; font-size: 12.5px; border-bottom: 1px solid #F5F5F0; align-items: center;"><div style="font-weight: 600;">Hindi</div><div style="color: #3B3A32;">Meera Kumari</div><div style="color: #75746B;">Theory 80 · Int 20</div><div style="display: flex; align-items: center; gap: 8px;"><div style="flex: 1; height: 6px; background: #E9E8E0; border-radius: 99px; overflow: hidden;"><div style="width: 0%; height: 100%; background: #3E8E5A;"></div></div><span style="font-size: 11.5px; color: #B5372A; font-weight: 600; width: 48px;">0 / 42</span></div><div style="color: #9C9B90; font-size: 11.5px;">—</div><div style="text-align: right;"><span style="font-size: 11px; font-weight: 600; color: #B5372A; background: #F6E4E2; padding: 2px 8px; border-radius: 99px;">Not started</span></div></div>
+        <div style="display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1.1fr) 120px minmax(0, 1fr) 110px 90px; gap: 12px; padding: 11px 18px; font-size: 12.5px; border-bottom: 1px solid #F5F5F0; align-items: center;"><div style="font-weight: 600;">Mathematics</div><div style="color: #3B3A32;">S. K. Pandey</div><div style="color: #75746B;">Theory 80 · Int 20</div><div style="display: flex; align-items: center; gap: 8px;"><div style="flex: 1; height: 6px; background: #E9E8E0; border-radius: 99px; overflow: hidden;"><div style="width: 100%; height: 100%; background: #3E8E5A;"></div></div><span style="font-size: 11.5px; color: #75746B; width: 48px;">42 / 42</span></div><div style="color: #9C9B90; font-size: 11.5px;">Today 09:40</div><div style="text-align: right;"><span style="font-size: 11px; font-weight: 600; color: #8A670E; background: #F5EBD8; padding: 2px 8px; border-radius: 99px;">Editing</span></div></div>
+        <div style="display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1.1fr) 120px minmax(0, 1fr) 110px 90px; gap: 12px; padding: 11px 18px; font-size: 12.5px; border-bottom: 1px solid #F5F5F0; align-items: center; background: #FAFAF7;"><div style="font-weight: 600; display: flex; flex-direction: column; gap: 1px;">Science<span style="font-size: 11px; font-weight: 500; color: #75746B;">Physics + Chemistry + Biology → composite</span></div><div style="color: #3B3A32;">A. Verma · N. Rai · S. Das</div><div style="color: #75746B;">3 × 26.67 · Int 20</div><div style="display: flex; align-items: center; gap: 8px;"><div style="flex: 1; height: 6px; background: #E9E8E0; border-radius: 99px; overflow: hidden;"><div style="width: 66%; height: 100%; background: #A87E12;"></div></div><span style="font-size: 11.5px; color: #75746B; width: 48px;">2 / 3</span></div><div style="color: #9C9B90; font-size: 11.5px;">11 Sep 16:02</div><div style="text-align: right;"><span style="font-size: 11px; font-weight: 600; color: #8A670E; background: #F5EBD8; padding: 2px 8px; border-radius: 99px;">Bio pending</span></div></div>
+        <div style="display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1.1fr) 120px minmax(0, 1fr) 110px 90px; gap: 12px; padding: 11px 18px; font-size: 12.5px; border-bottom: 1px solid #F5F5F0; align-items: center;"><div style="font-weight: 600; display: flex; flex-direction: column; gap: 1px;">Social Science<span style="font-size: 11px; font-weight: 500; color: #75746B;">History + Geography + Pol Sci + Eco → composite</span></div><div style="color: #3B3A32;">Priya Tiwari</div><div style="color: #75746B;">4 × 20 · Int 20</div><div style="display: flex; align-items: center; gap: 8px;"><div style="flex: 1; height: 6px; background: #E9E8E0; border-radius: 99px; overflow: hidden;"><div style="width: 100%; height: 100%; background: #3E8E5A;"></div></div><span style="font-size: 11.5px; color: #75746B; width: 48px;">4 / 4</span></div><div style="color: #9C9B90; font-size: 11.5px;">10 Sep 12:11</div><div style="text-align: right;"><span style="font-size: 11px; font-weight: 600; color: #2C4A38; background: #E4EFE8; padding: 2px 8px; border-radius: 99px;">Locked</span></div></div>
+        <div style="display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1.1fr) 120px minmax(0, 1fr) 110px 90px; gap: 12px; padding: 11px 18px; font-size: 12.5px; border-bottom: 1px solid #F5F5F0; align-items: center;"><div style="font-weight: 600;">Computer Applications</div><div style="color: #3B3A32;">Rahul Gupta <span style="font-size: 10.5px; color: #B5372A; font-weight: 600;">· absent</span></div><div style="color: #75746B;">Theory 50 · Prac 50</div><div style="display: flex; align-items: center; gap: 8px;"><div style="flex: 1; height: 6px; background: #E9E8E0; border-radius: 99px; overflow: hidden;"><div style="width: 50%; height: 100%; background: #A87E12;"></div></div><span style="font-size: 11.5px; color: #75746B; width: 48px;">21 / 42</span></div><div style="color: #9C9B90; font-size: 11.5px;">9 Sep 15:48</div><div style="text-align: right;"><span style="font-size: 11px; font-weight: 600; color: #8A670E; background: #F5EBD8; padding: 2px 8px; border-radius: 99px;">Partial</span></div></div>
+        <div style="display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1.1fr) 120px minmax(0, 1fr) 110px 90px; gap: 12px; padding: 11px 18px; font-size: 12.5px; border-bottom: 1px solid #F5F5F0; align-items: center;"><div style="font-weight: 600;">Sanskrit</div><div style="color: #3B3A32;">K. N. Mishra</div><div style="color: #75746B;">Theory 80 · Int 20</div><div style="display: flex; align-items: center; gap: 8px;"><div style="flex: 1; height: 6px; background: #E9E8E0; border-radius: 99px; overflow: hidden;"><div style="width: 100%; height: 100%; background: #3E8E5A;"></div></div><span style="font-size: 11.5px; color: #75746B; width: 48px;">42 / 42</span></div><div style="color: #9C9B90; font-size: 11.5px;">8 Sep 11:30</div><div style="text-align: right;"><span style="font-size: 11px; font-weight: 600; color: #2C4A38; background: #E4EFE8; padding: 2px 8px; border-radius: 99px;">Locked</span></div></div>
+        <div style="display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1.1fr) 120px minmax(0, 1fr) 110px 90px; gap: 12px; padding: 11px 18px; font-size: 12.5px; border-bottom: 1px solid #F5F5F0; align-items: center;"><div style="font-weight: 600; display: flex; align-items: center; gap: 8px;">Physical Education <span style="font-size: 10.5px; font-weight: 600; color: #75746B; background: #F5F5F0; padding: 1px 7px; border-radius: 99px;">Co-scholastic</span></div><div style="color: #3B3A32;">D. Yadav</div><div style="color: #75746B;">Grade A–E</div><div style="display: flex; align-items: center; gap: 8px;"><div style="flex: 1; height: 6px; background: #E9E8E0; border-radius: 99px; overflow: hidden;"><div style="width: 100%; height: 100%; background: #3E8E5A;"></div></div><span style="font-size: 11.5px; color: #75746B; width: 48px;">42 / 42</span></div><div style="color: #9C9B90; font-size: 11.5px;">7 Sep 10:05</div><div style="text-align: right;"><span style="font-size: 11px; font-weight: 600; color: #2C4A38; background: #E4EFE8; padding: 2px 8px; border-radius: 99px;">Locked</span></div></div>
+        <div style="display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1.1fr) 120px minmax(0, 1fr) 110px 90px; gap: 12px; padding: 11px 18px; font-size: 12.5px; align-items: center;"><div style="font-weight: 600; display: flex; align-items: center; gap: 8px;">Work Education <span style="font-size: 10.5px; font-weight: 600; color: #75746B; background: #F5F5F0; padding: 1px 7px; border-radius: 99px;">Co-scholastic</span></div><div style="color: #3B3A32;">Class teacher</div><div style="color: #75746B;">Grade A–E</div><div style="display: flex; align-items: center; gap: 8px;"><div style="flex: 1; height: 6px; background: #E9E8E0; border-radius: 99px; overflow: hidden;"><div style="width: 100%; height: 100%; background: #3E8E5A;"></div></div><span style="font-size: 11.5px; color: #75746B; width: 48px;">42 / 42</span></div><div style="color: #9C9B90; font-size: 11.5px;">7 Sep 10:05</div><div style="text-align: right;"><span style="font-size: 11px; font-weight: 600; color: #2C4A38; background: #E4EFE8; padding: 2px 8px; border-radius: 99px;">Locked</span></div></div>
+      </section>
+
+      <!-- Right rail: gate + class picker -->
+      <div style="display: flex; flex-direction: column; gap: 14px;">
+        <section style="background: #FFFFFF; border: 1px solid #E9E8E0; border-radius: 14px; padding: 16px 18px; display: flex; flex-direction: column; gap: 12px;">
+          <div style="display: flex; align-items: center; justify-content: space-between;">
+            <div style="font-size: 13.5px; font-weight: 700;">Report-card gate</div>
+            <span style="font-size: 11px; font-weight: 600; color: #B5372A; background: #F6E4E2; padding: 2px 8px; border-radius: 99px;">Blocked</span>
+          </div>
+          <div style="font-size: 12.5px; color: #3B3A32; line-height: 1.5;">Cards for Class 10-A cannot be published until every scholastic paper has marks for all 42 students.</div>
+          <div style="display: flex; flex-direction: column; gap: 6px;">
+            <div style="display: flex; align-items: center; gap: 8px; font-size: 12.5px;"><span style="width: 8px; height: 8px; border-radius: 50%; background: #B5372A;"></span>Hindi · no entries</div>
+            <div style="display: flex; align-items: center; gap: 8px; font-size: 12.5px;"><span style="width: 8px; height: 8px; border-radius: 50%; background: #A87E12;"></span>Biology paper · 0 of 42</div>
+            <div style="display: flex; align-items: center; gap: 8px; font-size: 12.5px;"><span style="width: 8px; height: 8px; border-radius: 50%; background: #A87E12;"></span>Computer Applications · 21 of 42</div>
+          </div>
+          <div style="display: flex; gap: 8px; margin-top: 4px;">
+            <div style="flex: 1; text-align: center; padding: 9px 0; border-radius: 10px; background: #26251F; color: #FFFFFF; font-size: 12.5px; font-weight: 600;">Enter Hindi now</div>
+            <div style="flex: 1; text-align: center; padding: 9px 0; border-radius: 10px; border: 1px solid #DBDAD0; font-size: 12.5px; font-weight: 600;">Remind teachers</div>
+          </div>
+        </section>
+
+        <section style="background: #FFFFFF; border: 1px solid #E9E8E0; border-radius: 14px; padding: 16px 18px; display: flex; flex-direction: column; gap: 10px;">
+          <div style="font-size: 13.5px; font-weight: 700;">All classes · Half-yearly</div>
+          <div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px;">
+            <div style="height: 40px; border-radius: 8px; background: #E4EFE8; color: #2C4A38; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 600;">6-A</div>
+            <div style="height: 40px; border-radius: 8px; background: #E4EFE8; color: #2C4A38; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 600;">6-B</div>
+            <div style="height: 40px; border-radius: 8px; background: #E4EFE8; color: #2C4A38; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 600;">7-A</div>
+            <div style="height: 40px; border-radius: 8px; background: #F5EBD8; color: #8A670E; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 600;">7-B</div>
+            <div style="height: 40px; border-radius: 8px; background: #E4EFE8; color: #2C4A38; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 600;">8-A</div>
+            <div style="height: 40px; border-radius: 8px; background: #E4EFE8; color: #2C4A38; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 600;">8-B</div>
+            <div style="height: 40px; border-radius: 8px; background: #F5EBD8; color: #8A670E; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 600;">9-A</div>
+            <div style="height: 40px; border-radius: 8px; background: #F5EBD8; color: #8A670E; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 600;">9-B</div>
+            <div style="height: 40px; border-radius: 8px; background: #26251F; color: #FFFFFF; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700;">10-A</div>
+            <div style="height: 40px; border-radius: 8px; background: #F6E4E2; color: #B5372A; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 600;">10-B</div>
+            <div style="height: 40px; border-radius: 8px; background: #F5EBD8; color: #8A670E; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 600;">11 Sci</div>
+            <div style="height: 40px; border-radius: 8px; background: #E4EFE8; color: #2C4A38; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 600;">11 Com</div>
+            <div style="height: 40px; border-radius: 8px; background: #F6E4E2; color: #B5372A; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 600;">12 Sci</div>
+            <div style="height: 40px; border-radius: 8px; background: #F6E4E2; color: #B5372A; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 600;">12 Com</div>
+            <div style="height: 40px; border-radius: 8px; background: #E4EFE8; color: #2C4A38; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 600;">12 Hum</div>
+          </div>
+          <div style="display: flex; gap: 12px; font-size: 11.5px; color: #75746B; padding-top: 2px;">
+            <span style="display: inline-flex; align-items: center; gap: 5px;"><span style="width: 10px; height: 10px; border-radius: 3px; background: #E4EFE8; display: inline-block;"></span>Complete</span>
+            <span style="display: inline-flex; align-items: center; gap: 5px;"><span style="width: 10px; height: 10px; border-radius: 3px; background: #F5EBD8; display: inline-block;"></span>In progress</span>
+            <span style="display: inline-flex; align-items: center; gap: 5px;"><span style="width: 10px; height: 10px; border-radius: 3px; background: #F6E4E2; display: inline-block;"></span>Blocked</span>
+          </div>
+        </section>
+      </div>
+    </main>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

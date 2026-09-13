@@ -1,0 +1,302 @@
+{
+ "pages": [
+  {
+   "id": "page-a",
+   "name": "Dashboard · People"
+  },
+  {
+   "id": "page-b",
+   "name": "Teaching · Schedule"
+  },
+  {
+   "id": "page-c",
+   "name": "Assessment · Setup"
+  },
+  {
+   "id": "page-x",
+   "name": "Unchosen directions (B, C)"
+  }
+ ],
+ "artboards": [
+  {
+   "file": "Main.dc.html",
+   "title": "Dashboard",
+   "page": "page-a",
+   "x": 0,
+   "y": 0,
+   "w": 1440,
+   "h": 900
+  },
+  {
+   "file": "Students.dc.html",
+   "title": "Students",
+   "page": "page-a",
+   "x": 1560,
+   "y": 0,
+   "w": 1440,
+   "h": 900
+  },
+  {
+   "file": "StudentProfile.dc.html",
+   "title": "Student profile",
+   "page": "page-a",
+   "x": 0,
+   "y": 1060,
+   "w": 1440,
+   "h": 900
+  },
+  {
+   "file": "Attendance.dc.html",
+   "title": "Attendance",
+   "page": "page-a",
+   "x": 1560,
+   "y": 1060,
+   "w": 1440,
+   "h": 900
+  },
+  {
+   "file": "Absentees.dc.html",
+   "title": "Absentees",
+   "page": "page-a",
+   "x": 0,
+   "y": 2120,
+   "w": 1440,
+   "h": 900
+  },
+  {
+   "file": "Teachers.dc.html",
+   "title": "Teachers",
+   "page": "page-a",
+   "x": 1560,
+   "y": 2120,
+   "w": 1440,
+   "h": 900
+  },
+  {
+   "file": "TeacherProfile.dc.html",
+   "title": "Teacher profile",
+   "page": "page-a",
+   "x": 0,
+   "y": 3180,
+   "w": 1440,
+   "h": 900
+  },
+  {
+   "file": "Login.dc.html",
+   "title": "Sign in",
+   "page": "page-a",
+   "x": 1560,
+   "y": 3180,
+   "w": 1440,
+   "h": 900
+  },
+  {
+   "file": "Mobile.dc.html",
+   "title": "Mobile · Dashboard",
+   "page": "page-a",
+   "x": 0,
+   "y": 4240,
+   "w": 390,
+   "h": 844
+  },
+  {
+   "file": "LessonPlans.dc.html",
+   "title": "Lesson plans",
+   "page": "page-b",
+   "x": 0,
+   "y": 0,
+   "w": 1440,
+   "h": 900
+  },
+  {
+   "file": "LessonLog.dc.html",
+   "title": "Lesson log",
+   "page": "page-b",
+   "x": 1560,
+   "y": 0,
+   "w": 1440,
+   "h": 900
+  },
+  {
+   "file": "Homework.dc.html",
+   "title": "Homework",
+   "page": "page-b",
+   "x": 0,
+   "y": 1060,
+   "w": 1440,
+   "h": 900
+  },
+  {
+   "file": "Arrangement.dc.html",
+   "title": "Arrangement",
+   "page": "page-b",
+   "x": 1560,
+   "y": 1060,
+   "w": 1440,
+   "h": 900
+  },
+  {
+   "file": "Reschedule.dc.html",
+   "title": "Reschedule lesson plans",
+   "page": "page-b",
+   "x": 0,
+   "y": 2120,
+   "w": 1440,
+   "h": 900
+  },
+  {
+   "file": "Syllabus.dc.html",
+   "title": "Syllabus & PDF",
+   "page": "page-b",
+   "x": 1560,
+   "y": 2120,
+   "w": 1440,
+   "h": 900
+  },
+  {
+   "file": "Timetable.dc.html",
+   "title": "Timetable",
+   "page": "page-b",
+   "x": 0,
+   "y": 3180,
+   "w": 1440,
+   "h": 900
+  },
+  {
+   "file": "ScheduleSettings.dc.html",
+   "title": "Period times & non-working days",
+   "page": "page-b",
+   "x": 1560,
+   "y": 3180,
+   "w": 1440,
+   "h": 900
+  },
+  {
+   "file": "Tests.dc.html",
+   "title": "Tests & marks",
+   "page": "page-c",
+   "x": 0,
+   "y": 0,
+   "w": 1440,
+   "h": 900
+  },
+  {
+   "file": "Examinations.dc.html",
+   "title": "Examinations",
+   "page": "page-c",
+   "x": 1560,
+   "y": 0,
+   "w": 1440,
+   "h": 900
+  },
+  {
+   "file": "Performance.dc.html",
+   "title": "Performance",
+   "page": "page-c",
+   "x": 0,
+   "y": 1060,
+   "w": 1440,
+   "h": 900
+  },
+  {
+   "file": "HpcCards.dc.html",
+   "title": "HPC cards",
+   "page": "page-c",
+   "x": 1560,
+   "y": 1060,
+   "w": 1440,
+   "h": 900
+  },
+  {
+   "file": "BoardCandidates.dc.html",
+   "title": "Board candidates",
+   "page": "page-c",
+   "x": 0,
+   "y": 2120,
+   "w": 1440,
+   "h": 900
+  },
+  {
+   "file": "ClassesSubjects.dc.html",
+   "title": "Classes & subjects",
+   "page": "page-c",
+   "x": 1560,
+   "y": 2120,
+   "w": 1440,
+   "h": 900
+  },
+  {
+   "file": "SetupHub.dc.html",
+   "title": "Setup hub",
+   "page": "page-c",
+   "x": 0,
+   "y": 3180,
+   "w": 1440,
+   "h": 900
+  },
+  {
+   "file": "Editorial.dc.html",
+   "title": "B · Editorial (not chosen)",
+   "page": "page-x",
+   "x": 0,
+   "y": 0,
+   "w": 1440,
+   "h": 900
+  },
+  {
+   "file": "Cockpit.dc.html",
+   "title": "C · Cockpit (not chosen)",
+   "page": "page-x",
+   "x": 1560,
+   "y": 0,
+   "w": 1440,
+   "h": 900
+  }
+ ],
+ "annotations": [
+  {
+   "id": "note-shared",
+   "page": "page-a",
+   "x": 3120,
+   "y": 0,
+   "w": 420,
+   "text": "DIRECTION A · COMMAND CENTRE\nShared shell on every desktop screen: grouped sidebar (Teaching · Assessment · People · Schedule & setup), ⌘K search, session pill, branch switcher at the top of the sidebar. Workflow pages (Examinations) collapse the sidebar to an icon rail.\n\nMobile keeps the same content and a 5-tab bar; the full nav opens from the menu button.\n\nPages menu in the toolbar: Dashboard · People / Teaching · Schedule / Assessment · Setup. All names, numbers and times are sample data."
+  },
+  {
+   "id": "note-patterns",
+   "page": "page-b",
+   "x": 3120,
+   "y": 0,
+   "w": 420,
+   "text": "Patterns to reuse when building:\n• Page head = crumb · title · one-line purpose · actions on the right.\n• Filter row under the head; status chips or legend at its right end.\n• One white card per data set, 14px radius, table header on #FAFAF7.\n• Day pickers are a row of pills; the selected day is ink.\n• Heatmap cells 26–30px, legend inline with the filter row.\n• Right rail (300–360px) for the thing you edit or the reason something is blocked.\n• Semantic colours only for status: green / gold / crimson. House colours only on house chips."
+  },
+  {
+   "id": "note-setup",
+   "page": "page-c",
+   "x": 3120,
+   "y": 0,
+   "w": 420,
+   "text": "Setup hub replaces the old Setup + Plan Fields + Report Card Templates + Period Times + Non-working Days menu entries with one landing page of tiles. Each tile opens the existing editor restyled on the same shell (Classes & subjects and Period times & non-working days are drawn here; the others follow the same card-and-rail pattern)."
+  },
+  {
+   "id": "note-b",
+   "page": "page-x",
+   "x": 0,
+   "y": -200,
+   "w": 460,
+   "text": "B · EDITORIAL — kept for reference. No sidebar, masthead tabs, Instrument Serif, ledger numbers."
+  },
+  {
+   "id": "note-c",
+   "page": "page-x",
+   "x": 1560,
+   "y": -200,
+   "w": 460,
+   "text": "C · COCKPIT — kept for reference. Dark-first, icon rail, IBM Plex, live period strip."
+  }
+ ],
+ "launch": {
+  "view": "focused",
+  "file": "Main.dc.html"
+ }
+}
