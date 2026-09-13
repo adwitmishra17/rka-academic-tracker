@@ -9,8 +9,9 @@
 // Registered from server.js BEFORE the older /api/hpc/:id route.
 // ============================================================================
 import { DEFAULT_HPC_DEFINITION } from './hpcDefaults.js'
+import { renderHpcHtml, renderHpcDocument, renderHpcPages, HPC_CSS } from './hpcRender.js'
 
-export function registerHpcRoutes(app, { supabase, verifyAuth, branchIdForCode }) {
+export function registerHpcRoutes(app, { supabase, verifyAuth, branchIdForCode, admin }) {
   const bad = (res, m) => res.status(400).json({ error: m })
   const fail = (res, e, where) => { console.error(`[admin] ${where}:`, e); res.status(500).json({ error: e.message }) }
 
@@ -122,5 +123,74 @@ export function registerHpcRoutes(app, { supabase, verifyAuth, branchIdForCode }
       }
       res.json({ saved })
     } catch (e) { fail(res, e, 'POST /api/hpc/entries') }
+  })
+
+  // ── Render: assessment → four-page HTML (stored on the row; SMS prints it) ──
+  const HPC_SELECT = 'id, branch_id, session_code, term_id, student_id, student_name, admission_no, class_name, section, roll_number, date_of_birth, father_name, mother_name, photo_key, domains, general_remarks, assessed_at, source, is_void, branches(code, name), exam_terms(id, name, short_code, session_code)'
+  const photoCache = new Map()   // photo_key → data URL (process lifetime)
+  async function photoDataUrl(key) {
+    if (!key) return null
+    if (photoCache.has(key)) return photoCache.get(key)
+    let out = null
+    try {
+      const r = await fetch(`${process.env.SUPABASE_URL}/functions/v1/r2-sign`, { method: 'POST', headers: { 'content-type': 'application/json', apikey: process.env.SUPABASE_SERVICE_ROLE_KEY, Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}` }, body: JSON.stringify({ op: 'download_data', key }) })
+      const j = await r.json().catch(() => null)
+      if (r.ok && j?.data_url) out = j.data_url
+    } catch (e) { console.warn('[hpc] photo fetch failed', key, e.message) }
+    photoCache.set(key, out)
+    return out
+  }
+  async function classTeacherName(branchCode, className) {
+    try {
+      const snap = await admin.firestore().collection('classTeacherByEmail').where('className', '==', className).get()
+      const hit = snap.docs.map((d) => d.data()).find((x) => !branchCode || x.branchCode === branchCode)
+      return hit?.teacherName || null
+    } catch { return null }
+  }
+  async function attendanceByMonth(studentId, sessionCode) {
+    const y = Number(String(sessionCode).slice(0, 4))
+    const { data } = await supabase.from('attendance_records').select('date, status').eq('student_id', studentId).gte('date', `${y}-04-01`).lte('date', `${y + 1}-03-31`)
+    const byMonth = {}; let marked = 0, present = 0
+    for (const r of data || []) {
+      const m = String(r.date).slice(5, 7); const p = r.status === 'present' || r.status === 'late' ? 1 : r.status === 'half_day' ? 0.5 : 0
+      const c = (byMonth[m] ||= { marked: 0, present: 0 }); c.marked += 1; c.present += p; marked += 1; present += p
+    }
+    return { byMonth, marked, present }
+  }
+  async function buildCard(a, defs) {
+    if (!defs[a.session_code]) defs[a.session_code] = (await definitionFor(a.session_code)).definition
+    const [attendance, meta, classTeacher, photo] = await Promise.all([
+      attendanceByMonth(a.student_id, a.session_code),
+      supabase.from('report_card_student_meta').select('height_cm, weight_kg').eq('student_id', a.student_id).eq('session_code', a.session_code).is('term_id', null).limit(1).then((r) => r.data?.[0] || null),
+      classTeacherName(a.branches?.code, a.class_name),
+      photoDataUrl(a.photo_key),
+    ])
+    return { assessment: a, def: defs[a.session_code], extras: { attendance, heightCm: meta?.height_cm ?? null, weightKg: meta?.weight_kg ?? null, classTeacher, photoDataUrl: photo, printedAt: new Date().toISOString() } }
+  }
+  /** Render + store one or more assessments. Returns [{ id, pages }] (pages = the four .page divs). */
+  async function renderAndStore(ids, who) {
+    const { data, error } = await supabase.from('hpc_assessments').select(HPC_SELECT).in('id', ids)
+    if (error) throw error
+    const byId = Object.fromEntries((data || []).map((a) => [a.id, a]))
+    const defs = {}, out = []
+    for (const id of ids) {
+      const a = byId[id]; if (!a) continue
+      const card = await buildCard(a, defs)
+      const html = renderHpcHtml(card)
+      await supabase.from('hpc_assessments').update({ rendered_html: html, rendered_at: new Date().toISOString() }).eq('id', id)
+      out.push({ id, pages: renderHpcPages(card), student: a.student_name })
+    }
+    return out
+  }
+
+  // POST /api/hpc/render { ids[] } → { html: one printable document, cards:[{id, student}] }
+  app.post('/api/hpc/render', verifyAuth, async (req, res) => {
+    try {
+      const ids = (req.body?.ids || []).filter(Boolean).slice(0, 80)
+      if (!ids.length) return bad(res, 'ids[] required')
+      const cards = await renderAndStore(ids, req.user?.email)
+      const html = `<!doctype html><html><head><meta charset="utf-8"><title>Holistic Progress Cards</title><style>${HPC_CSS}</style></head><body>${cards.map((c) => c.pages).join('\n')}</body></html>`
+      res.json({ html, cards: cards.map((c) => ({ id: c.id, student: c.student })) })
+    } catch (e) { fail(res, e, 'POST /api/hpc/render') }
   })
 }

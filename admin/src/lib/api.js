@@ -163,6 +163,7 @@ export const hpcApi = {
   saveSetup:(sessionCode, definition)                 => apiPut('/api/hpc/setup', { sessionCode, definition }),
   entries:  (branchCode, sessionCode, termId, className, section) => apiGet('/api/hpc/entries', { branchCode, sessionCode, termId, className, section }),
   saveEntries: (branchCode, sessionCode, termId, rows) => apiPost('/api/hpc/entries', { branchCode, sessionCode, termId, rows }),
+  render:   (ids)                                     => apiPost('/api/hpc/render', { ids }),
 }
 
 // ── Board Candidates (LoC) helpers ──

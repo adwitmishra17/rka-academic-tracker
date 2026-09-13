@@ -327,7 +327,9 @@ function HpcList({ def, branchCode, sessionCode }) {
   function openEdit(row) {
     const base = {}
     for (const d of def.domains) { const ex = row.domains?.[d.key] || {}; base[d.key] = { rating: ex.rating || '', remarks: ex.remarks || '' } }
-    setDraft({ domains: base, general_remarks: row.general_remarks || '' })
+    const sm = row.domains?._summary || {}
+    const toText = (v) => (Array.isArray(v) ? v : String(v || '').split(/\n|;/)).map(x => String(x).trim()).filter(Boolean).join('\n')
+    setDraft({ domains: base, general_remarks: row.general_remarks || '', strengths: toText(sm.strengths), canDo: toText(sm.canDo), next: toText(sm.next) })
     setEditing(row)
   }
   function setDomainField(key, field, value) { setDraft(prev => ({ ...prev, domains: { ...prev.domains, [key]: { ...prev.domains[key], [field]: value } } })) }
@@ -339,7 +341,10 @@ function HpcList({ def, branchCode, sessionCode }) {
         const dr = draft.domains[d.key] || {}
         merged[d.key] = { ...(editing.domains?.[d.key] || {}), rating: dr.rating || null, remarks: dr.remarks?.trim() ? dr.remarks.trim() : null }
       }
+      const lines = (t) => String(t || '').split(/\n/).map(x => x.trim()).filter(Boolean)
+      merged._summary = { strengths: lines(draft.strengths), canDo: lines(draft.canDo), next: lines(draft.next) }
       await hpcApi.override(editing.id, merged, draft.general_remarks)
+      hpcApi.render([editing.id]).catch(() => {})   // refresh the frozen print for SMS
       setEditing(null); load()
     } catch (e) { setError(e.message) } finally { setSaving(false) }
   }
@@ -377,7 +382,7 @@ function HpcList({ def, branchCode, sessionCode }) {
                   <td style={{ ...td, color: rated === total ? 'var(--green)' : 'var(--gold-dark)', fontWeight:600 }}>{rated} / {total}</td>
                   <td style={td}><span style={{ fontSize:11, fontWeight:600, padding:'2px 8px', borderRadius:999, background:'rgba(52,199,89,0.12)', color:'#0a7d3a' }}>{r.source === 'teacher_pwa' ? 'Teacher app (old)' : 'Office'}</span></td>
                   <td style={{ ...td, textAlign:'right', whiteSpace:'nowrap' }}>
-                    <button onClick={() => openEdit(r)} style={ghost} title="Overall domain rating + domain remarks">Remarks</button>{' '}
+                    <button onClick={() => openEdit(r)} style={ghost} title="Domain remarks, strengths, can-do, next steps, summary">Remarks</button>{' '}
                     <button onClick={() => navigate(`/hpc/print?ids=${r.id}`)} style={ghost}>Print</button>
                     {isSuperAdmin && <>{' '}<button onClick={() => handleVoid(r)} style={{ ...ghost, color:'var(--crimson)', borderColor:'rgba(139,26,26,0.3)' }}>Void</button></>}
                   </td>
@@ -390,8 +395,8 @@ function HpcList({ def, branchCode, sessionCode }) {
 
       {editing && (
         <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.4)', zIndex:1000, display:'flex', alignItems:'center', justifyContent:'center', padding:24 }} onClick={() => !saving && setEditing(null)}>
-          <div style={{ background:'var(--white)', borderRadius:14, padding:20, width:'min(640px,100%)', maxHeight:'86vh', overflowY:'auto', border:'1px solid var(--gray-100)' }} onClick={e => e.stopPropagation()}>
-            <div style={{ fontSize:16, fontWeight:700, color:'var(--green-dark)', marginBottom:4 }}>{editing.student_name} — domain ratings &amp; remarks</div>
+          <div style={{ background:'var(--white)', borderRadius:14, padding:20, width:'min(820px,100%)', maxHeight:'88vh', overflowY:'auto', border:'1px solid var(--gray-100)' }} onClick={e => e.stopPropagation()}>
+            <div style={{ fontSize:16, fontWeight:700, color:'var(--green-dark)', marginBottom:4 }}>{editing.student_name} — remarks, strengths &amp; next steps</div>
             <div style={{ fontSize:12, color:'var(--text-muted)', marginBottom:14 }}>The overall rating is normally worked out from the indicators; set it here only to override. Indicator ratings are edited in the Entry tab.</div>
             <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
               {def.domains.map(d => (
@@ -405,8 +410,13 @@ function HpcList({ def, branchCode, sessionCode }) {
                   </div>
                 </div>
               ))}
+              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:10 }}>
+                {[['strengths', 'My strengths this term', 'one per line · print as badges'], ['canDo', 'Things I can do now', 'one per line'], ['next', 'Next, we will work on', 'one per line']].map(([k, title, hint]) => (
+                  <div key={k}><div style={{ fontSize:13, fontWeight:600 }}>{title}</div><div style={{ fontSize:10.5, color:'var(--text-muted)', marginBottom:4 }}>{hint}</div><textarea value={draft[k] || ''} onChange={e => setDraft(d => ({ ...d, [k]: e.target.value }))} rows={4} style={taStyle} /></div>
+                ))}
+              </div>
               {def.generalRemarks !== false && <div>
-                <div style={{ fontSize:13, fontWeight:600, marginBottom:6 }}>General remarks</div>
+                <div style={{ fontSize:13, fontWeight:600, marginBottom:6 }}>Teacher's summary (general remarks)</div>
                 <textarea value={draft.general_remarks} onChange={e => setDraft(d => ({ ...d, general_remarks: e.target.value }))} rows={3} style={taStyle} />
               </div>}
             </div>
