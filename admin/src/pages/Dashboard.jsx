@@ -250,8 +250,13 @@ export default function Dashboard() {
   }, [effectiveBranches, currentBranch])
 
   // ---------------------------------------------------------------- coverage
-  const nowMin = (() => { const d = new Date(); return d.getHours() * 60 + d.getMinutes() })()
+  const minutesNow = () => { const d = new Date(); return d.getHours() * 60 + d.getMinutes() }
+  const [nowMin, setNowMin] = useState(minutesNow)
+  useEffect(() => { const id = setInterval(() => setNowMin(minutesNow()), 30 * 1000); return () => clearInterval(id) }, [])
   const periodEnd = (s) => { const m = /–(\d{2}):(\d{2})$/.exec(s.label || ''); return m ? Number(m[1]) * 60 + Number(m[2]) : null }
+  const periodStart = (s) => { const m = /^(\d{2}):(\d{2})–/.exec(s.label || ''); return m ? Number(m[1]) * 60 + Number(m[2]) : null }
+  const isNow = (s) => { const a = periodStart(s), b = periodEnd(s); return a !== null && b !== null && nowMin >= a && nowMin < b }
+  const minsLeft = (s) => { const b = periodEnd(s); return b === null ? null : b - nowMin }
 
   const coverage = useMemo(() => {
     const sched = schedule.length ? schedule : Array.from({ length: 8 }, (_, i) => ({ period: i + 1, label: '' }))
@@ -297,6 +302,7 @@ export default function Dashboard() {
   const pillStyle = (tone) => ({ display: 'inline-block', padding: '2px 8px', borderRadius: 99, fontSize: 10.5, fontWeight: 600, ...( { green: { background: 'var(--green-light)', color: 'var(--green-dark)' }, gold: { background: 'var(--gold-light)', color: 'var(--gold-dark)' }, red: { background: 'var(--crimson-light)', color: 'var(--crimson)' }, orange: { background: '#E07B00', color: '#fff' }, muted: { background: 'var(--gray-50)', color: 'var(--text-muted)' } }[tone] ) })
 
   const isSunday = todayName === 'Sunday'
+  const currentPeriod = !isSunday ? coverage.sched.find(isNow) : null
   const presentPct = attendance && attendance.marked > 0 ? Math.round((attendance.present / attendance.marked) * 1000) / 10 : null
   const plansTotal = missingPlanTeachers.length + (timetableTeachers.filter(t => timetable.some(s => s.teacherId === t.id)).length - missingPlanTeachers.length)
 
@@ -358,7 +364,7 @@ export default function Dashboard() {
             <div style={CARD_HEAD}>
               <div>
                 <div style={{ fontSize: 14, fontWeight: 700 }}>Today's coverage</div>
-                <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>{isSunday ? 'No school today' : `${todayName} · ${coverage.rows.length} teachers timetabled · hover a cell for details`}</div>
+                <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>{isSunday ? 'No school today' : `${todayName} · ${coverage.rows.length} teachers timetabled${currentPeriod ? ` · P${currentPeriod.period} running (${currentPeriod.label})` : nowMin < (periodStart(coverage.sched[0]) ?? 0) ? ' · school not started yet' : ' · school day over'} · hover a cell for details`}</div>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, height: 34, width: 240, background: 'var(--gray-50)', border: '1px solid var(--gray-100)', borderRadius: 9, padding: '0 10px' }}>
@@ -389,9 +395,12 @@ export default function Dashboard() {
                     {focus.cells.map((c, i) => {
                       const s = coverage.sched[i]
                       const free = c.kind === 'none'
+                      const live = isNow(s)
+                      const over = !live && periodEnd(s) !== null && nowMin >= periodEnd(s)
                       return (
-                        <div key={i} title={cellTitle(c, s, focus.t)} style={{ background: 'var(--white)', border: `1px solid ${c.kind === 'uncovered' ? 'var(--crimson)' : 'var(--gray-100)'}`, borderRadius: 10, padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 6, minHeight: 92, opacity: free ? 0.6 : 1 }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}><span style={{ fontSize: 12, fontWeight: 700 }}>P{s.period}</span><span style={{ fontSize: 10.5, color: 'var(--text-muted)' }}>{(s.label || '').split('–')[0]}</span></div>
+                        <div key={i} title={cellTitle(c, s, focus.t)} style={{ background: live ? 'var(--white)' : over ? 'var(--gray-50)' : 'var(--white)', border: live ? '2px solid var(--text)' : `1px solid ${c.kind === 'uncovered' ? 'var(--crimson)' : 'var(--gray-100)'}`, boxShadow: live ? 'var(--shadow-md)' : 'none', borderRadius: 10, padding: live ? '9px 11px' : '10px 12px', display: 'flex', flexDirection: 'column', gap: 6, minHeight: 92, opacity: free && !live ? 0.6 : 1, position: 'relative' }}>
+                          {live && <span style={{ position: 'absolute', top: -9, left: 10, background: 'var(--text)', color: 'var(--white)', fontSize: 9.5, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', padding: '2px 7px', borderRadius: 99, display: 'inline-flex', alignItems: 'center', gap: 5 }}><span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--green-mid)', display: 'inline-block', animation: 'pulse 1.5s ease infinite' }} />Now · {minsLeft(s)} min left</span>}
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}><span style={{ fontSize: 12, fontWeight: 700 }}>P{s.period}</span><span style={{ fontSize: 10.5, color: live ? 'var(--text)' : 'var(--text-muted)', fontWeight: live ? 600 : 400 }}>{s.label || ''}</span></div>
                           <div style={{ fontSize: 13, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{free ? 'Free' : (c.slot?.className || c.cls)}</div>
                           <div style={{ fontSize: 11.5, color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{free ? '' : (c.slot?.subject || '')}</div>
                           <div style={{ marginTop: 'auto' }}>{!free && <span style={pillStyle(kindTone[c.kind])}>{c.kind === 'arranged' ? `→ ${shortName(c.who)}` : kindLabel[c.kind]}</span>}</div>
@@ -402,12 +411,12 @@ export default function Dashboard() {
                 ) : (
                   <div style={{ overflowX: 'auto' }}>
                     <table style={{ borderCollapse: 'separate', borderSpacing: '6px 4px', width: '100%', minWidth: 640 }}>
-                      <thead><tr><th style={{ textAlign: 'left', fontSize: 10.5, color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', width: 90 }}>Day</th>{coverage.sched.map(s => <th key={s.period} title={s.label} style={{ fontSize: 10.5, color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', textAlign: 'center' }}>P{s.period}</th>)}</tr></thead>
+                      <thead><tr><th style={{ textAlign: 'left', fontSize: 10.5, color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', width: 90 }}>Day</th>{coverage.sched.map(s => <th key={s.period} title={s.label} style={{ fontSize: 10.5, color: isNow(s) ? 'var(--text)' : 'var(--text-muted)', fontWeight: isNow(s) ? 700 : 600, textTransform: 'uppercase', letterSpacing: '0.06em', textAlign: 'center' }}>P{s.period}{isNow(s) ? ' · now' : ''}</th>)}</tr></thead>
                       <tbody>
                         {weekFor(focus.t.id).map(({ day, cells }) => (
                           <tr key={day}>
                             <td style={{ padding: 0, fontSize: 12.5, fontWeight: day === todayName ? 700 : 500, color: day === todayName ? 'var(--text)' : 'var(--text-muted)' }}>{day.slice(0, 3)}{day === todayName && <span style={{ marginLeft: 6, ...pillStyle('green') }}>Today</span>}</td>
-                            {cells.map((c, i) => <td key={i} style={{ padding: 0 }}>{c ? <div title={`${day} · P${coverage.sched[i].period} · ${c.subject || ''} · ${c.cls}`} style={{ background: day === todayName ? 'var(--green-light)' : 'var(--white)', border: '1px solid var(--gray-100)', borderRadius: 8, padding: '6px 8px', display: 'flex', flexDirection: 'column', gap: 1, minHeight: 44 }}><span style={{ fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.cls}</span><span style={{ fontSize: 10.5, color: 'var(--text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.subject}</span></div> : <div style={{ height: 44, borderRadius: 8, background: 'var(--gray-100)', opacity: 0.6 }} />}</td>)}
+                            {cells.map((c, i) => { const live = day === todayName && isNow(coverage.sched[i]); return <td key={i} style={{ padding: 0 }}>{c ? <div title={`${day} · P${coverage.sched[i].period} · ${c.subject || ''} · ${c.cls}${live ? ' · running now' : ''}`} style={{ background: day === todayName ? 'var(--green-light)' : 'var(--white)', border: live ? '2px solid var(--text)' : '1px solid var(--gray-100)', boxShadow: live ? 'var(--shadow-sm)' : 'none', borderRadius: 8, padding: live ? '5px 7px' : '6px 8px', display: 'flex', flexDirection: 'column', gap: 1, minHeight: 44 }}><span style={{ fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.cls}</span><span style={{ fontSize: 10.5, color: 'var(--text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.subject}</span></div> : <div style={{ height: 44, borderRadius: 8, background: 'var(--gray-100)', opacity: 0.6, border: live ? '2px solid var(--text)' : 'none' }} />}</td> })}
                           </tr>
                         ))}
                       </tbody>
@@ -436,7 +445,7 @@ export default function Dashboard() {
                     <thead>
                       <tr>
                         <th style={{ textAlign: 'left', fontSize: 10.5, color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', padding: '0 0 2px', position: 'sticky', top: 0, background: 'var(--white)', minWidth: 170 }}>Teacher</th>
-                        {coverage.sched.map(s => <th key={s.period} title={s.label} style={{ fontSize: 10.5, color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', padding: '0 0 2px', textAlign: 'center', position: 'sticky', top: 0, background: 'var(--white)' }}>P{s.period}</th>)}
+                        {coverage.sched.map(s => <th key={s.period} title={s.label} style={{ fontSize: 10.5, color: isNow(s) ? 'var(--text)' : 'var(--text-muted)', fontWeight: isNow(s) ? 700 : 600, textTransform: 'uppercase', letterSpacing: '0.06em', padding: '0 0 2px', textAlign: 'center', position: 'sticky', top: 0, background: 'var(--white)', borderBottom: isNow(s) ? '2px solid var(--text)' : '2px solid transparent' }}>P{s.period}</th>)}
                       </tr>
                     </thead>
                     <tbody>
