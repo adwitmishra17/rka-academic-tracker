@@ -159,6 +159,10 @@ export const hpcApi = {
   get:      (id)                                      => apiGet(`/api/hpc/${id}`),
   override: (id, domains, general_remarks)            => apiPost('/api/hpc/override', { id, domains, general_remarks }),
   void:     (id, reason)                              => apiPost('/api/hpc/void', { id, reason }),
+  setup:    (sessionCode)                             => apiGet('/api/hpc/setup', { sessionCode }),
+  saveSetup:(sessionCode, definition)                 => apiPut('/api/hpc/setup', { sessionCode, definition }),
+  entries:  (branchCode, sessionCode, termId, className, section) => apiGet('/api/hpc/entries', { branchCode, sessionCode, termId, className, section }),
+  saveEntries: (branchCode, sessionCode, termId, rows) => apiPost('/api/hpc/entries', { branchCode, sessionCode, termId, rows }),
 }
 
 // ── Board Candidates (LoC) helpers ──

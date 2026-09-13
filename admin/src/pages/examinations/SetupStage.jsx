@@ -35,7 +35,7 @@ export default function SetupStage({ branch, sessionCode, className, config, ref
 
   const terms = config?.terms || []
   const teachers = config?.teachers || []
-  const templates = config?.templates || []
+  const templates = (config?.templates || []).filter((t) => t.family !== 'hpc')   // the HPC setup is its own page
   const classMap = config?.classMap || {}
   const selected = className || ''
   // The card decides what is listed here: rows come from the class's template

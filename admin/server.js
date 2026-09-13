@@ -27,6 +27,7 @@ import dotenv   from 'dotenv'
 import admin    from 'firebase-admin'
 import { createClient } from '@supabase/supabase-js'
 import { registerExamRoutes } from './lib/examRoutes.js'
+import { registerHpcRoutes } from './lib/hpcRoutes.js'
 
 // Load .env / .env.local in dev (Hostinger injects env vars directly).
 dotenv.config()
@@ -819,6 +820,10 @@ app.get('/api/exam/paper-marks', verifyAuth, async (req, res) => {
 })
 
 // ─── HPC routes (Holistic Progress Card — read SMS Supabase, service-role) ──
+// Setup + office entry (2026-09-14) live in lib/hpcRoutes.js; registered first so
+// /api/hpc/setup and /api/hpc/entries are not swallowed by GET /api/hpc/:id below.
+registerHpcRoutes(app, { supabase, verifyAuth, branchIdForCode })
+
 const HPC_SELECT = `id, branch_id, session_code, term_id, student_id, student_name, admission_no, class_name, section, roll_number, date_of_birth, father_name, mother_name, photo_key, domains, general_remarks, assessed_at, assessed_by, source, is_void, voided_at, voided_by, void_reason, branches(code, name), exam_terms(id, name, short_code, session_code)`
 
 // GET /api/hpc?branchCode=&termId=&className=&section=
