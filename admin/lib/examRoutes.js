@@ -14,6 +14,7 @@
 
 import { computeCard, planCard, resolveRows, resolveSeniorNames, seniorOptionals, generatePaperSpecs, applyClassStats, normName } from './cardEngine.js'
 import { renderCardHtml } from './cardRender.js'
+import { attachPhotos } from './studentPhoto.js'
 
 const STANDARD_TERMS = [
   { shortCode: 'T1', name: 'Term 1', sortOrder: 1 },
@@ -691,6 +692,7 @@ export function registerExamRoutes(app, { supabase, admin, verifyAuth, branchIdF
       const { cards } = await computeClass({ branchId: st.branch_id, branchCode: st.branches?.code, sessionCode, className: st.class_name, cardKey, section: st.section || undefined })
       const card = cards.find((c) => c.student.id === studentId)
       if (!card) return res.status(404).json({ error: 'Student not in the active roster' })
+      await attachPhotos([card])
       res.json({ card, html: renderCardHtml(card) })
     } catch (e) { err(res, e, 'GET /api/exam/card') }
   })
@@ -713,10 +715,12 @@ export function registerExamRoutes(app, { supabase, admin, verifyAuth, branchIdF
         const { data: prev } = await supabase.from('published_report_cards').select('id, student_id, version').eq('session_code', sessionCode).eq('card_key', key).eq('is_current', true).in('student_id', ready.map((c) => c.student.id))
         const prevBy = new Map((prev || []).map((p) => [p.student_id, p]))
         const now = new Date().toISOString()
+        await attachPhotos(ready) // photo goes into the frozen HTML only; the card JSON keeps just photoKey
         const rows = ready.map((c) => {
           const version = (prevBy.get(c.student.id)?.version || 0) + 1
-          const stamped = { ...c, publishedAt: now, publishedVersion: version, publishedBy: req.user.email }
-          return { student_id: c.student.id, branch_id: bid, session_code: sessionCode, class_name: className, section: c.student.section || null, card_key: key, card_label: c.cardLabel, template_id: bundle.template.id, family: c.family, version, is_current: true, card: stamped, html: renderCardHtml(stamped), published_by: req.user.email, published_at: now }
+          const { photoUrl, ...plain } = c
+          const stamped = { ...plain, publishedAt: now, publishedVersion: version, publishedBy: req.user.email }
+          return { student_id: c.student.id, branch_id: bid, session_code: sessionCode, class_name: className, section: c.student.section || null, card_key: key, card_label: c.cardLabel, template_id: bundle.template.id, family: c.family, version, is_current: true, card: stamped, html: renderCardHtml({ ...stamped, photoUrl }), published_by: req.user.email, published_at: now }
         })
         if (prev?.length) { const { error } = await supabase.from('published_report_cards').update({ is_current: false }).in('id', prev.map((p) => p.id)); if (error) throw error }
         for (let i = 0; i < rows.length; i += 50) { const { error } = await supabase.from('published_report_cards').insert(rows.slice(i, i + 50)); if (error) throw error }

@@ -10,6 +10,7 @@
 // ============================================================================
 import { DEFAULT_HPC_DEFINITION } from './hpcDefaults.js'
 import { renderHpcHtml, renderHpcDocument, renderHpcPages, HPC_CSS } from './hpcRender.js'
+import { photoDataUrl } from './studentPhoto.js'
 
 export function registerHpcRoutes(app, { supabase, verifyAuth, branchIdForCode, admin }) {
   const bad = (res, m) => res.status(400).json({ error: m })
@@ -127,19 +128,6 @@ export function registerHpcRoutes(app, { supabase, verifyAuth, branchIdForCode, 
 
   // ── Render: assessment → four-page HTML (stored on the row; SMS prints it) ──
   const HPC_SELECT = 'id, branch_id, session_code, term_id, student_id, student_name, admission_no, class_name, section, roll_number, date_of_birth, father_name, mother_name, photo_key, domains, general_remarks, assessed_at, source, is_void, branches(code, name), exam_terms(id, name, short_code, session_code)'
-  const photoCache = new Map()   // photo_key → data URL (process lifetime)
-  async function photoDataUrl(key) {
-    if (!key) return null
-    if (photoCache.has(key)) return photoCache.get(key)
-    let out = null
-    try {
-      const r = await fetch(`${process.env.SUPABASE_URL}/functions/v1/r2-sign`, { method: 'POST', headers: { 'content-type': 'application/json', apikey: process.env.SUPABASE_SERVICE_ROLE_KEY, Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}` }, body: JSON.stringify({ op: 'download_data', key }) })
-      const j = await r.json().catch(() => null)
-      if (r.ok && j?.data_url) out = j.data_url
-    } catch (e) { console.warn('[hpc] photo fetch failed', key, e.message) }
-    photoCache.set(key, out)
-    return out
-  }
   async function classTeacherName(branchCode, className) {
     try {
       const snap = await admin.firestore().collection('classTeacherByEmail').where('className', '==', className).get()
