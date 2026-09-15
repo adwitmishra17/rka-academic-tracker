@@ -34,6 +34,7 @@ const CSS = `
   .page{width:210mm;height:297mm;margin:0 auto;background:#FAF7F0;color:#1A1A1A;position:relative;padding:10mm 12mm 8mm;display:flex;flex-direction:column;gap:6px;overflow:hidden}
   .hd{display:flex;align-items:center;gap:12px;border-bottom:1px solid #D8D2C2;padding-bottom:7px}
   .hd img.crest{width:48px;height:48px;object-fit:contain;flex-shrink:0}
+  .school img.wordmark{display:block;height:44px;width:auto;max-width:260px;margin-bottom:2px}
   .school b{display:block;font-family:Lora,Georgia,serif;font-size:22px;letter-spacing:.06em;line-height:1.1}
   .school span{font-size:12px;color:#1A1A1A}
   .meta{margin-left:auto;text-align:right;font-family:"JetBrains Mono",ui-monospace,monospace;font-size:10px;color:#1A1A1A;line-height:1.6;white-space:nowrap}
@@ -142,7 +143,7 @@ export function renderCardBody(card) {
 function recordNo(card) { return `RC/${card.student?.branchCode || 'RKA'}/${card.sessionCode}/${card.cardKey}/${card.student?.admissionNo || dash}` }
 function header(card) {
   return `<div class="hd"><img class="crest" src="${assetBase()}/crest-card.png" alt="" onerror="this.style.visibility='hidden'">
-    <div class="school"><b>RADHAKRISHNA ACADEMY</b><span>${esc(ADDRESS)}${card.student?.branchName ? ' · ' + esc(card.student.branchName) : ''}</span></div>
+    <div class="school"><img class="wordmark" src="${assetBase()}/banner-card.png" alt="RADHAKRISHNA ACADEMY" onerror="this.replaceWith(Object.assign(document.createElement('b'),{textContent:'RADHAKRISHNA ACADEMY'}))"><span>${esc(ADDRESS)}${card.student?.branchName ? ' · ' + esc(card.student.branchName) : ''}</span></div>
     <div class="meta">AFFILIATION <b>${AFFILIATION}</b><br>SCHOOL CODE <b>${SCHOOL_CODE}</b><br>RECORD ${esc(recordNo(card))}</div></div>`
 }
 function titleStrip(card, shown) {
