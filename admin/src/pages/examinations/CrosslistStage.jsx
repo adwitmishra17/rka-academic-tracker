@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react'
-import { examApi } from '../../lib/api'
+import { examApi, cardEntriesApi } from '../../lib/api'
 import { inp, lbl, card, th, td, Btn, Pill, Note, Spinner } from './ui.jsx'
 import { COMP, valsFromGrid, groupsOf, exportSheetPDF, exportSheetXLSX, loadImage } from './entrySheets.js'
 
@@ -56,6 +56,7 @@ export default function CrosslistStage({ branch, sessionCode, className, config 
   const [raw, setRaw] = useState(null)
   const [cards, setCards] = useState(null)
   const [grid, setGrid] = useState(null)
+  const [pack, setPack] = useState(null)          // graded areas: { students, areas, grades, meta }
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState('')
   const terms = config?.terms || []
@@ -99,13 +100,15 @@ export default function CrosslistStage({ branch, sessionCode, className, config 
     setErr(''); setBusy(true)
     const p = mode === 'raw'
       ? (termId ? examApi.crosslist(branch, termId, className, section || undefined).then(setRaw) : Promise.resolve())
+      : mode === 'graded'
+        ? (termId ? cardEntriesApi.load(branch, sessionCode, className, termId, section || undefined).then(setPack) : Promise.resolve())
       : mode === 'sheets' || mode === 'subject'
         ? (termId ? examApi.classGrid(branch, sessionCode, className, termId, section || undefined).then(setGrid) : Promise.resolve())
         : examApi.classCards(branch, sessionCode, className, cardKey || undefined, section || undefined).then((d) => { setCards({ ...d, _section: section, _tick: reloadTick }); if (!cardKey) setCardKey(d.cardKey) })
-    p.catch((e) => { setErr(e.message); if (mode === 'raw') setRaw(null); else if (mode === 'sheets' || mode === 'subject') setGrid(null); else setCards(null) }).finally(() => setBusy(false))
+    p.catch((e) => { setErr(e.message); if (mode === 'raw') setRaw(null); else if (mode === 'graded') setPack(null); else if (mode === 'sheets' || mode === 'subject') setGrid(null); else setCards(null) }).finally(() => setBusy(false))
   }, [mode, termId, cardKey, section, branch, sessionCode, className, reloadTick]) // eslint-disable-line
 
-  const sections = useMemo(() => [...new Set(((mode === 'raw' ? raw?.students : (mode === 'sheets' || mode === 'subject') ? grid?.students : cards?.rows) || []).map((r) => r.section).filter(Boolean))].sort(), [raw, cards, grid, mode])
+  const sections = useMemo(() => [...new Set(((mode === 'raw' ? raw?.students : mode === 'graded' ? pack?.students : (mode === 'sheets' || mode === 'subject') ? grid?.students : cards?.rows) || []).map((r) => r.section).filter(Boolean))].sort(), [raw, cards, grid, mode])
   const sheetArgs = (withMarks) => grid && { data: grid, groups: groupsOf(grid), vals: valsFromGrid(grid), withMarks, meta: { term: grid.term?.name, className, section, branch, session: sessionCode } }
   const meta = `${className}${section ? ' - ' + section : ''}  ·  ${branch} branch  ·  Session ${sessionCode}`
   const fname = (kind) => `crosslist-${kind}-${branch}-${className.replace(/\s+/g, '-')}${section ? '-' + section : ''}`
@@ -146,7 +149,30 @@ export default function CrosslistStage({ branch, sessionCode, className, config 
   }, [grid, subjectId, meta])
   const subjectExport = subjectTables.length ? { tables: subjectTables, fileName: fname(`${(grid?.term?.name || 'term').replace(/\s+/g, '-')}-${subjectId ? subjectTables[0].subject.name.replace(/\s+/g, '-') : 'all-subjects'}`), sheet: className } : null
 
-  const exp = mode === 'raw' ? rawExport : mode === 'subject' ? subjectExport : cardExport
+  // ── graded areas (co-scholastic + graded subjects + discipline + remarks): crosslist and blank entry sheet ──
+  const tplDef = useMemo(() => (config?.templates || []).find((t) => t.id === config?.classMap?.[className])?.definition || {}, [config, className])
+  const termObj = terms.find((t) => t.id === termId)
+  const isLastTerm = !!termObj && terms.every((t) => (t.sort_order ?? 0) <= (termObj.sort_order ?? 0))
+  const gradedTable = useMemo(() => {
+    if (!pack) return null
+    const areas = [...(pack.areas || []).filter((a) => a.subject_code === 'RCG'), ...(pack.areas || []).filter((a) => a.subject_code === 'RCA')]
+    const scaleOf = (a) => ((a.subject_code === 'RCG' ? tplDef.gradedSubjects?.scale : tplDef.coScholastic?.scale) || ['A', 'B', 'C']).join('/')
+    const discScale = (tplDef.discipline?.scale || ['A', 'B', 'C']).join('/')
+    const head = ['Roll', 'Student', ...areas.map((a) => `${a.subject_name} (${scaleOf(a)})`), `Discipline (${discScale})`, 'Remarks', ...(isLastTerm ? ['Ht (cm)', 'Wt (kg)'] : [])]
+    const rowFor = (s, withGrades) => {
+      const g = pack.grades?.[s.id] || {}, m = pack.meta?.[s.id] || {}
+      return [s.roll_number || '—', s.full_name, ...areas.map((a) => (withGrades ? (g[a.id] || '') : '')), withGrades ? (m.discipline || '') : '', withGrades ? (m.remarks || '') : '', ...(isLastTerm ? [withGrades ? (m.heightCm ?? '') : '', withGrades ? (m.weightKg ?? '') : ''] : [])]
+    }
+    const rows = (withGrades) => (pack.students || []).map((s) => rowFor(s, withGrades))
+    const n = head.length
+    const columnStyles = { [n - (isLastTerm ? 3 : 1)]: { cellWidth: 70, halign: 'left' } }   // Remarks column wide
+    const base = (withGrades) => ({ title: `GRADED AREAS — ${(termObj?.name || '').toUpperCase()}${withGrades ? '' : ' · ENTRY SHEET'}`, subtitle: `${meta}  ·  ${withGrades ? 'as entered' : 'blank — write the grade letter in each box'}`, head, body: rows(withGrades), sheet: className, columnStyles })
+    return { areas, head, filled: base(true), blank: base(false), entered: (pack.students || []).filter((s) => areas.some((a) => pack.grades?.[s.id]?.[a.id])).length }
+  }, [pack, tplDef, isLastTerm, meta, termObj])
+  const gradedExport = gradedTable && { ...gradedTable.filled, fileName: fname(`graded-${(termObj?.name || 'term').replace(/\s+/g, '-')}`) }
+  const gradedBlank = gradedTable && { ...gradedTable.blank, fileName: fname(`graded-${(termObj?.name || 'term').replace(/\s+/g, '-')}-blank`) }
+
+  const exp = mode === 'raw' ? rawExport : mode === 'subject' ? subjectExport : mode === 'graded' ? gradedExport : cardExport
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
@@ -154,17 +180,22 @@ export default function CrosslistStage({ branch, sessionCode, className, config 
       <div style={{ ...card, display: 'flex', gap: 12, alignItems: 'flex-end', flexWrap: 'wrap' }}>
         <div><span style={lbl}>View</span>
           <div style={{ display: 'inline-flex', border: '1px solid var(--gray-200)', borderRadius: 99, overflow: 'hidden' }}>
-            {[['card', 'As on card'], ['raw', 'Raw per term'], ['subject', 'Subject-wise'], ['sheets', 'Entry sheets']].map(([k, l]) => <button key={k} onClick={() => setMode(k)} style={{ padding: '6px 14px', border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer', background: mode === k ? 'var(--text)' : 'var(--white)', color: mode === k ? 'var(--white)' : 'var(--text-muted)' }}>{l}</button>)}
+            {[['card', 'As on card'], ['raw', 'Raw per term'], ['subject', 'Subject-wise'], ['graded', 'Graded areas'], ['sheets', 'Entry sheets']].map(([k, l]) => <button key={k} onClick={() => setMode(k)} style={{ padding: '6px 14px', border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer', background: mode === k ? 'var(--text)' : 'var(--white)', color: mode === k ? 'var(--white)' : 'var(--text-muted)' }}>{l}</button>)}
           </div></div>
         {mode === 'subject' && grid && <div><span style={lbl}>Subject</span><select value={subjectId} onChange={(e) => setSubjectId(e.target.value)} style={inp}><option value="">All subjects (one page each)</option>{grid.subjects.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}</select></div>}
-        {mode === 'raw' || mode === 'sheets' || mode === 'subject' ? (
+        {mode === 'raw' || mode === 'sheets' || mode === 'subject' || mode === 'graded' ? (
           <div><span style={lbl}>Term</span><select value={termId} onChange={(e) => setTermId(e.target.value)} style={inp}>{terms.map((t) => <option key={t.id} value={t.id}>{termLabel(t)}</option>)}</select></div>
         ) : (
           <div><span style={lbl}>Card</span><select value={cardKey} onChange={(e) => setCardKey(e.target.value)} style={inp}>{(cards?.cardKeys || []).map((k) => <option key={k.key} value={k.key}>{k.label}</option>)}</select></div>
         )}
         {sections.length > 1 && <div><span style={lbl}>Section</span><select value={section} onChange={(e) => setSection(e.target.value)} style={inp}><option value="">All</option>{sections.map((s) => <option key={s}>{s}</option>)}</select></div>}
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          {mode === 'sheets' ? (<>
+          {mode === 'graded' ? (<>
+            <Btn onClick={() => guarded(() => exportPDF(gradedBlank))} disabled={!gradedBlank || busy || syncing} title="Empty boxes for every area, discipline and remarks — for the class teacher to fill on paper">Blank sheet (PDF)</Btn>
+            <Btn onClick={() => guarded(() => exportXLSX(gradedBlank))} disabled={!gradedBlank || busy || syncing}>Blank sheet (Excel)</Btn>
+            <Btn onClick={() => guarded(() => exportPDF(gradedExport))} disabled={!gradedExport || busy || syncing} title="Grades as entered so far">With grades (PDF)</Btn>
+            <Btn onClick={() => guarded(() => exportXLSX(gradedExport))} disabled={!gradedExport || busy || syncing}>With grades (Excel)</Btn>
+          </>) : mode === 'sheets' ? (<>
             <Btn onClick={() => guarded(() => exportSheetPDF(sheetArgs(false)))} disabled={!grid?.papers?.length || busy || syncing} title="Student list with empty boxes for every paper of this term — for marking on paper">Blank sheet (PDF)</Btn>
             <Btn onClick={() => guarded(() => exportSheetXLSX(sheetArgs(false)))} disabled={!grid?.papers?.length || busy || syncing} title="Same list as an Excel file">Blank sheet (Excel)</Btn>
             <Btn onClick={() => guarded(() => exportSheetPDF(sheetArgs(true)))} disabled={!grid?.papers?.length || busy || syncing} title="Current entries, for checking against the answer sheets">With marks (PDF)</Btn>
@@ -187,6 +218,20 @@ export default function CrosslistStage({ branch, sessionCode, className, config 
         </Note>
       )}
       {sync?.synced && <div style={{ fontSize: 11.5, color: 'var(--green)', marginTop: -6 }}>✓ Papers match the scoring rules ({sync.papers} papers).{sync.notes?.length ? <span style={{ color: 'var(--text-muted)' }}> Note: {sync.notes.join('; ')} — marks are scaled from the paper's own max.</span> : null}</div>}
+
+      {mode === 'graded' && !busy && pack && gradedTable && (
+        <div style={{ ...card, padding: 0, overflow: 'auto' }}>
+          <div style={{ padding: '10px 14px', borderBottom: '1px solid var(--gray-100)', display: 'flex', alignItems: 'baseline', gap: 10 }}><div style={{ fontSize: 13, fontWeight: 600 }}>Graded areas · {termObj?.name}</div><div style={{ fontSize: 11.5, color: 'var(--text-muted)' }}>{gradedTable.areas.length} area{gradedTable.areas.length === 1 ? '' : 's'} · {gradedTable.entered} of {pack.students?.length || 0} students have grades · entered under Marks entry → Card entries</div></div>
+          {gradedTable.areas.length === 0 ? <div style={{ padding: 14, fontSize: 12, color: 'var(--text-muted)' }}>This class's template has no co-scholastic areas or graded subjects. Add them in Setup → Card areas.</div> : (
+            <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 700 }}>
+              <thead><tr>{gradedTable.head.map((h, i) => <th key={i} style={{ ...th, textAlign: i < 2 || /^Remarks/.test(h) ? 'left' : 'center' }}>{h}</th>)}</tr></thead>
+              <tbody>{gradedTable.filled.body.map((r, i) => (
+                <tr key={i} style={{ background: i % 2 ? 'var(--gray-50)' : 'var(--white)' }}>{r.map((c, j) => <td key={j} style={{ ...td, textAlign: j < 2 || j === gradedTable.head.findIndex((h) => /^Remarks/.test(h)) ? 'left' : 'center', color: c === '' ? 'var(--gray-400)' : 'var(--text)', fontWeight: j === 1 ? 500 : (j > 1 && c && !/^Remarks/.test(gradedTable.head[j]) ? 600 : 400), whiteSpace: j === 1 ? 'nowrap' : 'normal' }}>{c === '' ? '—' : c}</td>)}</tr>
+              ))}</tbody>
+            </table>
+          )}
+        </div>
+      )}
 
       {mode === 'subject' && !busy && grid && subjectTables.map((t) => (
         <div key={t.subject.id} style={{ ...card, padding: 0, overflow: 'auto' }}>
