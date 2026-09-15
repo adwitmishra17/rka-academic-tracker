@@ -61,15 +61,15 @@ export async function exportSheetPDF({ data, groups, vals, withMarks, meta }) {
   const pageW = doc.internal.pageSize.getWidth()
   let y = 8
   if (banner) { const bw = 56, bh = (banner.h / banner.w) * bw; if (crest) { const ch = 11, cw = (crest.w / crest.h) * ch; doc.addImage(crest.data, 'PNG', pageW / 2 - bw / 2 - cw - 4, y + (bh - ch) / 2, cw, ch) } doc.addImage(banner.data, 'PNG', pageW / 2 - bw / 2, y, bw, bh); y += bh + 2 }
-  doc.setFont('helvetica', 'bold').setFontSize(11).setTextColor(26, 74, 46); doc.text(`MARKS ENTRY SHEET — ${(meta.term || '').toUpperCase()}`, pageW / 2, y + 4, { align: 'center' })
-  doc.setFont('helvetica', 'normal').setFontSize(8.5).setTextColor(90); doc.text(`${meta.className}${meta.section ? ' - ' + meta.section : ''}  ·  ${meta.branch} branch  ·  Session ${meta.session}  ·  ${withMarks ? 'current entries' : 'blank — enter raw marks, AB for absent'}`, pageW / 2, y + 8.5, { align: 'center' }); y += 12
+  doc.setFont('helvetica', 'bold').setFontSize(12).setTextColor(0); doc.text(`MARKS ENTRY SHEET — ${(meta.term || '').toUpperCase()}`, pageW / 2, y + 4, { align: 'center' })
+  doc.setFont('helvetica', 'normal').setFontSize(9).setTextColor(0); doc.text(`${meta.className}${meta.section ? ' - ' + meta.section : ''}  ·  ${meta.branch} branch  ·  Session ${meta.session}  ·  ${withMarks ? 'current entries' : 'blank — enter raw marks, AB for absent'}`, pageW / 2, y + 8.5, { align: 'center' }); y += 12
   const nPapers = groups.reduce((s, g) => s + g.papers.length, 0)
   const fixed = 9 + 40 + 16, paperW = Math.max(8, (pageW - 12 - fixed) / Math.max(1, nPapers))
   const columnStyles = { 0: { cellWidth: 9 }, 1: { cellWidth: 40, halign: 'left' }, 2: { cellWidth: 16 } }
   for (let i = 0; i < nPapers; i++) columnStyles[3 + i] = { cellWidth: paperW }
-  autoTable(doc, { startY: y, head: sheetHead2(groups), body: sheetRows(data, groups, vals, withMarks), margin: { left: 6, right: 6 }, styles: { font: 'helvetica', fontSize: nPapers > 14 ? 6.5 : 7.5, cellPadding: 1.2, halign: 'center', valign: 'middle', minCellHeight: withMarks ? 6 : 8, lineColor: [205, 214, 207], lineWidth: 0.15 }, headStyles: { fillColor: [26, 74, 46], textColor: 255, fontSize: nPapers > 14 ? 6 : 7, lineColor: [255, 255, 255], lineWidth: 0.2, cellPadding: 1 }, alternateRowStyles: { fillColor: [246, 250, 247] }, columnStyles })
+  autoTable(doc, { startY: y, head: sheetHead2(groups), body: sheetRows(data, groups, vals, withMarks), margin: { left: 6, right: 6 }, theme: 'grid', styles: { font: 'helvetica', fontSize: nPapers > 14 ? 7 : 8.5, cellPadding: 1.2, halign: 'center', valign: 'middle', minCellHeight: withMarks ? 6 : 8, textColor: 0, lineColor: 0, lineWidth: 0.2 }, headStyles: { fillColor: [232, 232, 232], textColor: 0, fontStyle: 'bold', fontSize: nPapers > 14 ? 6.5 : 7.5, lineColor: 0, lineWidth: 0.3, cellPadding: 1 }, alternateRowStyles: { fillColor: 255 }, columnStyles })
   const pages = doc.getNumberOfPages()
-  for (let p = 1; p <= pages; p++) { doc.setPage(p); doc.setFont('helvetica', 'normal').setFontSize(7).setTextColor(150); doc.text(`Printed ${new Date().toLocaleDateString('en-IN')} · ${data.students.length} students · Teacher signature: ____________________`, 6, doc.internal.pageSize.getHeight() - 5); doc.text(`Page ${p} of ${pages}`, pageW - 6, doc.internal.pageSize.getHeight() - 5, { align: 'right' }) }
+  for (let p = 1; p <= pages; p++) { doc.setPage(p); doc.setFont('helvetica', 'normal').setFontSize(8).setTextColor(0); doc.text(`Printed ${new Date().toLocaleDateString('en-IN')} · ${data.students.length} students · Teacher signature: ____________________`, 6, doc.internal.pageSize.getHeight() - 5); doc.text(`Page ${p} of ${pages}`, pageW - 6, doc.internal.pageSize.getHeight() - 5, { align: 'right' }) }
   doc.save(fileBase(meta, withMarks) + '.pdf')
 }
 export async function exportSheetXLSX({ data, groups, vals, withMarks, meta }) {

@@ -13,29 +13,43 @@ import { COMP, valsFromGrid, groupsOf, exportSheetPDF, exportSheetXLSX, loadImag
 
 const cellText = (c) => (!c || !c.entered ? '—' : c.absent ? 'AB' : String(c.obtained))
 
-async function exportPDF({ title, subtitle, head, body, fileName }) {
+/* Printer-friendly: black text, thin black grid, pale header band. Several tables → one document,
+   one table per page (used by the subject-wise crosslist). */
+async function exportPDF({ title, subtitle, head, body, fileName, tables }) {
   const [{ default: jsPDF }, { default: autoTable }] = await Promise.all([import('jspdf'), import('jspdf-autotable')])
   const [banner, crest] = await Promise.all([loadImage('/banner-light.png', 480), loadImage('/crest.png', 96)])
   const doc = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'landscape' })
   const pageW = doc.internal.pageSize.getWidth()
-  let y = 10
-  if (banner) { const bw = 62, bh = (banner.h / banner.w) * bw; if (crest) { const ch = 12, cw = (crest.w / crest.h) * ch; doc.addImage(crest.data, 'PNG', pageW / 2 - bw / 2 - cw - 4, y + (bh - ch) / 2, cw, ch) } doc.addImage(banner.data, 'PNG', pageW / 2 - bw / 2, y, bw, bh); y += bh + 2 }
-  doc.setFont('helvetica', 'bold').setFontSize(11).setTextColor(26, 74, 46); doc.text(title, pageW / 2, y + 4, { align: 'center' })
-  doc.setFont('helvetica', 'normal').setFontSize(8.5).setTextColor(90); doc.text(subtitle, pageW / 2, y + 8.5, { align: 'center' }); y += 12
-  autoTable(doc, { startY: y, head: [head], body, margin: { left: 8, right: 8 }, styles: { font: 'helvetica', fontSize: 7.4, cellPadding: 1.2, halign: 'center' }, headStyles: { fillColor: [26, 74, 46], textColor: 255, fontSize: 7 }, alternateRowStyles: { fillColor: [246, 250, 247] }, columnStyles: { 0: { cellWidth: 11 }, 1: { cellWidth: 42, halign: 'left' } } })
+  const list = tables || [{ title, subtitle, head, body }]
+  list.forEach((t, idx) => {
+    if (idx > 0) doc.addPage()
+    let y = 10
+    if (banner) { const bw = 62, bh = (banner.h / banner.w) * bw; if (crest) { const ch = 12, cw = (crest.w / crest.h) * ch; doc.addImage(crest.data, 'PNG', pageW / 2 - bw / 2 - cw - 4, y + (bh - ch) / 2, cw, ch) } doc.addImage(banner.data, 'PNG', pageW / 2 - bw / 2, y, bw, bh); y += bh + 2 }
+    doc.setFont('helvetica', 'bold').setFontSize(12).setTextColor(0); doc.text(t.title, pageW / 2, y + 4, { align: 'center' })
+    doc.setFont('helvetica', 'normal').setFontSize(9).setTextColor(0); doc.text(t.subtitle, pageW / 2, y + 9, { align: 'center' }); y += 13
+    autoTable(doc, { startY: y, head: [t.head], body: t.body, margin: { left: 8, right: 8 }, theme: 'grid',
+      styles: { font: 'helvetica', fontSize: 9, cellPadding: 1.6, halign: 'center', textColor: 0, lineColor: 0, lineWidth: 0.2 },
+      headStyles: { fillColor: [232, 232, 232], textColor: 0, fontStyle: 'bold', fontSize: 8.5, lineColor: 0, lineWidth: 0.3 },
+      alternateRowStyles: { fillColor: 255 }, columnStyles: { 0: { cellWidth: 12 }, 1: { cellWidth: 46, halign: 'left' }, ...(t.columnStyles || {}) } })
+  })
   const pages = doc.getNumberOfPages()
-  for (let p = 1; p <= pages; p++) { doc.setPage(p); doc.setFont('helvetica', 'normal').setFontSize(7).setTextColor(150); doc.text(`Generated ${new Date().toLocaleDateString('en-IN')} · ${body.length} students · AB = absent, — = not entered`, 8, doc.internal.pageSize.getHeight() - 5); doc.text(`Page ${p} of ${pages}`, pageW - 8, doc.internal.pageSize.getHeight() - 5, { align: 'right' }) }
+  for (let p = 1; p <= pages; p++) { doc.setPage(p); doc.setFont('helvetica', 'normal').setFontSize(8).setTextColor(0); doc.text(`Generated ${new Date().toLocaleDateString('en-IN')} · AB = absent, — = not entered`, 8, doc.internal.pageSize.getHeight() - 5); doc.text(`Page ${p} of ${pages}`, pageW - 8, doc.internal.pageSize.getHeight() - 5, { align: 'right' }) }
   doc.save(fileName + '.pdf')
 }
-async function exportXLSX({ title, subtitle, head, body, fileName, sheet }) {
+async function exportXLSX({ title, subtitle, head, body, fileName, sheet, tables }) {
   const XLSX = await import('xlsx')
-  const ws = XLSX.utils.aoa_to_sheet([[title], [subtitle], [], head, ...body])
-  ws['!cols'] = head.map((h, i) => ({ wch: i === 1 ? 26 : Math.max(8, Math.min(14, String(h).length + 2)) }))
-  const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, sheet.slice(0, 25)); XLSX.writeFile(wb, fileName + '.xlsx')
+  const wb = XLSX.utils.book_new()
+  for (const t of (tables || [{ title, subtitle, head, body, sheet }])) {
+    const ws = XLSX.utils.aoa_to_sheet([[t.title], [t.subtitle], [], t.head, ...t.body])
+    ws['!cols'] = t.head.map((h, i) => ({ wch: i === 1 ? 26 : Math.max(8, Math.min(14, String(h).length + 2)) }))
+    XLSX.utils.book_append_sheet(wb, ws, String(t.sheet || sheet).replace(/[\\/?*[\]:]/g, ' ').slice(0, 31))
+  }
+  XLSX.writeFile(wb, fileName + '.xlsx')
 }
 
 export default function CrosslistStage({ branch, sessionCode, className, config }) {
   const [mode, setMode] = useState('card')
+  const [subjectId, setSubjectId] = useState('')   // subject-wise view: '' = every subject
   const [termId, setTermId] = useState('')
   const [cardKey, setCardKey] = useState('')
   const [section, setSection] = useState('')
@@ -85,13 +99,13 @@ export default function CrosslistStage({ branch, sessionCode, className, config 
     setErr(''); setBusy(true)
     const p = mode === 'raw'
       ? (termId ? examApi.crosslist(branch, termId, className, section || undefined).then(setRaw) : Promise.resolve())
-      : mode === 'sheets'
+      : mode === 'sheets' || mode === 'subject'
         ? (termId ? examApi.classGrid(branch, sessionCode, className, termId, section || undefined).then(setGrid) : Promise.resolve())
         : examApi.classCards(branch, sessionCode, className, cardKey || undefined, section || undefined).then((d) => { setCards({ ...d, _section: section, _tick: reloadTick }); if (!cardKey) setCardKey(d.cardKey) })
-    p.catch((e) => { setErr(e.message); if (mode === 'raw') setRaw(null); else if (mode === 'sheets') setGrid(null); else setCards(null) }).finally(() => setBusy(false))
+    p.catch((e) => { setErr(e.message); if (mode === 'raw') setRaw(null); else if (mode === 'sheets' || mode === 'subject') setGrid(null); else setCards(null) }).finally(() => setBusy(false))
   }, [mode, termId, cardKey, section, branch, sessionCode, className, reloadTick]) // eslint-disable-line
 
-  const sections = useMemo(() => [...new Set(((mode === 'raw' ? raw?.students : mode === 'sheets' ? grid?.students : cards?.rows) || []).map((r) => r.section).filter(Boolean))].sort(), [raw, cards, grid, mode])
+  const sections = useMemo(() => [...new Set(((mode === 'raw' ? raw?.students : (mode === 'sheets' || mode === 'subject') ? grid?.students : cards?.rows) || []).map((r) => r.section).filter(Boolean))].sort(), [raw, cards, grid, mode])
   const sheetArgs = (withMarks) => grid && { data: grid, groups: groupsOf(grid), vals: valsFromGrid(grid), withMarks, meta: { term: grid.term?.name, className, section, branch, session: sessionCode } }
   const meta = `${className}${section ? ' - ' + section : ''}  ·  ${branch} branch  ·  Session ${sessionCode}`
   const fname = (kind) => `crosslist-${kind}-${branch}-${className.replace(/\s+/g, '-')}${section ? '-' + section : ''}`
@@ -110,7 +124,29 @@ export default function CrosslistStage({ branch, sessionCode, className, config 
     body: cards.rows.map((r) => [r.roll || '—', r.name, ...subjectsInCards.map((s) => { const x = r.subjects.find((y) => y.subject === s); return !x || !x.max ? '—' : `${x.obtained}/${x.max}` }), r.overall.max ? `${r.overall.obtained}/${r.overall.max}` : '—', r.overall.pct != null ? r.overall.pct.toFixed(1) : '—', r.overall.grade || '—', r.rank ?? '—', r.ok ? 'yes' : `no (${r.missing.length})`]),
     fileName: fname(cards.cardKey), sheet: className,
   }
-  const exp = mode === 'raw' ? rawExport : cardExport
+  // ── subject-wise: one table per subject, every paper of the term as a column ──
+  const subjectTables = useMemo(() => {
+    if (!grid) return []
+    const byKey = new Map(grid.marks.map((m) => [`${m.student_id}|${m.paper_id}`, m]))
+    const cellOf = (s, p) => {
+      if (grid.applicable && !(grid.applicable[s.id] || []).includes(p.subjectId)) return 'n/a'
+      const m = byKey.get(`${s.id}|${p.id}`); if (!m) return '—'
+      if (m.is_absent) return 'AB'
+      if (p.hasPractical) return m.theory_obtained == null && m.practical_obtained == null ? '—' : `${Number(m.theory_obtained || 0)} + ${Number(m.practical_obtained || 0)}`
+      return m.marks_obtained == null ? '—' : String(Number(m.marks_obtained))
+    }
+    const numOf = (s, p) => { const m = byKey.get(`${s.id}|${p.id}`); if (!m || m.is_absent) return m?.is_absent ? 0 : null; return p.hasPractical ? Number(m.theory_obtained || 0) + Number(m.practical_obtained || 0) : (m.marks_obtained == null ? null : Number(m.marks_obtained)) }
+    return grid.subjects.filter((sub) => !subjectId || sub.id === subjectId).map((sub) => {
+      const papers = grid.papers.filter((p) => p.subjectId === sub.id)
+      const maxTotal = papers.reduce((a, p) => a + (p.hasPractical ? Number(p.theoryMax || 0) + Number(p.practicalMax || 0) : Number(p.max || 0)), 0)
+      const head = ['Roll', 'Student', ...papers.map((p) => `${COMP[p.componentKey] || p.name} /${p.hasPractical ? `${p.theoryMax}+${p.practicalMax}` : p.max}`), `Total /${maxTotal}`]
+      const body = grid.students.map((s) => { const vals = papers.map((p) => numOf(s, p)); const any = vals.some((v) => v != null); return [s.roll || '—', s.name, ...papers.map((p) => cellOf(s, p)), any ? String(vals.reduce((a, v) => a + (v || 0), 0)) : '—'] })
+      return { subject: sub, papers, title: `SUBJECT CROSSLIST — ${sub.name.toUpperCase()} · ${(grid.term?.name || '').toUpperCase()}`, subtitle: `${meta}${sub.teacher ? '  ·  ' + sub.teacher : ''}`, head, body, sheet: sub.name }
+    })
+  }, [grid, subjectId, meta])
+  const subjectExport = subjectTables.length ? { tables: subjectTables, fileName: fname(`${(grid?.term?.name || 'term').replace(/\s+/g, '-')}-${subjectId ? subjectTables[0].subject.name.replace(/\s+/g, '-') : 'all-subjects'}`), sheet: className } : null
+
+  const exp = mode === 'raw' ? rawExport : mode === 'subject' ? subjectExport : cardExport
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
@@ -118,9 +154,10 @@ export default function CrosslistStage({ branch, sessionCode, className, config 
       <div style={{ ...card, display: 'flex', gap: 12, alignItems: 'flex-end', flexWrap: 'wrap' }}>
         <div><span style={lbl}>View</span>
           <div style={{ display: 'inline-flex', border: '1px solid var(--gray-200)', borderRadius: 99, overflow: 'hidden' }}>
-            {[['card', 'As on card'], ['raw', 'Raw per term'], ['sheets', 'Entry sheets']].map(([k, l]) => <button key={k} onClick={() => setMode(k)} style={{ padding: '6px 14px', border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer', background: mode === k ? 'var(--text)' : 'var(--white)', color: mode === k ? 'var(--white)' : 'var(--text-muted)' }}>{l}</button>)}
+            {[['card', 'As on card'], ['raw', 'Raw per term'], ['subject', 'Subject-wise'], ['sheets', 'Entry sheets']].map(([k, l]) => <button key={k} onClick={() => setMode(k)} style={{ padding: '6px 14px', border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer', background: mode === k ? 'var(--text)' : 'var(--white)', color: mode === k ? 'var(--white)' : 'var(--text-muted)' }}>{l}</button>)}
           </div></div>
-        {mode === 'raw' || mode === 'sheets' ? (
+        {mode === 'subject' && grid && <div><span style={lbl}>Subject</span><select value={subjectId} onChange={(e) => setSubjectId(e.target.value)} style={inp}><option value="">All subjects (one page each)</option>{grid.subjects.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}</select></div>}
+        {mode === 'raw' || mode === 'sheets' || mode === 'subject' ? (
           <div><span style={lbl}>Term</span><select value={termId} onChange={(e) => setTermId(e.target.value)} style={inp}>{terms.map((t) => <option key={t.id} value={t.id}>{termLabel(t)}</option>)}</select></div>
         ) : (
           <div><span style={lbl}>Card</span><select value={cardKey} onChange={(e) => setCardKey(e.target.value)} style={inp}>{(cards?.cardKeys || []).map((k) => <option key={k.key} value={k.key}>{k.label}</option>)}</select></div>
@@ -150,6 +187,20 @@ export default function CrosslistStage({ branch, sessionCode, className, config 
         </Note>
       )}
       {sync?.synced && <div style={{ fontSize: 11.5, color: 'var(--green)', marginTop: -6 }}>✓ Papers match the scoring rules ({sync.papers} papers).{sync.notes?.length ? <span style={{ color: 'var(--text-muted)' }}> Note: {sync.notes.join('; ')} — marks are scaled from the paper's own max.</span> : null}</div>}
+
+      {mode === 'subject' && !busy && grid && subjectTables.map((t) => (
+        <div key={t.subject.id} style={{ ...card, padding: 0, overflow: 'auto' }}>
+          <div style={{ padding: '10px 14px', borderBottom: '1px solid var(--gray-100)', display: 'flex', alignItems: 'baseline', gap: 10 }}><div style={{ fontSize: 13, fontWeight: 600 }}>{t.subject.name}</div><div style={{ fontSize: 11.5, color: 'var(--text-muted)' }}>{grid.term?.name}{t.subject.teacher ? ` · ${t.subject.teacher}` : ''} · {t.papers.length} paper{t.papers.length === 1 ? '' : 's'}</div></div>
+          {t.papers.length === 0 ? <div style={{ padding: 14, fontSize: 12, color: 'var(--text-muted)' }}>No papers for this subject in {grid.term?.name}.</div> : (
+            <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 520 }}>
+              <thead><tr>{t.head.map((h, i) => <th key={i} style={{ ...th, textAlign: i < 2 ? 'left' : 'center' }}>{h}</th>)}</tr></thead>
+              <tbody>{t.body.map((r, i) => (
+                <tr key={i} style={{ background: i % 2 ? 'var(--gray-50)' : 'var(--white)' }}>{r.map((c, j) => <td key={j} style={{ ...td, textAlign: j < 2 ? 'left' : 'center', color: c === '—' || c === 'n/a' ? 'var(--gray-400)' : c === 'AB' ? 'var(--crimson)' : 'var(--text)', fontWeight: j === r.length - 1 ? 600 : (j === 1 ? 500 : 400), whiteSpace: j === 1 ? 'nowrap' : 'normal' }}>{c}</td>)}</tr>
+              ))}</tbody>
+            </table>
+          )}
+        </div>
+      ))}
 
       {mode === 'sheets' && !busy && grid && (
         <div style={{ ...card }}>
