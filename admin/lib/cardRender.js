@@ -34,71 +34,71 @@ const CSS = `
   .page{width:210mm;height:297mm;margin:0 auto;background:#FAF7F0;color:#1A1A1A;position:relative;padding:10mm 12mm 8mm;display:flex;flex-direction:column;gap:6px;overflow:hidden}
   .hd{display:flex;align-items:center;gap:12px;border-bottom:1px solid #D8D2C2;padding-bottom:7px}
   .hd img.crest{width:48px;height:48px;object-fit:contain;flex-shrink:0}
-  .school b{display:block;font-family:Lora,Georgia,serif;font-size:20px;letter-spacing:.06em;line-height:1.1}
-  .school span{font-size:10px;color:#8C8579}
-  .meta{margin-left:auto;text-align:right;font-family:"JetBrains Mono",ui-monospace,monospace;font-size:8px;color:#8C8579;line-height:1.6;white-space:nowrap}
-  .meta b{color:#7B1F2B;font-size:10.5px}
+  .school b{display:block;font-family:Lora,Georgia,serif;font-size:22px;letter-spacing:.06em;line-height:1.1}
+  .school span{font-size:12px;color:#1A1A1A}
+  .meta{margin-left:auto;text-align:right;font-family:"JetBrains Mono",ui-monospace,monospace;font-size:10px;color:#1A1A1A;line-height:1.6;white-space:nowrap}
+  .meta b{color:#7B1F2B;font-size:12.5px}
   .title{display:flex;align-items:baseline;justify-content:space-between;padding:1px 0}
-  .title h2{margin:0;font-family:Lora,Georgia,serif;font-size:20px;letter-spacing:.28em;font-weight:600}
-  .title span{font-family:"JetBrains Mono",ui-monospace,monospace;font-size:9px;color:#8C8579;letter-spacing:.1em}
+  .title h2{margin:0;font-family:Lora,Georgia,serif;font-size:21px;letter-spacing:.2em;font-weight:600;white-space:nowrap}
+  .title span{font-family:"JetBrains Mono",ui-monospace,monospace;font-size:11px;color:#1A1A1A;letter-spacing:.06em;white-space:nowrap}
   .strip{display:grid;grid-template-columns:1fr;gap:12px;border:1px solid #D8D2C2;padding:7px 9px}
   .strip.hasphoto{grid-template-columns:26mm 1fr}
   .photo{width:26mm;height:30mm;background:#E8E4D8;object-fit:cover;display:block}
   .cells{display:grid;grid-template-columns:repeat(3,1fr);gap:5px 12px;align-content:center}
-  .cell small{display:block;font-size:7.5px;letter-spacing:.12em;text-transform:uppercase;color:#8C8579}
-  .cell b{font-size:11px;font-weight:600}
+  .cell small{display:block;font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;color:#1A1A1A}
+  .cell b{font-size:13px;font-weight:600}
   .cell b.mono{font-family:"JetBrains Mono",ui-monospace,monospace;font-weight:500}
-  .cell b.name{font-family:Lora,Georgia,serif;font-size:14px}
+  .cell b.name{font-family:Lora,Georgia,serif;font-size:16px}
   .metrics{display:grid;grid-template-columns:repeat(6,1fr);border:1px solid #D8D2C2}
   .metrics div{padding:5px 6px;border-right:1px solid #D8D2C2;text-align:center}
   .metrics div:last-child{border-right:0}
-  .metrics .v{font-family:Lora,Georgia,serif;font-size:17px;font-weight:600;line-height:1.15}
+  .metrics .v{font-family:Lora,Georgia,serif;font-size:19px;font-weight:600;line-height:1.15}
   .metrics .v.red{color:#7B1F2B}
-  .metrics .k{font-size:7.5px;letter-spacing:.12em;text-transform:uppercase;color:#8C8579}
-  table{width:100%;border-collapse:collapse;font-size:10.5px}
-  th{font-size:7.5px;letter-spacing:.08em;text-transform:uppercase;color:#8C8579;text-align:center;padding:4px 3px;border-bottom:1px solid #1A1A1A;line-height:1.3;font-weight:600;vertical-align:bottom}
+  .metrics .k{font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;color:#1A1A1A}
+  table{width:100%;border-collapse:collapse;font-size:12.5px}
+  th{font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;color:#1A1A1A;text-align:center;padding:4px 3px;border-bottom:1px solid #1A1A1A;line-height:1.3;font-weight:600;vertical-align:bottom}
   th.l,td.l{text-align:left}
   th.band{border-bottom:1px solid #D8D2C2;color:#1A1A1A;letter-spacing:.14em;padding-bottom:2px}
   th.sep,td.sep{border-left:1px solid #D8D2C2}
   td{padding:5.5px 3px;text-align:center;border-bottom:1px solid #D8D2C2;color:#1A1A1A}
   tbody tr:nth-child(even) td{background:rgba(123,31,43,.035)}
-  td.sub{font-weight:600;font-size:11px}
-  td.sub small{display:block;font-weight:400;font-size:8.5px;color:#8C8579}
+  td.sub{font-weight:600;font-size:13px;white-space:nowrap}
+  td.sub small{display:block;font-weight:400;font-size:10.5px;color:#1A1A1A}
   td.t{font-weight:700}
   td.g{color:#7B1F2B;font-weight:700}
-  td.dim{color:#8C8579}
+  td.dim{color:#1A1A1A}
   td.fail{color:#7B1F2B;font-weight:700}
-  td small.mm{color:#B5AE9E;font-size:8px}
-  table.dense{font-size:9.5px}
-  table.dense td{padding:4.5px 2px}
-  table.dense th{letter-spacing:.04em;padding:3px 2px}
-  table.dense td.sub{font-size:10px}
+  td small.mm{color:#1A1A1A;font-size:10px}
+  table.dense{font-size:10.5px}
+  table.dense td{padding:4px 1.5px}
+  table.dense th{letter-spacing:.02em;padding:3px 1.5px;font-size:8.5px}
+  table.dense td.sub{font-size:11px;white-space:normal}
   table.roomy td{padding:8px 3px}
   tr.sum td{border-top:1px solid #1A1A1A;border-bottom:0;font-weight:700;background:none!important;white-space:nowrap}
   td.t,td.g{white-space:nowrap}
-  h4{font-size:7.5px;letter-spacing:.14em;text-transform:uppercase;color:#8C8579;margin:0 0 3px;font-weight:600}
+  h4{font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;color:#1A1A1A;margin:0 0 3px;font-weight:600}
   .row2{display:grid;grid-template-columns:1.25fr 1fr;gap:14px;margin-top:4px}
   .chart svg{width:100%;height:auto;display:block}
-  .legend{display:flex;gap:12px;font-size:8.5px;color:#8C8579;margin-top:2px}
+  .legend{display:flex;gap:12px;font-size:10.5px;color:#1A1A1A;margin-top:2px}
   .legend i{display:inline-block;width:9px;height:9px;margin-right:4px;vertical-align:-1px;border-radius:2px}
-  .co div{display:flex;justify-content:space-between;align-items:baseline;border-bottom:1px dotted #D8D2C2;padding:3.5px 0;font-size:10px}
-  .co small{color:#8C8579;font-style:italic;font-family:Lora,Georgia,serif;font-size:9px;margin-left:4px}
+  .co div{display:flex;justify-content:space-between;align-items:baseline;border-bottom:1px dotted #D8D2C2;padding:3.5px 0;font-size:12px}
+  .co small{color:#1A1A1A;font-style:italic;font-family:Lora,Georgia,serif;font-size:11px;margin-left:4px}
   .co b{color:#7B1F2B;font-family:"JetBrains Mono",ui-monospace,monospace;font-weight:500}
   .co b.plain{color:#1A1A1A;font-family:Inter,sans-serif;font-weight:600}
-  .bottom{display:grid;grid-template-columns:1.25fr 1fr;gap:14px;margin-top:2px;flex:1;min-height:34mm;max-height:64mm}
+  .bottom{display:grid;grid-template-columns:1.25fr 1fr;gap:14px;margin-top:2px;flex:1 0 auto;min-height:30mm}
   .bottom>div{display:flex;flex-direction:column}
-  .box{border:1px solid #D8D2C2;padding:7px 9px;font-size:10.5px;line-height:1.55;flex:1}
+  .box{border:1px solid #D8D2C2;padding:6px 9px;font-size:12.5px;line-height:1.45;flex:1}
   .box i{font-family:Lora,Georgia,serif}
-  .box .who{display:block;font-size:8px;color:#8C8579;margin-top:4px;letter-spacing:.06em;text-transform:uppercase}
-  .box .kv{display:grid;grid-template-columns:auto 1fr;gap:2px 10px}
-  .box .kv span{color:#8C8579;font-size:9.5px}
+  .box .who{display:block;font-size:10px;color:#1A1A1A;margin-top:4px;letter-spacing:.06em;text-transform:uppercase}
+  .box .kv{display:grid;grid-template-columns:auto 1fr;gap:0 10px}
+  .box .kv span{color:#1A1A1A;font-size:11.5px}
   .box .kv b{font-weight:600}
-  .box .result{font-family:Lora,Georgia,serif;font-size:13.5px;font-weight:700;color:#7B1F2B;margin-top:5px;letter-spacing:.04em}
-  .box .note{font-size:9px;color:#8C8579;margin-top:5px}
-  .key{font-size:8px;color:#8C8579;line-height:1.5}
-  .sig{display:flex;justify-content:space-between;margin-top:auto;padding-top:16px;font-size:8px;letter-spacing:.12em;text-transform:uppercase;color:#8C8579}
+  .box .result{font-family:Lora,Georgia,serif;font-size:15.5px;font-weight:700;color:#7B1F2B;margin-top:5px;letter-spacing:.04em}
+  .box .note{font-size:11px;color:#1A1A1A;margin-top:5px}
+  .key{font-size:10px;color:#1A1A1A;line-height:1.5}
+  .sig{display:flex;justify-content:space-between;margin-top:auto;padding-top:16px;font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:#1A1A1A}
   .sig div{border-top:1px solid #1A1A1A;width:44mm;text-align:center;padding-top:4px}
-  .foot{display:flex;justify-content:space-between;font-family:"JetBrains Mono",ui-monospace,monospace;font-size:7.5px;color:#8C8579}
+  .foot{display:flex;justify-content:space-between;font-family:"JetBrains Mono",ui-monospace,monospace;font-size:9.5px;color:#1A1A1A}
   @media print{body{background:#fff}.page{margin:0;page-break-after:always}@page{size:A4 portrait;margin:0}}
 `
 
@@ -238,10 +238,10 @@ function tableSecondary(card, shown) {
     const wr = has ? (ex.absent ? 'AB' : fmt(ex.theoryMax ? ex.theory : ex.value)) : dash
     const pr = has ? (ex.absent ? 'AB' : (ex.practicalMax ? fmt(ex.practical) : dash)) : dash
     const exT = has ? (ex.absent ? 'AB' : fmt(ex.value)) : dash
-    return `<tr><td class="l sub">${esc(title(r.subject))}${r.additional ? '<small>Additional subject · not in aggregate</small>' : ''}</td>${grey(esc(r.locCode || ''))}${ia.map((c) => `<td>${cellVal(cell.comps?.[c.key])}</td>`).join('')}<td class="t">${iaOk ? iaSum : dash}</td><td class="sep">${pr}</td><td>${wr}</td><td class="t">${exT}</td><td class="t sep">${cell.complete ? cell.obtained : dash}</td>${gradeCell(cell.complete ? cell.grade : null)}${sc.cell(r)}</tr>`
+    return `<tr><td class="l sub">${esc(title(r.subject))}${r.additional ? '<small>Additional · not in aggregate</small>' : ''}</td>${grey(esc(r.locCode || ''))}${ia.map((c) => `<td>${cellVal(cell.comps?.[c.key])}</td>`).join('')}<td class="t">${iaOk ? iaSum : dash}</td><td class="sep">${pr}</td><td>${wr}</td><td class="t">${exT}</td><td class="t sep">${cell.complete ? cell.obtained : dash}</td>${gradeCell(cell.complete ? cell.grade : null)}${sc.cell(r)}</tr>`
   }).join('')
   const o = card.overall
-  return `<table><thead>${head}</thead><tbody>${body}<tr class="sum"><td class="l" colspan="${ia.length + 6}">Aggregate · excluding additional subjects</td><td class="sep">${totalCell(o)}</td>${gradeCell(o.grade)}${sc.sum}</tr></tbody></table>`
+  return `<table class="dense"><thead>${head}</thead><tbody>${body}<tr class="sum"><td class="l" colspan="${ia.length + 6}">Aggregate · excluding additional subjects</td><td class="sep">${totalCell(o)}</td>${gradeCell(o.grade)}${sc.sum}</tr></tbody></table>`
 }
 
 // ── family: senior_progress (XI–XII) ────────────────────────────────────────
@@ -295,17 +295,17 @@ function chart(card, shown, final) {
   if (!rows.length) return ''
   const perRow = (r, k) => r.byTerm[k]?.max || null
   const per = card.family === 'secondary_annual' ? (card.plan.subjectTotal || 100) : (Math.max(...rows.map((r) => perRow(r, shown[0]?.key) || 0)) || 100)
-  const W = 400, base = 118, H = 104, n = rows.length, gw = W / n
+  const W = 400, base = 108, H = 94, n = rows.length, gw = W / n
   const y = (v) => base - Math.max(0, Math.min(per, v)) * H / per
-  const grid = [25, 50, 75, 100].map((p) => { const v = Math.round(per * p / 100); return `<line x1="0" x2="${W}" y1="${y(v)}" y2="${y(v)}" stroke="#E8E4D8" stroke-width=".6"/><text x="0" y="${y(v) - 1.5}" font-size="6" fill="#B5AE9E" font-family="Inter,sans-serif">${v}</text>` }).join('')
-  const labels = rows.map((r, i) => `<text x="${i * gw + gw / 2}" y="${base + 9}" text-anchor="middle" font-size="6" fill="#8C8579" font-family="Inter,sans-serif">${esc(shortName(r.subject).toUpperCase())}</text>`).join('')
+  const grid = [25, 50, 75, 100].map((p) => { const v = Math.round(per * p / 100); return `<line x1="0" x2="${W}" y1="${y(v)}" y2="${y(v)}" stroke="#E8E4D8" stroke-width=".6"/><text x="0" y="${y(v) - 1.5}" font-size="8" fill="#1A1A1A" font-family="Inter,sans-serif">${v}</text>` }).join('')
+  const labels = rows.map((r, i) => `<text x="${i * gw + gw / 2}" y="${base + 9}" text-anchor="middle" font-size="8" fill="#1A1A1A" font-family="Inter,sans-serif">${esc(shortName(r.subject).toUpperCase())}</text>`).join('')
   const bw = Math.min(12, gw / 2.6)
   let bars, legend, h4
   if (final && shown.length >= 2) {
     const [a, b] = shown
     bars = rows.map((r, i) => {
       const x = i * gw + gw / 2, ca = r.byTerm[a.key], cb = r.byTerm[b.key]; const va = ca?.complete ? ca.obtained : 0, vb = cb?.complete ? cb.obtained : 0
-      return `<rect x="${x - bw - 1}" y="${y(va)}" width="${bw}" height="${base - y(va)}" fill="#D8D2C2"/><rect x="${x + 1}" y="${y(vb)}" width="${bw}" height="${base - y(vb)}" fill="#7B1F2B"/>${cb?.complete ? `<text x="${x + 1 + bw / 2}" y="${y(vb) - 2}" text-anchor="middle" font-size="6.5" font-weight="700" fill="#7B1F2B" font-family="Inter,sans-serif">${vb}</text>` : ''}`
+      return `<rect x="${x - bw - 1}" y="${y(va)}" width="${bw}" height="${base - y(va)}" fill="#D8D2C2"/><rect x="${x + 1}" y="${y(vb)}" width="${bw}" height="${base - y(vb)}" fill="#7B1F2B"/>${cb?.complete ? `<text x="${x + 1 + bw / 2}" y="${y(vb) - 2}" text-anchor="middle" font-size="8.5" font-weight="700" fill="#7B1F2B" font-family="Inter,sans-serif">${vb}</text>` : ''}`
     }).join('')
     legend = `<span><i style="background:#D8D2C2"></i>${esc(a.label)}</span><span><i style="background:#7B1F2B"></i>${esc(b.label)}</span>`
     h4 = `${esc(a.label)} against ${esc(b.label)} · marks out of ${per}`
@@ -317,12 +317,12 @@ function chart(card, shown, final) {
       const avg = card.sectionAverageByTerm?.[`${r.subject}|${t}`] ?? card.sectionAverage?.[r.subject]; const hi = card.sectionHighest?.[r.subject]
       const mine = hasSection ? `<rect x="${x + 1}" y="${y(v)}" width="${bw}" height="${base - y(v)}" fill="#7B1F2B"/>` : `<rect x="${x - bw / 2}" y="${y(v)}" width="${bw}" height="${base - y(v)}" fill="#7B1F2B"/>`
       const lx = hasSection ? x + 1 + bw / 2 : x
-      return `${hasSection && avg != null ? `<rect x="${x - bw - 1}" y="${y(avg)}" width="${bw}" height="${base - y(avg)}" fill="#D8D2C2"/>` : ''}${mine}${hasSection && hi != null ? `<line x1="${x - bw - 2}" x2="${x + bw + 2}" y1="${y(hi)}" y2="${y(hi)}" stroke="#1A1A1A" stroke-width=".9"/>` : ''}${c?.complete ? `<text x="${lx}" y="${y(v) - 2}" text-anchor="middle" font-size="6.5" font-weight="700" fill="#7B1F2B" font-family="Inter,sans-serif">${v}</text>` : ''}`
+      return `${hasSection && avg != null ? `<rect x="${x - bw - 1}" y="${y(avg)}" width="${bw}" height="${base - y(avg)}" fill="#D8D2C2"/>` : ''}${mine}${hasSection && hi != null ? `<line x1="${x - bw - 2}" x2="${x + bw + 2}" y1="${y(hi)}" y2="${y(hi)}" stroke="#1A1A1A" stroke-width=".9"/>` : ''}${c?.complete ? `<text x="${lx}" y="${y(v) - 2}" text-anchor="middle" font-size="8.5" font-weight="700" fill="#7B1F2B" font-family="Inter,sans-serif">${v}</text>` : ''}`
     }).join('')
     legend = `<span><i style="background:#7B1F2B"></i>${esc((card.student?.name || 'Student').split(' ')[0])}</span>${hasSection ? '<span><i style="background:#D8D2C2"></i>Section average</span><span><i style="border:1px solid #1A1A1A;background:#FAF7F0"></i>Section highest</span>' : ''}`
     h4 = `${esc(shown[0]?.label || '')} · marks out of ${per}${hasSection ? ' against the section' : ''}`
   }
-  return `<h4>${h4}</h4><svg viewBox="0 0 400 134">${grid}${bars}<line x1="0" x2="${W}" y1="${base}" y2="${base}" stroke="#1A1A1A" stroke-width=".8"/>${labels}</svg><div class="legend">${legend}</div>`
+  return `<h4>${h4}</h4><svg viewBox="0 0 400 124">${grid}${bars}<line x1="0" x2="${W}" y1="${base}" y2="${base}" stroke="#1A1A1A" stroke-width=".8"/>${labels}</svg><div class="legend">${legend}</div>`
 }
 
 // ── co-scholastic list (graded subjects, areas, discipline, height/weight) ──
