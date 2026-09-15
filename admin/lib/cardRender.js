@@ -33,8 +33,8 @@ const CSS = `
   body{margin:0;background:#e9e7e0;font-family:Inter,system-ui,-apple-system,"Segoe UI",sans-serif;color:#1A1A1A;font-variant-numeric:tabular-nums;-webkit-print-color-adjust:exact;print-color-adjust:exact}
   .page{width:210mm;height:297mm;margin:0 auto;background:#FAF7F0;color:#1A1A1A;position:relative;padding:10mm 12mm 8mm;display:flex;flex-direction:column;gap:6px;overflow:hidden}
   .hd{display:flex;align-items:center;gap:12px;border-bottom:1px solid #D8D2C2;padding-bottom:7px}
-  .hd img.crest{width:48px;height:48px;object-fit:contain;flex-shrink:0}
-  .school img.wordmark{display:block;height:44px;width:auto;max-width:260px;margin-bottom:2px}
+  .hd img.crest{width:62px;height:62px;object-fit:contain;flex-shrink:0}
+  .school img.wordmark{display:block;height:50px;width:auto;max-width:300px}
   .school b{display:block;font-family:Lora,Georgia,serif;font-size:22px;letter-spacing:.06em;line-height:1.1}
   .school span{font-size:12px;color:#1A1A1A}
   .meta{margin-left:auto;text-align:right;font-family:"JetBrains Mono",ui-monospace,monospace;font-size:10px;color:#1A1A1A;line-height:1.6;white-space:nowrap}
@@ -56,24 +56,24 @@ const CSS = `
   .metrics .v{font-family:Lora,Georgia,serif;font-size:19px;font-weight:600;line-height:1.15;white-space:nowrap}
   .metrics .v.red{color:#7B1F2B}
   .metrics .k{font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;color:#1A1A1A}
-  table{width:100%;border-collapse:collapse;font-size:12.5px}
-  th{font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;color:#1A1A1A;text-align:center;padding:4px 3px;border-bottom:1px solid #1A1A1A;line-height:1.3;font-weight:600;vertical-align:bottom}
+  table{width:100%;border-collapse:collapse;font-size:14px}
+  th{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:#1A1A1A;text-align:center;padding:4px 3px;border-bottom:1px solid #1A1A1A;line-height:1.3;font-weight:600;vertical-align:bottom}
   th.l,td.l{text-align:left}
   th.band{border-bottom:1px solid #D8D2C2;color:#1A1A1A;letter-spacing:.14em;padding-bottom:2px}
   th.sep,td.sep{border-left:1px solid #D8D2C2}
   td{padding:5.5px 3px;text-align:center;border-bottom:1px solid #D8D2C2;color:#1A1A1A}
   tbody tr:nth-child(even) td{background:rgba(123,31,43,.035)}
-  td.sub{font-weight:600;font-size:13px;white-space:nowrap}
-  td.sub small{display:block;font-weight:400;font-size:10.5px;color:#1A1A1A}
+  td.sub{font-weight:600;font-size:14.5px;white-space:nowrap}
+  td.sub small{display:block;font-weight:400;font-size:12px;color:#1A1A1A}
   td.t{font-weight:700}
   td.g{color:#7B1F2B;font-weight:700}
   td.dim{color:#1A1A1A}
   td.fail{color:#7B1F2B;font-weight:700}
-  td small.mm{color:#1A1A1A;font-size:10px}
-  table.dense{font-size:10.5px}
-  table.dense td{padding:4px 1.5px}
-  table.dense th{letter-spacing:.02em;padding:3px 1.5px;font-size:8.5px}
-  table.dense td.sub{font-size:11px;white-space:normal}
+  td small.mm{color:#1A1A1A;font-size:11.5px}
+  table.dense{font-size:11px}
+  table.dense td{padding:4px 1px}
+  table.dense th{letter-spacing:0;padding:3px 1px;font-size:9px}
+  table.dense td.sub{font-size:12.5px;white-space:normal}
   table.roomy td{padding:8px 3px}
   tr.sum td{border-top:1px solid #1A1A1A;border-bottom:0;font-weight:700;background:none!important;white-space:nowrap}
   td.t,td.g{white-space:nowrap}
@@ -97,7 +97,7 @@ const CSS = `
   .box .result{font-family:Lora,Georgia,serif;font-size:16px;font-weight:700;color:#7B1F2B;margin-top:2px;letter-spacing:.04em}
   .box .note{font-size:11px;color:#1A1A1A;margin-top:5px}
   .key{font-size:10px;color:#1A1A1A;line-height:1.5}
-  .sig{display:flex;justify-content:space-between;margin-top:auto;padding-top:22mm;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:#1A1A1A}
+  .sig{display:flex;justify-content:space-between;margin-top:auto;padding-top:14mm;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:#1A1A1A}
   .sig div{border-top:1px solid #1A1A1A;width:44mm;text-align:center;padding-top:4px}
   .foot{display:flex;justify-content:space-between;font-family:"JetBrains Mono",ui-monospace,monospace;font-size:9.5px;color:#1A1A1A}
   @media print{body{background:#fff}.page{margin:0;page-break-after:always}@page{size:A4 portrait;margin:0}}
@@ -143,7 +143,7 @@ export function renderCardBody(card) {
 function recordNo(card) { return `RC/${card.student?.branchCode || 'RKA'}/${card.sessionCode}/${card.cardKey}/${card.student?.admissionNo || dash}` }
 function header(card) {
   return `<div class="hd"><img class="crest" src="${assetBase()}/crest-card.png" alt="" onerror="this.style.visibility='hidden'">
-    <div class="school"><img class="wordmark" src="${assetBase()}/banner-card.png" alt="RADHAKRISHNA ACADEMY" onerror="this.replaceWith(Object.assign(document.createElement('b'),{textContent:'RADHAKRISHNA ACADEMY'}))"><span>${esc(ADDRESS)}${card.student?.branchName ? ' · ' + esc(card.student.branchName) : ''}</span></div>
+    <div class="school"><img class="wordmark" src="${assetBase()}/banner-card.png" alt="RADHAKRISHNA ACADEMY" onerror="this.replaceWith(Object.assign(document.createElement('b'),{textContent:'RADHAKRISHNA ACADEMY'}))"></div>
     <div class="meta">AFFILIATION <b>${AFFILIATION}</b><br>SCHOOL CODE <b>${SCHOOL_CODE}</b><br>RECORD ${esc(recordNo(card))}</div></div>`
 }
 function titleStrip(card, shown) {
@@ -295,7 +295,7 @@ function chart(card, shown, final) {
   if (!rows.length) return ''
   const perRow = (r, k) => r.byTerm[k]?.max || null
   const per = card.family === 'secondary_annual' ? (card.plan.subjectTotal || 100) : (Math.max(...rows.map((r) => perRow(r, shown[0]?.key) || 0)) || 100)
-  const W = 400, base = 108, H = 94, n = rows.length, gw = W / n
+  const W = 400, base = 150, H = 134, n = rows.length, gw = W / n
   const y = (v) => base - Math.max(0, Math.min(per, v)) * H / per
   const grid = [25, 50, 75, 100].map((p) => { const v = Math.round(per * p / 100); return `<line x1="0" x2="${W}" y1="${y(v)}" y2="${y(v)}" stroke="#E8E4D8" stroke-width=".6"/><text x="0" y="${y(v) - 1.5}" font-size="8" fill="#1A1A1A" font-family="Inter,sans-serif">${v}</text>` }).join('')
   const labels = rows.map((r, i) => `<text x="${i * gw + gw / 2}" y="${base + 9}" text-anchor="middle" font-size="8" fill="#1A1A1A" font-family="Inter,sans-serif">${esc(shortName(r.subject).toUpperCase())}</text>`).join('')
@@ -322,7 +322,7 @@ function chart(card, shown, final) {
     legend = `<span><i style="background:#7B1F2B"></i>${esc((card.student?.name || 'Student').split(' ')[0])}</span>${hasSection ? '<span><i style="background:#D8D2C2"></i>Section average</span><span><i style="border:1px solid #1A1A1A;background:#FAF7F0"></i>Section highest</span>' : ''}`
     h4 = `${esc(shown[0]?.label || '')} · marks out of ${per}${hasSection ? ' against the section' : ''}`
   }
-  return `<h4>${h4}</h4><svg viewBox="0 0 400 124">${grid}${bars}<line x1="0" x2="${W}" y1="${base}" y2="${base}" stroke="#1A1A1A" stroke-width=".8"/>${labels}</svg><div class="legend">${legend}</div>`
+  return `<h4>${h4}</h4><svg viewBox="0 0 400 166">${grid}${bars}<line x1="0" x2="${W}" y1="${base}" y2="${base}" stroke="#1A1A1A" stroke-width=".8"/>${labels}</svg><div class="legend">${legend}</div>`
 }
 
 // ── co-scholastic list (graded subjects, areas, discipline, height/weight) ──
