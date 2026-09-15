@@ -50,10 +50,10 @@ const CSS = `
   .cell b{font-size:13px;font-weight:600}
   .cell b.mono{font-family:"JetBrains Mono",ui-monospace,monospace;font-weight:500}
   .cell b.name{font-family:Lora,Georgia,serif;font-size:16px}
-  .metrics{display:grid;grid-template-columns:repeat(6,1fr);border:1px solid #D8D2C2}
+  .metrics{display:grid;grid-template-columns:1.2fr 1.35fr .9fr .7fr .7fr;border:1px solid #D8D2C2}
   .metrics div{padding:5px 6px;border-right:1px solid #D8D2C2;text-align:center}
   .metrics div:last-child{border-right:0}
-  .metrics .v{font-family:Lora,Georgia,serif;font-size:19px;font-weight:600;line-height:1.15}
+  .metrics .v{font-family:Lora,Georgia,serif;font-size:19px;font-weight:600;line-height:1.15;white-space:nowrap}
   .metrics .v.red{color:#7B1F2B}
   .metrics .k{font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;color:#1A1A1A}
   table{width:100%;border-collapse:collapse;font-size:12.5px}
@@ -78,26 +78,26 @@ const CSS = `
   tr.sum td{border-top:1px solid #1A1A1A;border-bottom:0;font-weight:700;background:none!important;white-space:nowrap}
   td.t,td.g{white-space:nowrap}
   h4{font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;color:#1A1A1A;margin:0 0 3px;font-weight:600}
-  .row2{display:grid;grid-template-columns:1.25fr 1fr;gap:14px;margin-top:4px}
+  .row2{display:grid;grid-template-columns:1.05fr 1fr;gap:16px;margin-top:4px}
   .chart svg{width:100%;height:auto;display:block}
   .legend{display:flex;gap:12px;font-size:10.5px;color:#1A1A1A;margin-top:2px}
   .legend i{display:inline-block;width:9px;height:9px;margin-right:4px;vertical-align:-1px;border-radius:2px}
-  .co div{display:flex;justify-content:space-between;align-items:baseline;border-bottom:1px dotted #D8D2C2;padding:3.5px 0;font-size:12px}
-  .co small{color:#1A1A1A;font-style:italic;font-family:Lora,Georgia,serif;font-size:11px;margin-left:4px}
-  .co b{color:#7B1F2B;font-family:"JetBrains Mono",ui-monospace,monospace;font-weight:500}
+  .co div{display:flex;justify-content:space-between;align-items:baseline;border-bottom:1px dotted #D8D2C2;padding:5px 0;font-size:14px}
+  .co small{color:#1A1A1A;font-style:italic;font-family:Lora,Georgia,serif;font-size:12px;margin-left:5px}
+  .co b{color:#7B1F2B;font-family:"JetBrains Mono",ui-monospace,monospace;font-weight:700;font-size:15px}
   .co b.plain{color:#1A1A1A;font-family:Inter,sans-serif;font-weight:600}
-  .bottom{display:grid;grid-template-columns:1.25fr 1fr;gap:14px;margin-top:2px;flex:1 0 auto;min-height:30mm}
+  .bottom{display:grid;grid-template-columns:1.4fr 1fr;gap:14px;margin-top:2px;flex:0 0 auto}
   .bottom>div{display:flex;flex-direction:column}
-  .box{border:1px solid #D8D2C2;padding:6px 9px;font-size:12.5px;line-height:1.45;flex:1}
+  .box{border:1px solid #D8D2C2;padding:6px 9px;font-size:12.5px;line-height:1.45;min-height:20mm}
   .box i{font-family:Lora,Georgia,serif}
   .box .who{display:block;font-size:10px;color:#1A1A1A;margin-top:4px;letter-spacing:.06em;text-transform:uppercase}
   .box .kv{display:grid;grid-template-columns:auto 1fr;gap:0 10px}
   .box .kv span{color:#1A1A1A;font-size:11.5px}
   .box .kv b{font-weight:600}
-  .box .result{font-family:Lora,Georgia,serif;font-size:15.5px;font-weight:700;color:#7B1F2B;margin-top:5px;letter-spacing:.04em}
+  .box .result{font-family:Lora,Georgia,serif;font-size:16px;font-weight:700;color:#7B1F2B;margin-top:2px;letter-spacing:.04em}
   .box .note{font-size:11px;color:#1A1A1A;margin-top:5px}
   .key{font-size:10px;color:#1A1A1A;line-height:1.5}
-  .sig{display:flex;justify-content:space-between;margin-top:auto;padding-top:16px;font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:#1A1A1A}
+  .sig{display:flex;justify-content:space-between;margin-top:auto;padding-top:22mm;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:#1A1A1A}
   .sig div{border-top:1px solid #1A1A1A;width:44mm;text-align:center;padding-top:4px}
   .foot{display:flex;justify-content:space-between;font-family:"JetBrains Mono",ui-monospace,monospace;font-size:9.5px;color:#1A1A1A}
   @media print{body{background:#fff}.page{margin:0;page-break-after:always}@page{size:A4 portrait;margin:0}}
@@ -175,13 +175,12 @@ function metrics(card, shown, final) {
   const a = attendanceFor(card, shown, final)
   const o = card.overall
   const present = a ? Math.round(a.present) : null, marked = a ? Math.round(a.marked) : null
-  const pctLabel = final || card.family === 'secondary_annual' ? 'Session' : (shown.length === 1 ? shown[0].label : 'Overall')
+  const scope = final || card.family === 'secondary_annual' ? 'Session' : (shown.length === 1 ? shown[0].label : 'Overall')
   return `<div class="metrics">
-    <div><div class="v">${fmt(marked)}</div><div class="k">Working days</div></div>
-    <div><div class="v">${fmt(present)}</div><div class="k">Present</div></div>
-    <div><div class="v red">${marked != null ? marked - present : dash}</div><div class="k">Absent</div></div>
-    <div><div class="v">${marked ? pct1(100 * present / marked) : dash}</div><div class="k">Attendance</div></div>
-    <div><div class="v">${o.pct != null ? pct1(o.pct) : dash}</div><div class="k">${esc(pctLabel)}${o.grade ? ' · grade ' + esc(o.grade) : ''}</div></div>
+    <div><div class="v">${marked != null ? `${present} / ${marked}` : dash}</div><div class="k">Attendance${marked ? ' · ' + pct1(100 * present / marked) : ''}</div></div>
+    <div><div class="v">${totalCell(o)}</div><div class="k">${esc(scope)} marks</div></div>
+    <div><div class="v">${o.pct != null ? pct1(o.pct) : dash}</div><div class="k">Percentage</div></div>
+    <div><div class="v red">${o.grade ? esc(o.grade) : dash}</div><div class="k">Grade</div></div>
     <div><div class="v red">${fmt(card.rank)}</div><div class="k">Rank</div></div>
   </div>`
 }
@@ -343,17 +342,14 @@ function coScholastic(card, shown) {
 
 // ── result box ──────────────────────────────────────────────────────────────
 function resultBox(card, final) {
-  const o = card.overall
   const isFinal = final || card.family === 'secondary_annual'
-  const kv = [['Marks', totalCell(o)], ['Percentage', pct1(o.pct)], ['Grade', o.grade || dash], ['Rank', card.rank != null ? String(card.rank) : dash]]
-  let tail = ''
   if (isFinal) {
     const promo = card.session?.promotedTo
-    if (card.family === 'secondary_annual' && card.result) tail = `<div class="result">RESULT: ${esc(card.result)}</div>`
-    else if (promo) { const p = String(promo).replace(/^Class /i, '').toUpperCase(); tail = `<div class="result">PROMOTED TO ${/^\d/.test(p) ? 'CLASS ' : ''}${esc(p)}</div>` }
-    else tail = `<div class="note">Promotion as decided by the school.</div>`
-  } else tail = `<div class="note">Promotion is decided on the final card.</div>`
-  return `<div class="kv">${kv.map(([k, v]) => `<span>${k}</span><b>${esc(v)}</b>`).join('')}</div>${tail}`
+    if (card.family === 'secondary_annual' && card.result) return `<div class="result">RESULT: ${esc(card.result)}</div>`
+    if (promo) { const p = String(promo).replace(/^Class /i, '').toUpperCase(); return `<div class="result">PROMOTED TO ${/^\d/.test(p) ? 'CLASS ' : ''}${esc(p)}</div>` }
+    return `<div class="note">Promotion as decided by the school.</div>`
+  }
+  return `<div class="note">Promotion is decided on the final card.</div>`
 }
 function gradeKey(card) {
   const b = card.scales?.gradeScale?.bands || []
