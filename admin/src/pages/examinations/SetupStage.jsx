@@ -52,6 +52,9 @@ export default function SetupStage({ branch, sessionCode, className, config, ref
   const onCardNames = useMemo(() => new Set(cardRows.flatMap((r) => r.mapped || [])), [cardRows])
   const otherSubjects = useMemo(() => classSubjects.filter((s) => !onCardNames.has(s.subject_name) && !['RCA', 'RCG'].includes(s.subject_code)).sort((a, b) => (a.kind === b.kind ? a.subject_name.localeCompare(b.subject_name) : a.kind === 'co_scholastic' ? 1 : -1)), [classSubjects, onCardNames])
   const subjects = classSubjects
+  // Family of the template bound to this class — drives whether "Add to card"
+  // offers core/optional (seniors) or a single classRows row (other families).
+  const cardFamily = useMemo(() => (templates.find((t) => t.id === classMap[selected])?.family) || null, [templates, classMap, selected])
   // canonical exam-subject name for a card row that has no subject yet
   const CANON = { 'ENGLISH LNG & LIT.': 'English', 'ENGLISH CORE': 'English', 'HINDI COURSE-A': 'Hindi', 'HINDI CORE': 'Hindi', 'GENERAL AWARENESS WRITTEN': 'General Awareness', 'GK': 'GK' }
   const canonName = (row) => CANON[row] || row.toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase()).replace(/\bAnd\b/, '&')
@@ -126,6 +129,44 @@ export default function SetupStage({ branch, sessionCode, className, config, ref
     if (!confirm(`Remove ${s.subject_name} from ${s.class_name}? Its generated papers go with it (refused if any marks exist).`)) return
     setBusy(s.id)
     try { await examApi.deleteSubject(s.id); await refreshConfig(); say('Removed') } catch (e) { fail(e) }
+    setBusy('')
+  }
+  // Promote a subject from the "other subjects" list onto this class's card by
+  // appending it to the bound template's definition — seniors use coreOrder /
+  // optionalOrder (+ a default scheme), other families use classRows. Mirrors
+  // RulesStage's addToList / addRow so both entry points behave identically.
+  async function addToCard(s, which) {
+    const tpl = templates.find((t) => t.id === classMap[selected])
+    if (!tpl) { setErr('Bind a report-card template to this class first (above).'); return }
+    const name = s.subject_name.trim().toUpperCase()
+    const fam = tpl.family
+    setBusy(s.id); setErr('')
+    try {
+      const def = JSON.parse(JSON.stringify(tpl.definition || {}))
+      if (fam === 'senior_progress') {
+        const key = which === 'optionalOrder' ? 'optionalOrder' : 'coreOrder'
+        const fallback = key === 'optionalOrder'
+          ? (/Commerce$/.test(selected) ? ['PHYSICAL EDUCATION', 'COMPUTER SCIENCE', 'HINDI CORE', 'MATHEMATICS'] : ['PHYSICAL EDUCATION', 'COMPUTER SCIENCE', 'HINDI CORE'])
+          : []
+        const cur = def[key]?.[selected] || fallback
+        if (cur.some((n) => String(n).toUpperCase() === name)) { say(`${s.subject_name} is already on the card`); setBusy(''); return }
+        def.schemes = def.schemes || {}
+        if (!def.schemes[name]) def.schemes[name] = { theory: 80, practical: 20 }
+        def[key] = def[key] || {}
+        def[key][selected] = [...cur, name]
+      } else {
+        def.classRows = def.classRows || {}
+        const cur = def.classRows[selected] || []
+        if (cur.some((r) => String(r.subject || '').toUpperCase() === name)) { say(`${s.subject_name} is already on the card`); setBusy(''); return }
+        const row = fam === 'secondary_annual' ? { subject: name, locCode: '', written: 80, practical: 0 }
+          : fam === 'pre_primary' ? { subject: name, oral: 40, written: 60 }
+          : { subject: name }
+        def.classRows[selected] = [...cur, row]
+      }
+      await reportTemplateApi.save(tpl.id, { definition: def })
+      await refreshConfig(); setRulesTick((n) => n + 1)
+      say(`${s.subject_name} added to the card — set its marks split in Rules`)
+    } catch (e) { fail(e) }
     setBusy('')
   }
 
@@ -301,7 +342,19 @@ export default function SetupStage({ branch, sessionCode, className, config, ref
                                   {!s.assigned_teacher_id && s.assigned_teacher_email && <option value="">{s.assigned_teacher_email}</option>}
                                   {teacherOpts}
                                 </select></td>
-                        <td style={{ ...td, textAlign: 'right', whiteSpace: 'nowrap' }}><Btn small kind="danger" onClick={() => removeSubject(s)}>✕ remove</Btn></td>
+                        <td style={{ ...td, textAlign: 'right', whiteSpace: 'nowrap' }}>
+                          {classMap[selected] && s.kind !== 'co_scholastic' && (
+                            cardFamily === 'senior_progress' ? (
+                              <>
+                                <Btn small onClick={() => addToCard(s, 'coreOrder')} disabled={busy === s.id} title="Add as a core subject — appears for every student in this class">+ core</Btn>{' '}
+                                <Btn small onClick={() => addToCard(s, 'optionalOrder')} disabled={busy === s.id} title="Add as a one-per-student optional (chosen in SMS)">+ optional</Btn>{' '}
+                              </>
+                            ) : (
+                              <><Btn small onClick={() => addToCard(s)} disabled={busy === s.id} title="Add this subject to the report card">+ add to card</Btn>{' '}</>
+                            )
+                          )}
+                          <Btn small kind="danger" onClick={() => removeSubject(s)}>✕ remove</Btn>
+                        </td>
                       </tr>
                     ))}</tbody>
                   </table></div>
