@@ -56,30 +56,30 @@ const CSS = `
   .metrics .v{font-family:Lora,Georgia,serif;font-size:19px;font-weight:600;line-height:1.15;white-space:nowrap}
   .metrics .v.red{color:#7B1F2B}
   .metrics .k{font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;color:#1A1A1A}
-  table{width:100%;border-collapse:collapse;font-size:14px}
-  th{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:#1A1A1A;text-align:center;padding:4px 3px;border-bottom:1px solid #1A1A1A;line-height:1.3;font-weight:600;vertical-align:bottom}
+  table{width:100%;border-collapse:collapse;font-size:12.5px}
+  th{font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;color:#1A1A1A;text-align:center;padding:4px 3px;border-bottom:1px solid #1A1A1A;line-height:1.3;font-weight:600;vertical-align:bottom}
   th.l,td.l{text-align:left}
   th.band{border-bottom:1px solid #D8D2C2;color:#1A1A1A;letter-spacing:.14em;padding-bottom:2px}
   th.sep,td.sep{border-left:1px solid #D8D2C2}
   td{padding:5.5px 3px;text-align:center;border-bottom:1px solid #D8D2C2;color:#1A1A1A}
   tbody tr:nth-child(even) td{background:rgba(123,31,43,.035)}
-  td.sub{font-weight:600;font-size:14.5px;white-space:nowrap}
-  td.sub small{display:block;font-weight:400;font-size:12px;color:#1A1A1A}
+  td.sub{font-weight:600;font-size:13px;white-space:nowrap}
+  td.sub small{display:block;font-weight:400;font-size:10.5px;color:#1A1A1A}
   td.t{font-weight:700}
   td.g{color:#7B1F2B;font-weight:700}
   td.dim{color:#1A1A1A}
   td.fail{color:#7B1F2B;font-weight:700}
-  td small.mm{color:#1A1A1A;font-size:11.5px}
-  table.dense{font-size:11px}
+  td small.mm{color:#1A1A1A;font-size:10px}
+  table.dense{font-size:10.5px}
   table.dense td{padding:4px 1px}
-  table.dense th{letter-spacing:0;padding:3px 1px;font-size:9px}
-  table.dense td.sub{font-size:12.5px;white-space:normal}
+  table.dense th{letter-spacing:.02em;padding:3px 1.5px;font-size:8.5px}
+  table.dense td.sub{font-size:11px;white-space:normal}
   table.roomy td{padding:8px 3px}
   tr.sum td{border-top:1px solid #1A1A1A;border-bottom:0;font-weight:700;background:none!important;white-space:nowrap}
   td.t,td.g{white-space:nowrap}
   h4{font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;color:#1A1A1A;margin:0 0 3px;font-weight:600}
   .row2{display:grid;grid-template-columns:1.05fr 1fr;gap:16px;margin-top:4px}
-  .chart svg{width:100%;height:auto;display:block}
+  .chart svg{width:100%;height:auto;display:block;margin-top:10px}
   .legend{display:flex;gap:12px;font-size:10.5px;color:#1A1A1A;margin-top:2px}
   .legend i{display:inline-block;width:9px;height:9px;margin-right:4px;vertical-align:-1px;border-radius:2px}
   .co div{display:flex;justify-content:space-between;align-items:baseline;border-bottom:1px dotted #D8D2C2;padding:5px 0;font-size:14px}
@@ -203,11 +203,14 @@ function tablePerformance(card, shown, final) {
   const comps = card.plan.components
   const perTerm = comps.reduce((s, c) => s + (c.max || 0), 0)
   const sc = sectionCols(card, shown, final)
-  const compHead = (first) => comps.map((c, j) => `<th class="${!first && !j ? 'sep' : ''}">${esc(c.label)}<br>/${c.max}</th>`).join('')
+  // print labels: PA-1 / PA-2 for the periodic test, PF, S.E., and HY / AN for the term exam
+  const short = (c, ti) => c.key === 'pt' ? `PA-${ti + 1}` : c.key === 'portfolio' ? 'PF' : c.key === 'se' ? 'S.E.' : c.key === 'exam' ? (ti === 0 ? 'HY' : 'AN') : c.label
+  const termIdx = (key) => Math.max(0, card.plan.cardTerms.findIndex((x) => x.key === key))
+  const compHead = (first, ti = 0) => comps.map((c, j) => `<th class="${!first && !j ? 'sep' : ''}">${esc(short(c, ti))}<br>/${c.max}</th>`).join('')
   const head = final
     ? `<tr><th class="l" rowspan="2">Scholastic area</th>${shown.map((t, i) => `<th class="band ${i ? 'sep' : ''}" colspan="${comps.length + 2}">${esc(t.label)}${t.examLabel ? ' · ' + esc(t.examLabel) : ''}</th>`).join('')}<th class="band sep" colspan="2">Session</th></tr>
-       <tr>${shown.map((t, i) => compHead(i === 0) + `<th>Total<br>/${perTerm}</th><th>Grade</th>`).join('')}<th class="sep">Total<br>/${perTerm * shown.length}</th><th>Grade</th></tr>`
-    : `<tr><th class="l">Scholastic area</th>${compHead(true)}<th class="sep">Total<br>/${perTerm}</th><th>Grade</th>${sc.head}</tr>`
+       <tr>${shown.map((t, i) => compHead(i === 0, termIdx(t.key)) + `<th>Total<br>/${perTerm}</th><th>Grade</th>`).join('')}<th class="sep">Total<br>/${perTerm * shown.length}</th><th>Grade</th></tr>`
+    : `<tr><th class="l">Scholastic area</th>${compHead(true, termIdx(shown[0].key))}<th class="sep">Total<br>/${perTerm}</th><th>Grade</th>${sc.head}</tr>`
   const body = card.rows.map((r) => {
     const cells = shown.map((t, i) => {
       const cell = r.byTerm[t.key]
@@ -354,6 +357,6 @@ function resultBox(card, final) {
 function gradeKey(card) {
   const b = card.scales?.gradeScale?.bands || []
   const parts = b.map(([m, g]) => `${g} ≥ ${m}`)
-  const extra = card.family === 'performance_profile' ? ' Periodic tests are conducted out of 40 and shown out of 10.' : card.family === 'secondary_annual' ? ' P.P.T. = pen-paper test; M.A. = multiple assessment; internal assessment as per CBSE.' : ''
+  const extra = card.family === 'performance_profile' ? ' PA = periodic assessment (out of 40, shown out of 10) · PF = portfolio · S.E. = subject enrichment · HY / AN = half-yearly / annual exam.' : card.family === 'secondary_annual' ? ' P.P.T. = pen-paper test; M.A. = multiple assessment; internal assessment as per CBSE.' : ''
   return `Grades · ${parts.join(' · ')} · ${esc(card.scales?.gradeScale?.floorLabel || 'E')} below ${b[b.length - 1]?.[0] ?? 33}.${extra} AB = absent.`
 }
