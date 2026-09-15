@@ -82,9 +82,9 @@ const CSS = `
   .chart svg{width:100%;height:auto;display:block;margin-top:10px}
   .legend{display:flex;gap:12px;font-size:10.5px;color:#1A1A1A;margin-top:2px}
   .legend i{display:inline-block;width:9px;height:9px;margin-right:4px;vertical-align:-1px;border-radius:2px}
-  .co div{display:flex;justify-content:space-between;align-items:baseline;border-bottom:1px dotted #D8D2C2;padding:5px 0;font-size:14px}
-  .co small{color:#1A1A1A;font-style:italic;font-family:Lora,Georgia,serif;font-size:12px;margin-left:5px}
-  .co b{color:#7B1F2B;font-family:"JetBrains Mono",ui-monospace,monospace;font-weight:700;font-size:15px}
+  .co div{display:flex;justify-content:space-between;align-items:baseline;border-bottom:1px dotted #D8D2C2;padding:5px 0;font-size:13px}
+  .co small{color:#1A1A1A;font-style:italic;font-family:Lora,Georgia,serif;font-size:11px;margin-left:5px}
+  .co b{color:#7B1F2B;font-family:"JetBrains Mono",ui-monospace,monospace;font-weight:700;font-size:14px}
   .co b.plain{color:#1A1A1A;font-family:Inter,sans-serif;font-weight:600}
   .bottom{display:grid;grid-template-columns:1.4fr 1fr;gap:14px;margin-top:2px;flex:0 0 auto}
   .bottom>div{display:flex;flex-direction:column}
