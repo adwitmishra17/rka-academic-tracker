@@ -129,7 +129,7 @@ export function renderCardBody(card) {
       <div>${coScholastic(card, shown)}</div>
     </div>
     <div class="bottom">
-      <div><h4>Class teacher's remarks</h4><div class="box"><i>${esc(card.remark || '')}</i>${card.classTeacher ? `<span class="who">${esc(card.classTeacher)} · Class teacher</span>` : ''}</div></div>
+      <div><h4>Class teacher's remarks</h4><div class="box"><i>${esc(card.remark || '')}</i></div></div>
       <div><h4>${esc(resultTitle)}</h4><div class="box">${resultBox(card, final)}</div></div>
     </div>
     <div class="key">${gradeKey(card)}</div>
@@ -146,7 +146,7 @@ function header(card) {
     <div class="meta">AFFILIATION <b>${AFFILIATION}</b><br>SCHOOL CODE <b>${SCHOOL_CODE}</b><br>RECORD ${esc(recordNo(card))}</div></div>`
 }
 function titleStrip(card, shown) {
-  const t = card.family === 'performance_profile' ? 'PERFORMANCE PROFILE' : card.family === 'senior_progress' ? 'PROGRESS REPORT' : 'REPORT CARD'
+  const t = 'REPORT CARD'   // same heading on every class
   const sub = card.family === 'secondary_annual' ? 'ANNUAL' : shown.map((x) => x.label.toUpperCase()).join(' & ')
   return `<div class="title"><h2>${t}</h2><span>SESSION ${esc(card.sessionCode)} · ${esc(sub)}</span></div>`
 }
@@ -158,7 +158,7 @@ function studentStrip(card) {
     ['Student', s.name, 'name'], ['Class / Section', cls], ['Roll No.', s.rollNumber, 'mono'],
     ['Admission No.', s.admissionNo, 'mono'], ['Date of Birth', s.dob ? dmy(s.dob) : null, 'mono'],
     senior ? ['Board Reg. No.', s.boardRegNo, 'mono'] : ['House', s.house],
-    ['Father', s.father], ['Mother', s.mother], ['Class teacher', card.classTeacher],
+    ['Father', s.father], ['Mother', s.mother], ['APAAR ID', s.apaarId, 'mono'],
   ]
   const photo = card.photoUrl ? `<img class="photo" src="${esc(card.photoUrl)}" alt="" onerror="this.style.visibility='hidden'">` : ''
   return `<div class="strip${photo ? ' hasphoto' : ''}">${photo}<div class="cells">${cells.map(([k, v, c]) => `<div class="cell"><small>${k}</small><b class="${c || ''}">${v == null || v === '' ? dash : esc(v)}</b></div>`).join('')}</div></div>`
@@ -181,7 +181,7 @@ function metrics(card, shown, final) {
     <div><div class="v red">${marked != null ? marked - present : dash}</div><div class="k">Absent</div></div>
     <div><div class="v">${marked ? pct1(100 * present / marked) : dash}</div><div class="k">Attendance</div></div>
     <div><div class="v">${o.pct != null ? pct1(o.pct) : dash}</div><div class="k">${esc(pctLabel)}${o.grade ? ' · grade ' + esc(o.grade) : ''}</div></div>
-    <div><div class="v red">${fmt(card.rank)}</div><div class="k">Rank${card.sectionStrength ? ' of ' + card.sectionStrength : ''}</div></div>
+    <div><div class="v red">${fmt(card.rank)}</div><div class="k">Rank</div></div>
   </div>`
 }
 /** Section average / highest columns — interim cards only (the final card spends the width on the second term). */
@@ -344,7 +344,7 @@ function coScholastic(card, shown) {
 function resultBox(card, final) {
   const o = card.overall
   const isFinal = final || card.family === 'secondary_annual'
-  const kv = [['Marks', totalCell(o)], ['Percentage', pct1(o.pct)], ['Grade', o.grade || dash], ['Rank', card.rank != null ? `${card.rank}${card.sectionStrength ? ' of ' + card.sectionStrength : ''}` : dash]]
+  const kv = [['Marks', totalCell(o)], ['Percentage', pct1(o.pct)], ['Grade', o.grade || dash], ['Rank', card.rank != null ? String(card.rank) : dash]]
   let tail = ''
   if (isFinal) {
     const promo = card.session?.promotedTo
