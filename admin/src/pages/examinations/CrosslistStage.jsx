@@ -275,7 +275,7 @@ export default function CrosslistStage({ branch, sessionCode, className, config 
             ))}</tbody>
           </table>
         </div>
-      )) : (cards && (
+      )) : mode !== 'card' ? null : (cards && (
         <div style={{ ...card, padding: 0, overflow: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 700 }}>
             <thead><tr><th style={th}>Roll</th><th style={th}>Student</th>{subjectsInCards.map((s) => <th key={s} style={{ ...th, textAlign: 'center' }}>{s}</th>)}<th style={{ ...th, textAlign: 'center' }}>Total</th><th style={{ ...th, textAlign: 'center' }}>%</th><th style={{ ...th, textAlign: 'center' }}>Grade</th><th style={{ ...th, textAlign: 'center' }}>Rank</th><th style={th}></th></tr></thead>
