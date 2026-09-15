@@ -217,11 +217,26 @@ export function resolveRows(def, family, className, subjects, student) {
     if (sp === 'PCM') core = core.filter((s) => normName(s) !== 'BIOLOGY')
     if (sp === 'PCB') core = core.filter((s) => normName(s) !== 'MATHEMATICS')
     const opt = student?.optional_subject ? normName(student.optional_subject) : null
-    const names = [...core]
+    let names = [...core]
     if (opt && !names.some((n) => normName(n) === opt)) {
       // optional_subject uses exam_subjects spelling ("Physical Education") — find the scheme name that aliases to it
       const schemeName = Object.keys(schemes).find((k) => rowSourceNames(k).includes(opt)) || student.optional_subject
       names.push(schemeName)
+    }
+    // Per-student subject exceptions (SMS students.subject_overrides): the rare
+    // senior who differs from the stream default — e.g. Arts with Economics
+    // instead of History. Drop first, then add (names not already present).
+    const ov = student?.subject_overrides || null
+    if (ov && (ov.drop?.length || ov.add?.length)) {
+      const dropSet = new Set((ov.drop || []).map(normName))
+      if (dropSet.size) names = names.filter((n) => !dropSet.has(normName(n)))
+      for (const a of (ov.add || [])) {
+        const an = normName(a)
+        if (an && !names.some((n) => normName(n) === an)) {
+          const schemeName = Object.keys(schemes).find((k) => rowSourceNames(k).includes(an)) || a
+          names.push(schemeName)
+        }
+      }
     }
     return resolveSeniorNames(d, names, subjects)
   }

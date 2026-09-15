@@ -99,7 +99,7 @@ export function registerExamRoutes(app, { supabase, admin, verifyAuth, branchIdF
   }
   async function roster(branchId, className, section) {
     let q = supabase.from('students')
-      .select('id, full_name, admission_no, class_name, section, roll_number, date_of_birth, father_name, mother_name, photo_key, house, apaar_id, gender, branch_id, optional_subject, science_path, board_reg_no, legacy_comp_id, branches(code, name)')
+      .select('id, full_name, admission_no, class_name, section, roll_number, date_of_birth, father_name, mother_name, photo_key, house, apaar_id, gender, branch_id, optional_subject, science_path, subject_overrides, board_reg_no, legacy_comp_id, branches(code, name)')
       .eq('branch_id', branchId).eq('class_name', className).eq('is_active', true).eq('deleted_in_sms', false).eq('enrollment_kind', 'regular')
       .order('section').order('roll_number').order('full_name')
     if (section) q = q.eq('section', section)
@@ -145,7 +145,11 @@ export function registerExamRoutes(app, { supabase, admin, verifyAuth, branchIdF
     if (fam === 'senior_progress' && students?.length) {
       const onCard = new Set(), applicable = {}
       for (const st of students) { const ids = resolveRows(def, fam, className, b.subjects, st).flatMap((r) => r.subjectIds); applicable[st.id] = ids; for (const id of ids) onCard.add(id) }
-      const order = resolveSeniorNames(def, [...(def.coreOrder?.[className] || []), ...seniorOptionals(def, className)], b.subjects).flatMap((r) => r.subjectIds)
+      const baseOrder = resolveSeniorNames(def, [...(def.coreOrder?.[className] || []), ...seniorOptionals(def, className)], b.subjects).flatMap((r) => r.subjectIds)
+      // Per-student overrides can add a subject that is neither stream core nor a
+      // listed optional (e.g. Economics for one Arts student) — keep it in the
+      // class-wide column order by appending any on-card subject the base misses.
+      const order = [...baseOrder, ...[...onCard].filter((id) => !baseOrder.includes(id))]
       return { onCard, applicable, order }
     }
     const order = resolveRows(def, fam, className, b.subjects, null).flatMap((r) => r.subjectIds)
