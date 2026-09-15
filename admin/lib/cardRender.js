@@ -75,10 +75,10 @@ const CSS = `
   table.dense th{letter-spacing:.02em;padding:3px 1.5px;font-size:8.5px}
   table.dense td.sub{font-size:11px;white-space:normal}
   table.roomy td{padding:8px 3px}
-  tr.sum td{border-top:1px solid #1A1A1A;border-bottom:0;font-weight:700;background:none!important;white-space:nowrap}
+  tr.sum td{border-top:1.5px solid #1A1A1A;border-bottom:1.5px solid #1A1A1A;font-weight:700;background:#EFE9DC!important;white-space:nowrap;padding-top:6px;padding-bottom:6px}
   td.t,td.g{white-space:nowrap}
   h4{font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;color:#1A1A1A;margin:0 0 3px;font-weight:600}
-  .row2{display:grid;grid-template-columns:1.05fr 1fr;gap:16px;margin-top:4px}
+  .row2{display:grid;grid-template-columns:1.05fr 1fr;gap:16px;margin-top:14px}
   .chart svg{width:100%;height:auto;display:block;margin-top:10px}
   .legend{display:flex;gap:12px;font-size:10.5px;color:#1A1A1A;margin-top:2px}
   .legend i{display:inline-block;width:9px;height:9px;margin-right:4px;vertical-align:-1px;border-radius:2px}
@@ -204,7 +204,7 @@ function tablePerformance(card, shown, final) {
   const perTerm = comps.reduce((s, c) => s + (c.max || 0), 0)
   const sc = sectionCols(card, shown, final)
   // print labels: PA-1 / PA-2 for the periodic test, PF, S.E., and HY / AN for the term exam
-  const short = (c, ti) => c.key === 'pt' ? `PA-${ti + 1}` : c.key === 'portfolio' ? 'PF' : c.key === 'se' ? 'S.E.' : c.key === 'exam' ? (ti === 0 ? 'HY' : 'AN') : c.label
+  const short = (c, ti) => c.key === 'pt' ? `PA-${ti + 1}` : (c.key === 'portfolio' || /portfolio/i.test(c.label)) ? 'PF' : (c.key === 'se' || /subject\s*enrich/i.test(c.label)) ? 'S.E.' : c.key === 'exam' ? (ti === 0 ? 'HY' : 'AN') : c.label
   const termIdx = (key) => Math.max(0, card.plan.cardTerms.findIndex((x) => x.key === key))
   const compHead = (first, ti = 0) => comps.map((c, j) => `<th class="${!first && !j ? 'sep' : ''}">${esc(short(c, ti))}<br>/${c.max}</th>`).join('')
   const head = final
@@ -230,8 +230,8 @@ function tableSecondary(card, shown) {
   const ia = card.plan.components.filter((c) => c.ia)
   const iaTotal = card.plan.iaTotal || ia.reduce((s, c) => s + c.max, 0)
   const sc = sectionCols(card, shown, false, 2)
-  const head = `<tr><th class="l" rowspan="2">Scholastic area</th><th rowspan="2">Code</th><th class="band" colspan="${ia.length + 1}">Internal assessment · ${iaTotal}</th><th class="band sep" colspan="3">Annual examination</th><th rowspan="2" class="sep">Total<br>/${card.plan.subjectTotal}</th><th rowspan="2">Grade</th>${sc.head}</tr>
-    <tr>${ia.map((c) => `<th>${esc(c.label)}<br>/${c.max}</th>`).join('')}<th>Total</th><th class="sep">Prac.</th><th>Written</th><th>Total</th></tr>`
+  const head = `<tr><th class="l" rowspan="2">Scholastic area</th><th rowspan="2">Code</th><th class="band" colspan="${ia.length + 1}">Internal assessment · ${iaTotal}</th><th class="band sep" colspan="3">Annual examination</th><th rowspan="2" class="sep">Total<br>/${card.plan.subjectTotal}</th><th rowspan="2" style="text-align:center;padding-left:0;padding-right:0">Grade</th>${sc.head}</tr>
+    <tr>${ia.map((c) => `<th>${esc(/portfolio/i.test(c.label) || c.key === 'portfolio' ? 'PF' : /subject\s*enrich/i.test(c.label) || c.key === 'se' ? 'SE' : c.label)}<br>/${c.max}</th>`).join('')}<th>Total</th><th class="sep">Prac.</th><th>Written</th><th>Total</th></tr>`
   const body = card.rows.map((r) => {
     const cell = r.byTerm.annual || {}
     const iaOk = ia.every((c) => cell.comps?.[c.key] && !cell.comps[c.key].missing)
