@@ -144,10 +144,13 @@ export default function CrosslistStage({ branch, sessionCode, className, config 
       const maxTotal = papers.reduce((a, p) => a + (p.hasPractical ? Number(p.theoryMax || 0) + Number(p.practicalMax || 0) : Number(p.max || 0)), 0)
       const head = ['Roll', 'Student', ...papers.map((p) => `${COMP[p.componentKey] || p.name} /${p.hasPractical ? `${p.theoryMax}+${p.practicalMax}` : p.max}`), `Total /${maxTotal}`]
       const body = grid.students.map((s) => { const vals = papers.map((p) => numOf(s, p)); const any = vals.some((v) => v != null); return [s.roll || '—', s.name, ...papers.map((p) => cellOf(s, p)), any ? String(vals.reduce((a, v) => a + (v || 0), 0)) : '—'] })
-      return { subject: sub, papers, title: `SUBJECT CROSSLIST — ${sub.name.toUpperCase()} · ${(grid.term?.name || '').toUpperCase()}`, subtitle: `${meta}${sub.teacher ? '  ·  ' + sub.teacher : ''}`, head, body, sheet: sub.name }
+      // blank entry sheet for this subject: empty boxes (n/a stays for subjects a student does not take)
+      const blankBody = grid.students.map((s) => [s.roll || '—', s.name, ...papers.map((p) => (grid.applicable && !(grid.applicable[s.id] || []).includes(p.subjectId) ? 'n/a' : '')), ''])
+      return { subject: sub, papers, title: `SUBJECT CROSSLIST — ${sub.name.toUpperCase()} · ${(grid.term?.name || '').toUpperCase()}`, subtitle: `${meta}${sub.teacher ? '  ·  ' + sub.teacher : ''}`, head, body, blankBody, sheet: sub.name }
     })
   }, [grid, subjectId, meta])
   const subjectExport = subjectTables.length ? { tables: subjectTables, fileName: fname(`${(grid?.term?.name || 'term').replace(/\s+/g, '-')}-${subjectId ? subjectTables[0].subject.name.replace(/\s+/g, '-') : 'all-subjects'}`), sheet: className } : null
+  const subjectBlank = subjectTables.length ? { tables: subjectTables.map((t) => ({ ...t, title: `SUBJECT ENTRY SHEET — ${t.subject.name.toUpperCase()} · ${(grid.term?.name || '').toUpperCase()}`, subtitle: `${t.subtitle}  ·  blank — enter raw marks, AB for absent`, body: t.blankBody })), fileName: subjectExport.fileName + '-blank', sheet: className } : null
 
   // ── graded areas (co-scholastic + graded subjects + discipline + remarks): crosslist and blank entry sheet ──
   const tplDef = useMemo(() => (config?.templates || []).find((t) => t.id === config?.classMap?.[className])?.definition || {}, [config, className])
@@ -190,7 +193,12 @@ export default function CrosslistStage({ branch, sessionCode, className, config 
         )}
         {sections.length > 1 && <div><span style={lbl}>Section</span><select value={section} onChange={(e) => setSection(e.target.value)} style={inp}><option value="">All</option>{sections.map((s) => <option key={s}>{s}</option>)}</select></div>}
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          {mode === 'graded' ? (<>
+          {mode === 'subject' ? (<>
+            <Btn onClick={() => guarded(() => exportPDF(subjectBlank))} disabled={!subjectBlank || busy || syncing} title="One page per subject with empty boxes for each paper — for the subject teacher to fill on paper">Blank sheet (PDF)</Btn>
+            <Btn onClick={() => guarded(() => exportXLSX(subjectBlank))} disabled={!subjectBlank || busy || syncing}>Blank sheet (Excel)</Btn>
+            <Btn onClick={() => guarded(() => exportPDF(subjectExport))} disabled={!subjectExport || busy || syncing} title="Marks as entered so far">With marks (PDF)</Btn>
+            <Btn onClick={() => guarded(() => exportXLSX(subjectExport))} disabled={!subjectExport || busy || syncing}>With marks (Excel)</Btn>
+          </>) : mode === 'graded' ? (<>
             <Btn onClick={() => guarded(() => exportPDF(gradedBlank))} disabled={!gradedBlank || busy || syncing} title="Empty boxes for every area, discipline and remarks — for the class teacher to fill on paper">Blank sheet (PDF)</Btn>
             <Btn onClick={() => guarded(() => exportXLSX(gradedBlank))} disabled={!gradedBlank || busy || syncing}>Blank sheet (Excel)</Btn>
             <Btn onClick={() => guarded(() => exportPDF(gradedExport))} disabled={!gradedExport || busy || syncing} title="Grades as entered so far">With grades (PDF)</Btn>
