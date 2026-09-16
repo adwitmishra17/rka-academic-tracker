@@ -30,10 +30,23 @@ async function exportPDF({ title, subtitle, head, body, fileName, tables }) {
     if (banner) { const bw = 62, bh = (banner.h / banner.w) * bw; if (crest) { const ch = 12, cw = (crest.w / crest.h) * ch; doc.addImage(crest.data, 'PNG', pageW / 2 - bw / 2 - cw - 4, y + (bh - ch) / 2, cw, ch) } doc.addImage(banner.data, 'PNG', pageW / 2 - bw / 2, y, bw, bh); y += bh + 2 }
     doc.setFont('helvetica', 'bold').setFontSize(12).setTextColor(0); doc.text(t.title, pageW / 2, y + 4, { align: 'center' })
     doc.setFont('helvetica', 'normal').setFontSize(9).setTextColor(0); doc.text(t.subtitle, pageW / 2, y + 9, { align: 'center' }); y += 13
+    // Fixed, equal mark columns (instead of autotable's content-proportional shrink, which splits
+    // "Mathematics" into "Mathematic / s"). The header font drops uniformly, to 5.5 pt at the
+    // smallest, until the longest single word in every heading fits its column.
+    const rollW = 10, nameW = orient(t) === 'portrait' ? 40 : 46, nCols = t.head.length
+    const fixedW = Object.entries(t.columnStyles || {}).filter(([i, c]) => Number(i) >= 2 && c.cellWidth).reduce((a, [, c]) => a + c.cellWidth, 0)
+    const fixedN = Object.keys(t.columnStyles || {}).filter((i) => Number(i) >= 2 && t.columnStyles[i].cellWidth).length
+    const markW = Math.max(9, (pageW - 16 - rollW - nameW - fixedW) / Math.max(1, nCols - 2 - fixedN))
+    const columnStyles = { 0: { cellWidth: rollW }, 1: { cellWidth: nameW, halign: 'left' } }
+    for (let i = 2; i < nCols; i++) columnStyles[i] = { cellWidth: markW }
+    doc.setFont('helvetica', 'bold')
+    const widthAt = (word, fs) => doc.getStringUnitWidth(word) * fs / doc.internal.scaleFactor
+    let headFs = 8.5
+    t.head.forEach((h, i) => { if (i < 2) return; const w = (t.columnStyles?.[i]?.cellWidth) || markW; String(h).split(/\s+/).forEach((word) => { while (headFs > 5.5 && widthAt(word, headFs) > w - 1.2) headFs -= 0.25 }) })
     autoTable(doc, { startY: y, head: [t.head], body: t.body, margin: { left: 8, right: 8 }, theme: 'grid',
       styles: { font: 'helvetica', fontSize: 9, cellPadding: 1.6, halign: 'center', textColor: 0, lineColor: 0, lineWidth: 0.2 },
-      headStyles: { fillColor: [232, 232, 232], textColor: 0, fontStyle: 'bold', fontSize: 8.5, lineColor: 0, lineWidth: 0.3 },
-      alternateRowStyles: { fillColor: 255 }, columnStyles: { 0: { cellWidth: 12 }, 1: { cellWidth: orient(t) === 'portrait' ? 42 : 46, halign: 'left' }, ...(t.columnStyles || {}) } })
+      headStyles: { fillColor: [232, 232, 232], textColor: 0, fontStyle: 'bold', fontSize: headFs, lineColor: 0, lineWidth: 0.3, cellPadding: { top: 1.4, bottom: 1.4, left: 0.6, right: 0.6 }, valign: 'middle' },
+      alternateRowStyles: { fillColor: 255 }, columnStyles: { ...columnStyles, ...(t.columnStyles || {}) } })
   })
   const pages = doc.getNumberOfPages()
   for (let p = 1; p <= pages; p++) { doc.setPage(p); const pw = doc.internal.pageSize.getWidth(), ph = doc.internal.pageSize.getHeight(); doc.setFont('helvetica', 'normal').setFontSize(8).setTextColor(0); doc.text(`Generated ${new Date().toLocaleDateString('en-IN')} · AB = absent, — = not entered`, 8, ph - 5); doc.text(`Page ${p} of ${pages}`, pw - 8, ph - 5, { align: 'right' }) }
@@ -119,7 +132,7 @@ export default function CrosslistStage({ branch, sessionCode, className, config 
   // ── export payloads ──
   const rawExport = raw && {
     title: `MARKS CROSSLIST — ${(raw.term?.name || '').toUpperCase()} (raw)`, subtitle: meta,
-    head: ['Roll', 'Student', ...raw.subjects.map((s) => `${s.name} (${s.maxMarks})`), 'Total', '%', 'Rank'],
+    head: ['Roll', 'Student', ...raw.subjects.map((s) => `${s.name}\n(${s.maxMarks})`), 'Total', '%', 'Rank'],
     body: raw.students.map((r) => [r.rollNumber || '—', r.name, ...raw.subjects.map((s) => cellText(r.marks[s.id])), r.hasAny ? `${r.total}/${r.maxTotal}` : '—', r.percent != null ? r.percent.toFixed(1) : '—', r.rank ?? '—']),
     fileName: fname((raw.term?.name || 'term').replace(/\s+/g, '-')), sheet: className,
   }
