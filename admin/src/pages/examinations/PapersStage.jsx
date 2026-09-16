@@ -25,7 +25,7 @@ export default function PapersStage({ branch, sessionCode, className, refreshCon
     try {
       const r = await examApi.generatePapers(branch, sessionCode, all ? undefined : className)
       const skipped = r.skipped?.length ? ` · skipped: ${r.skipped.map((s) => `${s.className} (${s.reason})`).join(', ')}` : ''
-      setFlash(`Created ${r.created}, adopted ${r.adopted} existing papers, ${r.existing} already in place${skipped}`)
+      setFlash(`Created ${r.created}, adopted ${r.adopted} existing papers, ${r.existing} already in place${r.removed ? `, ${r.removed} stale empty paper${r.removed === 1 ? '' : 's'} removed` : ''}${skipped}`)
       setTimeout(() => setFlash(''), 6000)
       await refreshConfig(); load()
     } catch (e) { setErr(e.message) }

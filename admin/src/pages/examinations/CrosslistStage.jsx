@@ -80,7 +80,7 @@ export default function CrosslistStage({ branch, sessionCode, className, config 
       const staleWithMarks = (sync?.stale || []).filter((x) => x.marks > 0)
       const fresh = await examApi.paperSyncStatus(branch, sessionCode, className)
       setSync(fresh); setReloadTick((n) => n + 1)
-      if (!fresh.synced && staleWithMarks.length) setErr(`Papers regenerated (${r.created} created, ${r.adopted} adopted), but ${staleWithMarks.length} old paper${staleWithMarks.length === 1 ? '' : 's'} still carr${staleWithMarks.length === 1 ? 'ies' : 'y'} marks and cannot be removed automatically: ${staleWithMarks.map((x) => x.label).join(', ')}. Move or clear those marks in Papers, then sync again.`)
+      if (!fresh.synced && staleWithMarks.length) setErr(`Papers regenerated (${r.created} created, ${r.adopted} adopted, ${r.removed || 0} stale removed), but ${staleWithMarks.length} old paper${staleWithMarks.length === 1 ? '' : 's'} still carr${staleWithMarks.length === 1 ? 'ies' : 'y'} marks and cannot be removed automatically: ${staleWithMarks.map((x) => x.label).join(', ')}. Move or clear those marks in Papers, then sync again.`)
       return fresh.synced
     } catch (e) { setErr(e.message); return false }
     finally { setSyncing(false) }

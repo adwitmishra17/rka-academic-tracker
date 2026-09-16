@@ -536,6 +536,20 @@ export function registerExamRoutes(app, { supabase, admin, verifyAuth, branchIdF
           if (error) throw error
           per.created += inserts.length
         }
+        // Stale: typed papers of ON-CARD subjects the rules no longer ask for (component removed or moved
+        // to another term). Empty ones are deleted so the sync check clears; ones holding marks are kept
+        // and reported — the office decides what to do with those marks.
+        const wanted = new Set(specs.map((sp) => `${sp.subjectId}|${sp.termId}|${sp.componentKey}`))
+        const onCard = new Set(specs.map((sp) => sp.subjectId))
+        const stale = b.papers.filter((p) => p.component_key && onCard.has(p.subject_id) && !wanted.has(`${p.subject_id}|${p.term_id}|${p.component_key}`))
+        per.removed = 0; per.keptWithMarks = []
+        for (const p of stale) {
+          if ((markCount.get(p.id) || 0) > 0) { per.keptWithMarks.push(p.paper_name); continue }
+          const { error } = await supabase.from('exam_papers').delete().eq('id', p.id)
+          if (error) throw error
+          per.removed += 1
+        }
+        summary.removed = (summary.removed || 0) + per.removed
         summary.created += per.created; summary.adopted += per.adopted; summary.existing += per.existing
         summary.perClass[cls] = per
       }
