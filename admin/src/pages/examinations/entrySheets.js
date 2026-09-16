@@ -56,7 +56,7 @@ const fileBase = (meta, withMarks) => `marks-sheet-${meta.branch}-${meta.classNa
 
 export async function exportSheetPDF({ data, groups, vals, withMarks, meta }) {
   const [{ default: jsPDF }, { default: autoTable }] = await Promise.all([import('jspdf'), import('jspdf-autotable')])
-  const [banner, crest] = await Promise.all([loadImage('/banner-light.png', 480), loadImage('/crest.png', 96)])
+  const [banner, crest] = await Promise.all([loadImage('/banner-light.png?v=3', 480), loadImage('/crest.png', 96)])
   const doc = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'landscape' })
   const pageW = doc.internal.pageSize.getWidth()
   let y = 8

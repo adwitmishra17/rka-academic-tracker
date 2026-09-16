@@ -143,7 +143,7 @@ export function renderCardBody(card) {
 function recordNo(card) { return `RC/${card.student?.branchCode || 'RKA'}/${card.sessionCode}/${card.cardKey}/${card.student?.admissionNo || dash}` }
 function header(card) {
   return `<div class="hd"><img class="crest" src="${assetBase()}/crest-card.png" alt="" onerror="this.style.visibility='hidden'">
-    <div class="school"><img class="wordmark" src="${assetBase()}/banner-card.png" alt="RADHAKRISHNA ACADEMY" onerror="this.replaceWith(Object.assign(document.createElement('b'),{textContent:'RADHAKRISHNA ACADEMY'}))"></div>
+    <div class="school"><img class="wordmark" src="${assetBase()}/banner-card.png?v=3" alt="RADHAKRISHNA ACADEMY" onerror="this.replaceWith(Object.assign(document.createElement('b'),{textContent:'RADHAKRISHNA ACADEMY'}))"></div>
     <div class="meta">AFFILIATION <b>${AFFILIATION}</b><br>SCHOOL CODE <b>${SCHOOL_CODE}</b><br>RECORD ${esc(recordNo(card))}</div></div>`
 }
 function titleStrip(card, shown) {

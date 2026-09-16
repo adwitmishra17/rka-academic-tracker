@@ -131,7 +131,7 @@ export function renderHpcPages(card) {
   const lines = (arr) => (Array.isArray(arr) ? arr : String(arr || '').split(/\n|;/)).map((t) => String(t).trim()).filter(Boolean)
   const strengths = lines(summary.strengths), canDo = lines(summary.canDo), next = lines(summary.next)
 
-  const hd = (sub) => `<div class="hd"><img class="crest" src="${assetBase()}/crest-card.png" alt="" onerror="this.style.visibility='hidden'"><div><img class="wordmark" src="${assetBase()}/banner-card.png" alt="RADHAKRISHNA ACADEMY" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'name',textContent:'RADHAKRISHNA ACADEMY'}))"><div class="sub">${esc(sub)}</div></div><div class="tag">${tag}</div></div>`
+  const hd = (sub) => `<div class="hd"><img class="crest" src="${assetBase()}/crest-card.png" alt="" onerror="this.style.visibility='hidden'"><div><img class="wordmark" src="${assetBase()}/banner-card.png?v=3" alt="RADHAKRISHNA ACADEMY" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'name',textContent:'RADHAKRISHNA ACADEMY'}))"><div class="sub">${esc(sub)}</div></div><div class="tag">${tag}</div></div>`
 
   // ── dots ────────────────────────────────────────────────────────────────
   const dots = (v) => { const i = levelIdx(v); return `<span class="lad">${scale.map((_, k) => `<i class="${k <= i && i >= 0 ? 'on' : ''}" style="${k <= i && i >= 0 ? `background:${DOT[Math.min(k, 3)]}` : ''}"></i>`).join('')}<small>${i >= 0 ? esc(meta(v).label) : '—'}</small></span>` }
@@ -161,7 +161,7 @@ export function renderHpcPages(card) {
   <svg class="deco" style="right:52mm;top:26mm" width="30" height="30" viewBox="0 0 24 24"><path d="M12 2l2.9 6.6 7.1.6-5.4 4.7 1.7 7.1L12 17.3 5.7 21l1.7-7.1L2 9.2l7.1-.6z" fill="#F26B5B"/></svg>
   <svg class="deco" style="right:14mm;top:118mm" width="70" height="90" viewBox="0 0 60 80"><ellipse cx="30" cy="30" rx="26" ry="30" fill="#8E5BC9"/><path d="M30 60 q6 8 -4 18" stroke="#8E5BC9" stroke-width="2" fill="none"/></svg>
   <svg class="deco" style="right:40mm;top:132mm" width="52" height="66" viewBox="0 0 60 80"><ellipse cx="30" cy="30" rx="26" ry="30" fill="#4FB3E8"/><path d="M30 60 q-6 8 4 18" stroke="#4FB3E8" stroke-width="2" fill="none"/></svg>
-  <div class="hd" style="position:relative;z-index:1"><img class="crest" src="${assetBase()}/crest-card.png" alt="" onerror="this.style.visibility='hidden'"><div><img class="wordmark" src="${assetBase()}/banner-card.png" alt="RADHAKRISHNA ACADEMY" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'name',textContent:'RADHAKRISHNA ACADEMY'}))"><div class="sub">Affiliated to CBSE, New Delhi${branchName ? ' · ' + esc(branchName) : ''} · Ballia</div></div></div>
+  <div class="hd" style="position:relative;z-index:1"><img class="crest" src="${assetBase()}/crest-card.png" alt="" onerror="this.style.visibility='hidden'"><div><img class="wordmark" src="${assetBase()}/banner-card.png?v=3" alt="RADHAKRISHNA ACADEMY" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'name',textContent:'RADHAKRISHNA ACADEMY'}))"><div class="sub">Affiliated to CBSE, New Delhi${branchName ? ' · ' + esc(branchName) : ''} · Ballia</div></div></div>
   <div style="position:relative;z-index:1">
     <div class="session">SESSION ${esc(a.session_code)}</div>
     <div class="title"><div class="a">HOLISTIC</div><div class="b">PROGRESS</div><div class="c">CARD</div></div>

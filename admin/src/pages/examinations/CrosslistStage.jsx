@@ -17,7 +17,7 @@ const cellText = (c) => (!c || !c.entered ? '—' : c.absent ? 'AB' : String(c.o
    one table per page (used by the subject-wise crosslist). */
 async function exportPDF({ title, subtitle, head, body, fileName, tables }) {
   const [{ default: jsPDF }, { default: autoTable }] = await Promise.all([import('jspdf'), import('jspdf-autotable')])
-  const [banner, crest] = await Promise.all([loadImage('/banner-light.png', 480), loadImage('/crest.png', 96)])
+  const [banner, crest] = await Promise.all([loadImage('/banner-light.png?v=3', 480), loadImage('/crest.png', 96)])
   const doc = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'landscape' })
   const pageW = doc.internal.pageSize.getWidth()
   const list = tables || [{ title, subtitle, head, body }]
@@ -142,10 +142,11 @@ export default function CrosslistStage({ branch, sessionCode, className, config 
     return grid.subjects.filter((sub) => !subjectId || sub.id === subjectId).map((sub) => {
       const papers = grid.papers.filter((p) => p.subjectId === sub.id)
       const maxTotal = papers.reduce((a, p) => a + (p.hasPractical ? Number(p.theoryMax || 0) + Number(p.practicalMax || 0) : Number(p.max || 0)), 0)
-      const head = ['Roll', 'Student', ...papers.map((p) => `${COMP[p.componentKey] || p.name} /${p.hasPractical ? `${p.theoryMax}+${p.practicalMax}` : p.max}`), `Total /${maxTotal}`]
-      const body = grid.students.map((s) => { const vals = papers.map((p) => numOf(s, p)); const any = vals.some((v) => v != null); return [s.roll || '—', s.name, ...papers.map((p) => cellOf(s, p)), any ? String(vals.reduce((a, v) => a + (v || 0), 0)) : '—'] })
+      const withTotal = papers.length > 1   // one paper in the term → its column IS the total
+      const head = ['Roll', 'Student', ...papers.map((p) => `${COMP[p.componentKey] || p.name} /${p.hasPractical ? `${p.theoryMax}+${p.practicalMax}` : p.max}`), ...(withTotal ? [`Total /${maxTotal}`] : [])]
+      const body = grid.students.map((s) => { const vals = papers.map((p) => numOf(s, p)); const any = vals.some((v) => v != null); return [s.roll || '—', s.name, ...papers.map((p) => cellOf(s, p)), ...(withTotal ? [any ? String(vals.reduce((a, v) => a + (v || 0), 0)) : '—'] : [])] })
       // blank entry sheet for this subject: empty boxes (n/a stays for subjects a student does not take)
-      const blankBody = grid.students.map((s) => [s.roll || '—', s.name, ...papers.map((p) => (grid.applicable && !(grid.applicable[s.id] || []).includes(p.subjectId) ? 'n/a' : '')), ''])
+      const blankBody = grid.students.map((s) => [s.roll || '—', s.name, ...papers.map((p) => (grid.applicable && !(grid.applicable[s.id] || []).includes(p.subjectId) ? 'n/a' : '')), ...(withTotal ? [''] : [])])
       return { subject: sub, papers, title: `SUBJECT CROSSLIST — ${sub.name.toUpperCase()} · ${(grid.term?.name || '').toUpperCase()}`, subtitle: `${meta}${sub.teacher ? '  ·  ' + sub.teacher : ''}`, head, body, blankBody, sheet: sub.name }
     })
   }, [grid, subjectId, meta])
