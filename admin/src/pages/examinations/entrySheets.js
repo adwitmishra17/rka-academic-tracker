@@ -69,7 +69,19 @@ export async function exportSheetPDF({ data, groups, vals, withMarks, meta }) {
   const fixed = 9 + 40 + 16, paperW = Math.max(8, Math.min(22, (pageW - 12 - fixed) / Math.max(1, nPapers)))
   const columnStyles = { 0: { cellWidth: 9 }, 1: { cellWidth: 40, halign: 'left' }, 2: { cellWidth: 16 } }
   for (let i = 0; i < nPapers; i++) columnStyles[3 + i] = { cellWidth: paperW }
-  autoTable(doc, { startY: y, head: sheetHead2(groups), body: sheetRows(data, groups, vals, withMarks), margin: { left: 6, right: 6 }, theme: 'grid', styles: { font: 'helvetica', fontSize: nPapers > 14 ? 7 : 8.5, cellPadding: 1.2, halign: 'center', valign: 'middle', minCellHeight: withMarks ? 6 : 8, textColor: 0, lineColor: 0, lineWidth: 0.2 }, headStyles: { fillColor: [232, 232, 232], textColor: 0, fontStyle: 'bold', fontSize: nPapers > 14 ? 6.5 : 7.5, lineColor: 0, lineWidth: 0.3, cellPadding: 1 }, alternateRowStyles: { fillColor: 255 }, columnStyles })
+  autoTable(doc, { startY: y, head: sheetHead2(groups), body: sheetRows(data, groups, vals, withMarks), margin: { left: 6, right: 6 }, theme: 'grid', styles: { font: 'helvetica', fontSize: nPapers > 14 ? 7 : 8.5, cellPadding: 1.2, halign: 'center', valign: 'middle', minCellHeight: withMarks ? 6 : 7, textColor: 0, lineColor: 0, lineWidth: 0.2 }, headStyles: { fillColor: [232, 232, 232], textColor: 0, fontStyle: 'bold', fontSize: nPapers > 14 ? 6.5 : 7.5, lineColor: 0, lineWidth: 0.3, cellPadding: { top: 1, bottom: 1, left: 0.6, right: 0.6 } }, alternateRowStyles: { fillColor: 255 }, columnStyles,
+    // subject names that would split mid-word ("Mathematic / s") shrink to fit their column instead
+    didParseCell: (d) => {
+      if (d.section !== 'head' || d.row.index !== 0 || d.column.index < 3) return
+      const avail = paperW * (d.cell.colSpan || 1) - 1.4
+      const longest = String(d.cell.raw?.content ?? d.cell.raw ?? '').split(/\s+/).reduce((a, w) => (w.length > a.length ? w : a), '')
+      if (!longest) return
+      doc.setFont('helvetica', 'bold')
+      let fs = d.cell.styles.fontSize
+      const width = (f) => doc.getStringUnitWidth(longest) * f / doc.internal.scaleFactor
+      while (fs > 5.5 && width(fs) > avail) fs -= 0.25
+      d.cell.styles.fontSize = fs
+    } })
   const pages = doc.getNumberOfPages()
   for (let p = 1; p <= pages; p++) { doc.setPage(p); doc.setFont('helvetica', 'normal').setFontSize(8).setTextColor(0); doc.text(`Printed ${new Date().toLocaleDateString('en-IN')} · ${data.students.length} students · Teacher signature: ____________________`, 6, doc.internal.pageSize.getHeight() - 5); doc.text(`Page ${p} of ${pages}`, pageW - 6, doc.internal.pageSize.getHeight() - 5, { align: 'right' }) }
   doc.save(fileBase(meta, withMarks) + '.pdf')
