@@ -18,11 +18,14 @@ const cellText = (c) => (!c || !c.entered ? '—' : c.absent ? 'AB' : String(c.o
 async function exportPDF({ title, subtitle, head, body, fileName, tables }) {
   const [{ default: jsPDF }, { default: autoTable }] = await Promise.all([import('jspdf'), import('jspdf-autotable')])
   const [banner, crest] = await Promise.all([loadImage('/banner-light.png?v=3', 480), loadImage('/crest.png', 96)])
-  const doc = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'landscape' })
-  const pageW = doc.internal.pageSize.getWidth()
+  // Portrait when the table is narrow (≤ 14 columns — Term 1 / Term 2, subject sheets, graded areas):
+  // ~50 rows fit a page instead of ~30. Wide half-yearly / annual tables stay landscape.
   const list = tables || [{ title, subtitle, head, body }]
+  const orient = (t) => (t.head.length <= 14 ? 'portrait' : 'landscape')
+  const doc = new jsPDF({ unit: 'mm', format: 'a4', orientation: orient(list[0]) })
   list.forEach((t, idx) => {
-    if (idx > 0) doc.addPage()
+    if (idx > 0) doc.addPage('a4', orient(t))
+    const pageW = doc.internal.pageSize.getWidth()
     let y = 10
     if (banner) { const bw = 62, bh = (banner.h / banner.w) * bw; if (crest) { const ch = 12, cw = (crest.w / crest.h) * ch; doc.addImage(crest.data, 'PNG', pageW / 2 - bw / 2 - cw - 4, y + (bh - ch) / 2, cw, ch) } doc.addImage(banner.data, 'PNG', pageW / 2 - bw / 2, y, bw, bh); y += bh + 2 }
     doc.setFont('helvetica', 'bold').setFontSize(12).setTextColor(0); doc.text(t.title, pageW / 2, y + 4, { align: 'center' })
@@ -30,10 +33,10 @@ async function exportPDF({ title, subtitle, head, body, fileName, tables }) {
     autoTable(doc, { startY: y, head: [t.head], body: t.body, margin: { left: 8, right: 8 }, theme: 'grid',
       styles: { font: 'helvetica', fontSize: 9, cellPadding: 1.6, halign: 'center', textColor: 0, lineColor: 0, lineWidth: 0.2 },
       headStyles: { fillColor: [232, 232, 232], textColor: 0, fontStyle: 'bold', fontSize: 8.5, lineColor: 0, lineWidth: 0.3 },
-      alternateRowStyles: { fillColor: 255 }, columnStyles: { 0: { cellWidth: 12 }, 1: { cellWidth: 46, halign: 'left' }, ...(t.columnStyles || {}) } })
+      alternateRowStyles: { fillColor: 255 }, columnStyles: { 0: { cellWidth: 12 }, 1: { cellWidth: orient(t) === 'portrait' ? 42 : 46, halign: 'left' }, ...(t.columnStyles || {}) } })
   })
   const pages = doc.getNumberOfPages()
-  for (let p = 1; p <= pages; p++) { doc.setPage(p); doc.setFont('helvetica', 'normal').setFontSize(8).setTextColor(0); doc.text(`Generated ${new Date().toLocaleDateString('en-IN')} · AB = absent, — = not entered`, 8, doc.internal.pageSize.getHeight() - 5); doc.text(`Page ${p} of ${pages}`, pageW - 8, doc.internal.pageSize.getHeight() - 5, { align: 'right' }) }
+  for (let p = 1; p <= pages; p++) { doc.setPage(p); const pw = doc.internal.pageSize.getWidth(), ph = doc.internal.pageSize.getHeight(); doc.setFont('helvetica', 'normal').setFontSize(8).setTextColor(0); doc.text(`Generated ${new Date().toLocaleDateString('en-IN')} · AB = absent, — = not entered`, 8, ph - 5); doc.text(`Page ${p} of ${pages}`, pw - 8, ph - 5, { align: 'right' }) }
   doc.save(fileName + '.pdf')
 }
 async function exportXLSX({ title, subtitle, head, body, fileName, sheet, tables }) {
