@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react'
 import { collection, doc, getDoc, getDocs, query, where, limit } from 'firebase/firestore'
+import { getApp } from 'firebase/app'
+import { getFunctions, httpsCallable } from 'firebase/functions'
 import { useAuth } from '../App'
 import { fetchStudents } from '../lib/api'
 import { branchConstraints, branchConstraintsArray } from '../lib/branchQuery'
@@ -88,6 +90,7 @@ export default function Dashboard() {
   const [schedule, setSchedule] = useState([])
   const [todayArrangements, setTodayArrangements] = useState([])
   const [attendance, setAttendance] = useState(null)
+  const [hrms, setHrms] = useState(null)   // getHrmsDayAttendance result; null = still loading
   const [todayLessonList, setTodayLessonList] = useState([])
   const [lastDay, setLastDay] = useState(null)          // { date, dayName, logged } — last school day before today
   const [teacherQuery, setTeacherQuery] = useState('')
@@ -105,6 +108,20 @@ export default function Dashboard() {
       .then(s => { if (s.exists()) setAdminProfile(s.data()) })
       .catch(() => {})
   }, [user])
+
+  // Live HRMS staff attendance for today — the same callable the Lesson Log
+  // heatmap uses (region asia-south2). Absence = NO biometric punch
+  // (attendance_daily row) on a day with real staff activity; degrades to
+  // "unavailable" on any failure (functions down / no access).
+  useEffect(() => {
+    let cancelled = false
+    setHrms(null)
+    const date = format(new Date(), 'yyyy-MM-dd')
+    httpsCallable(getFunctions(getApp(), 'asia-south2'), 'getHrmsDayAttendance')({ date })
+      .then(res => { if (!cancelled) setHrms(res.data || { failed: true }) })
+      .catch(err => { console.warn('HRMS attendance unavailable:', err?.message || err); if (!cancelled) setHrms({ failed: true }) })
+    return () => { cancelled = true }
+  }, [effectiveBranches])
   const adminName = (adminProfile?.fullName || '').split(' ')[0]
                  || (user?.displayName || '').split(' ')[0]
                  || (user?.email || '').split('@')[0]
@@ -298,6 +315,28 @@ export default function Dashboard() {
     return { sched, rows, visible, totalSlots, uncovered, absentTeachers: absentIds.size }
   }, [schedule, timetable, timetableTeachers, todayLessonList, todayArrangements, todayName, nowMin, teacherQuery])
 
+  // HRMS absentees today — teachers who haven't punched in (no attendance_daily
+  // row), joined via teachers.hrmsEmployeeId. Only trusted when the day shows
+  // real staff activity (staffDayActive); on-leave + attendance-exempt aren't
+  // "absent". Before 11 AM a missing punch is still ambiguous (may yet arrive).
+  const hrmsAbsence = useMemo(() => {
+    const todayYMD = format(new Date(), 'yyyy-MM-dd')
+    const map = (hrms && !hrms.failed && hrms.date === todayYMD && hrms.staffDayActive) ? hrms.byEmployee : null
+    const out = { available: !!map, loading: hrms === null, absent: 0, present: 0, leave: 0, tracked: 0, softMorning: new Date().getHours() < 11 }
+    if (!map) return out
+    for (const t of timetableTeachers) {
+      if (!t.hrmsEmployeeId) continue
+      const st = map[t.hrmsEmployeeId]
+      if (!st) continue
+      // Count only real attendance statuses toward the tracked denominator —
+      // attendance-exempt / unknown staff are neither present nor absent.
+      if (st.status === 'no_punch') { out.absent++; out.tracked++ }
+      else if (st.status === 'leave') { out.leave++; out.tracked++ }
+      else if (st.status === 'present') { out.present++; out.tracked++ }
+    }
+    return out
+  }, [hrms, timetableTeachers])
+
   const lastDaySlots = lastDay ? timetable.filter(s => s.day === lastDay.dayName).length : 0
   const focusTeacher = focusId ? timetableTeachers.find(t => t.id === focusId) : null
   const focus = focusId ? (coverage.rows.find(r => r.t.id === focusId) || (focusTeacher ? { t: focusTeacher, cells: coverage.sched.map(() => ({ kind: 'none' })), absent: false, offToday: true } : null)) : null
@@ -357,7 +396,17 @@ export default function Dashboard() {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 12 }}>
         <Kpi label={lastDay ? `Lessons logged ${lastDay.date === format(subDays(new Date(), 1), 'yyyy-MM-dd') ? 'yesterday' : 'on ' + lastDay.dayName}` : 'Lessons logged yesterday'} value={loading || !lastDay ? undefined : lastDay.logged} unit={lastDaySlots ? `/ ${lastDaySlots}` : ''} sub={isSunday ? 'No school today' : <span>Today so far: <b style={{ fontWeight: 600, color: 'var(--text)' }}>{stats.todayLessons ?? 0}</b>{coverage.totalSlots ? ` of ${coverage.totalSlots}` : ''}</span>} tone={lastDay && lastDaySlots && lastDay.logged / lastDaySlots < 0.6 ? 'gold' : undefined} onClick={() => navigate('/lessons')} />
         <Kpi label="Student attendance today" value={loading ? undefined : (presentPct === null ? '—' : `${presentPct}%`)} sub={attendance ? (attendance.marked ? `${attendance.present} present of ${attendance.marked} marked` : 'Nothing marked yet') : ''} tone={presentPct !== null && presentPct < 85 ? 'red' : undefined} onClick={() => navigate('/attendance')} />
-        <Kpi label="Teachers absent today" value={loading ? undefined : coverage.absentTeachers} unit={`of ${stats.teachers ?? '—'}`} sub={coverage.uncovered ? `${coverage.uncovered} period${coverage.uncovered > 1 ? 's' : ''} still uncovered` : coverage.absentTeachers ? 'All periods covered' : 'From today’s arrangements'} tone={coverage.uncovered ? 'red' : undefined} onClick={() => navigate('/arrangement')} />
+        <Kpi label="Teachers absent today"
+          value={hrms === null ? undefined : (hrmsAbsence.available ? hrmsAbsence.absent : '—')}
+          unit={hrmsAbsence.available ? `of ${hrmsAbsence.tracked} on HRMS` : ''}
+          sub={
+            hrms === null ? 'Checking HRMS…'
+              : !hrmsAbsence.available ? 'HRMS attendance unavailable today'
+                : hrmsAbsence.softMorning ? `Not punched in yet · ${hrmsAbsence.present} present so far`
+                  : `Haven’t punched in per HRMS${hrmsAbsence.leave ? ` · ${hrmsAbsence.leave} on leave` : ''}`
+          }
+          tone={hrmsAbsence.available && !hrmsAbsence.softMorning && hrmsAbsence.absent > 0 ? 'red' : undefined}
+          onClick={() => navigate('/arrangement')} />
         <Kpi label="Plans due this week" value={loading ? undefined : missingPlanTeachers.length} unit="missing" sub={plansTotal ? `${plansTotal - missingPlanTeachers.length} of ${plansTotal} teachers submitted` : ''} tone={missingPlanTeachers.length ? 'gold' : undefined} onClick={() => navigate('/lesson-plans')} />
         <Kpi label="No lesson in 3+ days" value={loading ? undefined : inactiveTeachers.length} unit="teachers" sub={inactiveTeachers.length ? inactiveTeachers.slice(0, 3).map(t => shortName(t.fullName)).join(', ') + (inactiveTeachers.length > 3 ? '…' : '') : 'Everyone is logging'} tone={inactiveTeachers.length ? 'gold' : undefined} onClick={() => navigate('/lessons')} />
       </div>
