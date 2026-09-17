@@ -87,7 +87,9 @@ export function planCard(def, family) {
   if (family === 'performance_profile') {
     const terms = (d.terms?.length ? d.terms : [{ key: 'T1', label: 'TERM - 1', examLabel: 'Half Yearly Exam' }, { key: 'T2', label: 'TERM - 2', examLabel: 'Yearly Exam' }])
       .map((t) => ({ key: t.key, label: t.label, examLabel: t.examLabel || '' }))
-    const comps = (d.components?.length ? d.components : [
+    // Defaults only when the list was never set. An explicitly emptied list ([]) stays empty —
+    // otherwise removing the last component in Scoring rules silently brings the defaults back.
+    const comps = (Array.isArray(d.components) ? d.components : [
       { key: 'pt', label: 'Periodic Test', max: 10, source: { type: 'exam', kind: 'PT' } },
       { key: 'portfolio', label: 'Portfolio', max: 5, source: { type: 'sheet' } },
       { key: 'se', label: 'Subject Enrichment', max: 5, source: { type: 'sheet' } },
@@ -113,7 +115,7 @@ export function planCard(def, family) {
     }
   }
   if (family === 'secondary_annual') {
-    const ia = d.ia?.components?.length ? d.ia.components : [
+    const ia = Array.isArray(d.ia?.components) ? d.ia.components : [
       { key: 'ppt', label: 'P.P.T.', max: 5, source: { type: 'exam', kind: 'PT', agg: 'avg' } },
       { key: 'ma', label: 'M.A.', max: 5, source: { type: 'sheet' } },
       { key: 'portfolio', label: 'Portfolio', max: 5, source: { type: 'sheet' } },
@@ -129,7 +131,7 @@ export function planCard(def, family) {
     })
     comps.push({ key: 'exam', label: 'Annual Exam', max: Number(d.annualExam?.total || 80), kind: 'exam', ia: false, termMap: { annual: annualTerm }, parts: d.annualExam?.parts || ['practical', 'written'] })
     return {
-      family, rounding, subjectTotal: d.subjectTotal || 100, iaTotal: Number(d.ia?.total || 20),
+      family, rounding, subjectTotal: d.subjectTotal || 100, iaTotal: Number(d.ia?.total ?? 20),
       cardTerms: [{ key: 'annual', label: 'ANNUAL' }],
       cardKeys: [{ key: 'annual', label: 'Annual card', showTerms: ['annual'], gateTerms: ['annual'] }],
       components: comps,
