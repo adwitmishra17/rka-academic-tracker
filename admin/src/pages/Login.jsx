@@ -102,14 +102,30 @@ export default function Login() {
   const fieldFocus = (e, on) => { e.target.style.borderColor = on ? 'var(--green)' : 'var(--gray-200)' }
 
   return (
-    <div style={{ minHeight: '100vh', background: 'var(--off-white)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 24, position: 'relative', overflow: 'hidden' }}>
-      <div style={{ position: 'absolute', top: -80, right: -80, width: 280, height: 280, borderRadius: '50%', border: '1px solid rgba(201,162,39,0.1)', pointerEvents: 'none' }} />
-      <div style={{ position: 'absolute', bottom: -60, left: -60, width: 200, height: 200, borderRadius: '50%', border: '1px solid var(--gray-100)', pointerEvents: 'none' }} />
-      <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 3, background: 'linear-gradient(90deg, var(--house-blue), var(--house-red), var(--house-green), var(--house-yellow))' }} />
+    <div className="tk-login" style={{ minHeight: '100vh', background: 'var(--off-white)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 24, position: 'relative', overflow: 'hidden' }}>
+      <style>{`
+        .tk-login .tk-ident > *, .tk-login .tk-card{animation:tk-rise .55s cubic-bezier(.2,.7,.2,1) both}
+        .tk-login .tk-ident > *:nth-child(1){animation-delay:.05s}
+        .tk-login .tk-ident > *:nth-child(2){animation-delay:.15s}
+        .tk-login .tk-ident > *:nth-child(3){animation-delay:.25s}
+        .tk-login .tk-ident > *:nth-child(4){animation-delay:.35s}
+        .tk-login .tk-card{animation-delay:.5s}
+        @keyframes tk-rise{from{opacity:0;transform:translateY(12px) scale(.985)}to{opacity:1;transform:none}}
+        .tk-strip{background:linear-gradient(90deg,var(--house-blue),var(--house-red),var(--house-green),var(--house-yellow),var(--house-blue));background-size:200% 100%;animation:tk-strip-flow 9s linear infinite}
+        @keyframes tk-strip-flow{to{background-position:-200% 0}}
+        .tk-ring-a{animation:tk-ring-a 15s ease-in-out infinite}
+        .tk-ring-b{animation:tk-ring-b 19s ease-in-out infinite}
+        @keyframes tk-ring-a{0%,100%{transform:translate(0,0) scale(1);opacity:1}50%{transform:translate(-14px,10px) scale(1.06);opacity:.72}}
+        @keyframes tk-ring-b{0%,100%{transform:translate(0,0) scale(1)}50%{transform:translate(12px,-10px) scale(1.05)}}
+        @media (prefers-reduced-motion:reduce){.tk-login .tk-ident>*,.tk-login .tk-card,.tk-strip,.tk-ring-a,.tk-ring-b{animation:none!important}.tk-strip{background-position:0 0}}
+      `}</style>
+      <div className="tk-ring-a" style={{ position: 'absolute', top: -80, right: -80, width: 280, height: 280, borderRadius: '50%', border: '1px solid rgba(201,162,39,0.1)', pointerEvents: 'none' }} />
+      <div className="tk-ring-b" style={{ position: 'absolute', bottom: -60, left: -60, width: 200, height: 200, borderRadius: '50%', border: '1px solid var(--gray-100)', pointerEvents: 'none' }} />
+      <div className="tk-strip" style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 3 }} />
 
-      <div className="fade-up" style={{ width: '100%', maxWidth: 380 }}>
+      <div style={{ width: '100%', maxWidth: 380, position: 'relative' }}>
         {/* School identity */}
-        <div style={{ textAlign: 'center', marginBottom: 32 }}>
+        <div className="tk-ident" style={{ textAlign: 'center', marginBottom: 32 }}>
           <img src={crest} alt="RKA Crest" style={{ width: 80, height: 80, objectFit: 'contain', display: 'block', margin: '0 auto 16px', borderRadius: '50%', border: '2px solid var(--gray-200)', background: 'var(--white)', padding: 4 }} />
           <img src={banner} alt="Radhakrishna Academy" style={{ width: '100%', maxWidth: 320, height: 'auto', objectFit: 'contain', display: 'block', margin: '0 auto 10px' }} />
           <div style={{ width: 36, height: 1.5, background: 'var(--green)', margin: '10px auto 8px', borderRadius: 1, opacity: 0.7 }} />
@@ -117,7 +133,7 @@ export default function Login() {
         </div>
 
         {/* Login card */}
-        <div style={{ background: 'var(--white)', borderRadius: 'var(--radius-lg)', border: '1px solid var(--gray-100)', boxShadow: 'var(--shadow-md)', padding: '26px 22px' }}>
+        <div className="tk-card" style={{ background: 'var(--white)', borderRadius: 'var(--radius-lg)', border: '1px solid var(--gray-100)', boxShadow: 'var(--shadow-md)', padding: '26px 22px' }}>
 
           {mode === 'google' && (
             <>
