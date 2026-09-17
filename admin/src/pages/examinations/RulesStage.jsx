@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react'
 import { examApi, reportTemplateApi } from '../../lib/api'
 import { planCard } from '../../../lib/cardEngine.js'
 import { inp, lbl, card, th, td, Btn, Pill, Note, Spinner } from './ui.jsx'
+import { compareClasses } from '../../lib/classes'
 
 /* Stage 2 — Scoring rules. Edits the class's report-card template
    definition: which components make a subject-term cell, their RAW paper
@@ -126,6 +127,53 @@ export default function RulesStage({ branch, sessionCode, className, config, ref
   function addRow() { upd((d) => { d.classRows = d.classRows || {}; d.classRows[className] = [...(d.classRows[className] || []), family === 'secondary_annual' ? { subject: 'NEW SUBJECT', locCode: '', written: 80, practical: 0 } : family === 'pre_primary' ? { subject: 'NEW SUBJECT', oral: 40, written: 60 } : { subject: 'NEW SUBJECT' }] }) }
   function removeRow(i) { upd((d) => { d.classRows[className] = d.classRows[className].filter((_, j) => j !== i) }) }
   function moveRow(i, dir) { upd((d) => { const a = d.classRows[className]; const j = i + dir; if (j < 0 || j >= a.length) return; [a[i], a[j]] = [a[j], a[i]] }) }
+  // ── copy this class's rows to other classes on the same template ──────────
+  // Rows live on the template (shared by both branches, per session), and sources are subject
+  // NAMES, so a copy is branch-independent: each class then matches its own subjects by name.
+  const [copyOpen, setCopyOpen] = useState(false)
+  const [copyTo, setCopyTo] = useState([])
+  const copyTargets = useMemo(() => sharedClasses.filter((c) => c !== className).sort(compareClasses), [sharedClasses, className])
+  function copyRows() {
+    if (!copyTo.length) return
+    const isSenior = family === 'senior_progress'
+    const what = isSenior ? `${coreOrder.length} core + ${optionalOrder.length} optional` : `${rows.length} row${rows.length === 1 ? '' : 's'}`
+    if (!confirm(`Copy ${className}'s ${what} to ${copyTo.join(', ')}?\n\nThis REPLACES the rows those classes have now (marks are not touched). Both branches follow the same rows. Save rules afterwards, then re-sync papers for each class.`)) return
+    upd((d) => {
+      for (const cls of copyTo) {
+        if (isSenior) {
+          d.coreOrder = d.coreOrder || {}; d.coreOrder[cls] = [...coreOrder]
+          d.optionalOrder = d.optionalOrder || {}; d.optionalOrder[cls] = [...optionalOrder]
+        } else {
+          d.classRows = d.classRows || {}; d.classRows[cls] = JSON.parse(JSON.stringify(rows))
+        }
+      }
+    })
+    setCopyOpen(false); setCopyTo([])
+    setFlash(`Rows copied to ${copyTo.join(', ')} — not saved yet. Click Save rules.`)
+  }
+  const copyPanel = copyTargets.length > 0 && (
+    <div style={{ position: 'relative' }}>
+      <Btn small onClick={() => setCopyOpen((o) => !o)} title="Copy this class's card rows to other classes on the same template">Copy rows to…</Btn>
+      {copyOpen && (
+        <div style={{ position: 'absolute', right: 0, top: '110%', zIndex: 20, background: 'var(--white)', border: '1px solid var(--gray-200)', borderRadius: 10, boxShadow: '0 8px 24px rgba(0,0,0,.12)', padding: 12, minWidth: 240 }}>
+          <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 6 }}>Copy {className}'s rows to</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 220, overflowY: 'auto' }}>
+            {copyTargets.map((c) => (
+              <label key={c} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, cursor: 'pointer' }}>
+                <input type="checkbox" checked={copyTo.includes(c)} onChange={(e) => setCopyTo((l) => e.target.checked ? [...l, c] : l.filter((x) => x !== c))} />{c}
+              </label>
+            ))}
+          </div>
+          <div style={{ fontSize: 11, color: 'var(--text-muted)', margin: '8px 0' }}>Replaces their current rows. Applies to both branches.</div>
+          <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
+            <Btn small onClick={() => setCopyTo(copyTo.length === copyTargets.length ? [] : copyTargets)}>{copyTo.length === copyTargets.length ? 'None' : 'All'}</Btn>
+            <Btn small onClick={() => { setCopyOpen(false); setCopyTo([]) }}>Cancel</Btn>
+            <Btn small kind="primary" onClick={copyRows} disabled={!copyTo.length}>Copy</Btn>
+          </div>
+        </div>
+      )}
+    </div>
+  )
   const schemes = def?.schemes || {}
   const coreOrder = def?.coreOrder?.[className] || []
   // Senior classes: core list + optional list per class; each name has a scheme (theory/practical per term)
@@ -287,7 +335,7 @@ export default function RulesStage({ branch, sessionCode, className, config, ref
         <div style={{ ...card, padding: 0, overflow: 'hidden' }}>
           <div style={{ display: 'flex', alignItems: 'center', padding: '10px 14px', borderBottom: '1px solid var(--gray-100)' }}>
             <div style={{ fontSize: 13, fontWeight: 600, flex: 1 }}>Card rows for {className} — and which class subjects feed each</div>
-            <Btn small onClick={addRow}>+ Row</Btn>
+            <div style={{ display: 'flex', gap: 6 }}>{copyPanel}<Btn small onClick={addRow}>+ Row</Btn></div>
           </div>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead><tr><th style={th}></th><th style={th}>Row on card</th>{family === 'secondary_annual' && <><th style={th}>LoC code</th><th style={th}>Written</th><th style={th}>Practical</th><th style={th}>Additional</th></>}{family === 'pre_primary' && <><th style={th}>Oral</th><th style={th}>Written</th></>}<th style={th}>Fed by (class subjects)</th><th style={th}></th></tr></thead>
@@ -335,7 +383,7 @@ export default function RulesStage({ branch, sessionCode, className, config, ref
               <div style={{ fontSize: 13, fontWeight: 600 }}>Card rows for {className} — core subjects, in print order</div>
               <div style={{ fontSize: 11.5, color: 'var(--text-muted)', marginTop: 2 }}>Theory / practical max per term. Science path from SMS drops Biology (PCM) or Mathematics (PCB) for that student.</div>
             </div>
-            <Btn small onClick={() => addToList('coreOrder', coreOrder)}>+ Core subject</Btn>
+            <div style={{ display: 'flex', gap: 6 }}>{copyPanel}<Btn small onClick={() => addToList('coreOrder', coreOrder)}>+ Core subject</Btn></div>
           </div>
           <div style={{ overflowX: 'auto' }}><table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead><tr><th style={th}>Subject</th><th style={th}>Theory</th><th style={th}>Practical</th><th style={th}>Total / term</th><th style={th}>Matches class subject</th><th style={th}></th></tr></thead>
