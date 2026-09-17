@@ -151,6 +151,56 @@ export default function RulesStage({ branch, sessionCode, className, config, ref
     setCopyOpen(false); setCopyTo([])
     setFlash(`Rows copied to ${copyTo.join(', ')} — not saved yet. Click Save rules.`)
   }
+  // ── copy the component rules to other templates of the same family ─────────
+  // Components are template-wide, so the targets are the OTHER templates of this family
+  // (e.g. Classes I–V → Classes VI–VIII), each written directly with reportTemplateApi.save.
+  const [copyCompOpen, setCopyCompOpen] = useState(false)
+  const [copyCompTo, setCopyCompTo] = useState([])
+  const compTargets = useMemo(() => (config?.templates || []).filter((t) => t.family === family && t.id !== data?.template?.id).map((t) => ({ id: t.id, name: t.name, classes: Object.entries(config?.classMap || {}).filter(([, id]) => id === t.id).map(([c]) => c).sort(compareClasses) })), [config, family, data])
+  async function copyComponents() {
+    if (!copyCompTo.length || !def) return
+    const names = compTargets.filter((t) => copyCompTo.includes(t.id)).map((t) => `${t.name} (${t.classes.join(', ') || 'no classes'})`)
+    const what = family === 'secondary_annual' ? 'internal-assessment components and annual-exam rule' : `${comps.length} components (max marks, exam terms, scaling)`
+    if (!confirm(`Copy ${data?.template?.name}'s ${what} to:\n\n${names.join('\n')}\n\nThis REPLACES their component rules and saves immediately (their card rows are untouched). Re-sync papers for their classes afterwards.`)) return
+    setBusy(true); setErr('')
+    try {
+      const { templates } = await reportTemplateApi.list(sessionCode)   // fresh copies — merge only the component keys
+      for (const id of copyCompTo) {
+        const t = templates.find((x) => x.id === id); if (!t) continue
+        const next = { ...(t.definition || {}) }
+        if (family === 'secondary_annual') { next.ia = JSON.parse(JSON.stringify(def.ia || { total: 0, components: [] })); next.annualExam = JSON.parse(JSON.stringify(def.annualExam || {})) }
+        else { next.components = JSON.parse(JSON.stringify(def.components || [])); if (def.terms) next.terms = JSON.parse(JSON.stringify(def.terms)) }
+        await reportTemplateApi.save(id, { definition: next })
+      }
+      setCopyCompOpen(false); setCopyCompTo([])
+      setFlash(`Components copied to ${names.length} template${names.length === 1 ? '' : 's'}. Re-sync papers for their classes.`)
+      await refreshConfig()
+    } catch (e) { setErr(e.message) }
+    setBusy(false)
+  }
+  const copyCompPanel = compTargets.length > 0 && (
+    <div style={{ position: 'relative' }}>
+      <Btn small onClick={() => setCopyCompOpen((o) => !o)} disabled={dirty} title={dirty ? 'Save rules first — the copy uses the saved rules' : 'Copy these component rules to another template of the same family'}>Copy components to…</Btn>
+      {copyCompOpen && (
+        <div style={{ position: 'absolute', right: 0, top: '110%', zIndex: 20, background: 'var(--white)', border: '1px solid var(--gray-200)', borderRadius: 10, boxShadow: '0 8px 24px rgba(0,0,0,.12)', padding: 12, minWidth: 300 }}>
+          <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 6 }}>Copy components to</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {compTargets.map((t) => (
+              <label key={t.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 12.5, cursor: 'pointer' }}>
+                <input type="checkbox" checked={copyCompTo.includes(t.id)} onChange={(e) => setCopyCompTo((l) => e.target.checked ? [...l, t.id] : l.filter((x) => x !== t.id))} style={{ marginTop: 2 }} />
+                <span>{t.name}<span style={{ display: 'block', fontSize: 11, color: 'var(--text-muted)' }}>{t.classes.join(', ') || 'no classes bound'}</span></span>
+              </label>
+            ))}
+          </div>
+          <div style={{ fontSize: 11, color: 'var(--text-muted)', margin: '8px 0' }}>Replaces their component rules and saves at once. Rows stay as they are. Both branches.</div>
+          <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
+            <Btn small onClick={() => { setCopyCompOpen(false); setCopyCompTo([]) }}>Cancel</Btn>
+            <Btn small kind="primary" onClick={copyComponents} disabled={!copyCompTo.length || busy}>{busy ? 'Copying…' : 'Copy'}</Btn>
+          </div>
+        </div>
+      )}
+    </div>
+  )
   const copyPanel = copyTargets.length > 0 && (
     <div style={{ position: 'relative' }}>
       <Btn small onClick={() => setCopyOpen((o) => !o)} title="Copy this class's card rows to other classes on the same template">Copy rows to…</Btn>
@@ -271,7 +321,7 @@ export default function RulesStage({ branch, sessionCode, className, config, ref
         <div style={{ padding: '10px 14px', borderBottom: '1px solid var(--gray-100)' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <div style={{ fontSize: 13, fontWeight: 600, flex: 1 }}>How a subject's marks are built{family === 'secondary_annual' ? '' : ' for each term column'}</div>
-            {!['senior_progress', 'pre_primary'].includes(family) && <Btn small onClick={addComp} title="Add a sheet component (Notebook, Activity …) — set its max after adding">+ Component</Btn>}
+            {!['senior_progress', 'pre_primary'].includes(family) && <div style={{ display: 'flex', gap: 6 }}>{copyCompPanel}<Btn small onClick={addComp} title="Add a sheet component (Notebook, Activity …) — set its max after adding">+ Component</Btn></div>}
           </div>
           <div style={{ fontSize: 11.5, color: 'var(--text-muted)', marginTop: 2 }}>
             Read each line left to right: what the teacher enters (raw marks, in which exam term) → what it becomes on the card. Rounding is half-up (6.5 → 7).
