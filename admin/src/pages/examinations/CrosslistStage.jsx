@@ -27,7 +27,7 @@ async function exportPDF({ title, subtitle, head, body, fileName, tables }) {
     if (idx > 0) doc.addPage('a4', orient(t))
     const pageW = doc.internal.pageSize.getWidth()
     let y = 10
-    if (banner) { const bw = 62, bh = (banner.h / banner.w) * bw; if (crest) { const ch = 12, cw = (crest.w / crest.h) * ch; doc.addImage(crest.data, 'PNG', pageW / 2 - bw / 2 - cw - 4, y + (bh - ch) / 2, cw, ch) } doc.addImage(banner.data, 'PNG', pageW / 2 - bw / 2, y, bw, bh); if (skolix) { const lh = 6.5, lw = (skolix.w / skolix.h) * lh; doc.addImage(skolix.data, 'PNG', pageW - 8 - lw, y + (bh - lh) / 2, lw, lh) } y += bh + 2 }
+    if (banner) { const bw = 62, bh = (banner.h / banner.w) * bw; if (crest) { const ch = 12, cw = (crest.w / crest.h) * ch; doc.addImage(crest.data, 'PNG', pageW / 2 - bw / 2 - cw - 4, y + (bh - ch) / 2, cw, ch) } doc.addImage(banner.data, 'PNG', pageW / 2 - bw / 2, y, bw, bh); if (skolix) { const lh = 9, lw = (skolix.w / skolix.h) * lh; doc.addImage(skolix.data, 'PNG', pageW - 8 - lw, y + (bh - lh) / 2, lw, lh) } y += bh + 2 }
     doc.setFont('helvetica', 'bold').setFontSize(12).setTextColor(0); doc.text(t.title, pageW / 2, y + 4, { align: 'center' })
     doc.setFont('helvetica', 'normal').setFontSize(9).setTextColor(0); doc.text(t.subtitle, pageW / 2, y + 9, { align: 'center' }); y += 13
     // Fixed, equal mark columns (instead of autotable's content-proportional shrink, which splits
