@@ -56,7 +56,7 @@ const fileBase = (meta, withMarks) => `marks-sheet-${meta.branch}-${meta.classNa
 
 export async function exportSheetPDF({ data, groups, vals, withMarks, meta }) {
   const [{ default: jsPDF }, { default: autoTable }] = await Promise.all([import('jspdf'), import('jspdf-autotable')])
-  const [banner, crest] = await Promise.all([loadImage('/banner-light.png?v=3', 480), loadImage('/crest.png', 96)])
+  const [banner, crest, skolix] = await Promise.all([loadImage('/banner-light.png?v=3', 480), loadImage('/crest.png', 96), loadImage('/skolix-lockup.png', 540)])
   const nPapersAll = groups.reduce((s, g) => s + g.papers.length, 0)
   // narrow sheets (Term 1 / Term 2: one paper per subject) print portrait so ~45 students fit a page
   const doc = new jsPDF({ unit: 'mm', format: 'a4', orientation: nPapersAll + 3 <= 14 ? 'portrait' : 'landscape' })
@@ -83,7 +83,7 @@ export async function exportSheetPDF({ data, groups, vals, withMarks, meta }) {
       d.cell.styles.fontSize = fs
     } })
   const pages = doc.getNumberOfPages()
-  for (let p = 1; p <= pages; p++) { doc.setPage(p); doc.setFont('helvetica', 'normal').setFontSize(8).setTextColor(0); doc.text(`Printed ${new Date().toLocaleDateString('en-IN')} · ${data.students.length} students · Teacher signature: ____________________`, 6, doc.internal.pageSize.getHeight() - 5); doc.text(`Page ${p} of ${pages}`, pageW - 6, doc.internal.pageSize.getHeight() - 5, { align: 'right' }) }
+  for (let p = 1; p <= pages; p++) { doc.setPage(p); doc.setFont('helvetica', 'normal').setFontSize(8).setTextColor(0); const ph = doc.internal.pageSize.getHeight(); let fx = 6; if (skolix) { const lh = 4.2, lw = (skolix.w / skolix.h) * lh; doc.addImage(skolix.data, 'PNG', fx, ph - 5 - lh + 1.1, lw, lh); fx += lw + 1.5 } doc.text(`Printed ${new Date().toLocaleDateString('en-IN')} · ${data.students.length} students · Teacher signature: ____________________`, fx, ph - 5); doc.text(`Page ${p} of ${pages}`, pageW - 6, ph - 5, { align: 'right' }) }
   doc.save(fileBase(meta, withMarks) + '.pdf')
 }
 export async function exportSheetXLSX({ data, groups, vals, withMarks, meta }) {

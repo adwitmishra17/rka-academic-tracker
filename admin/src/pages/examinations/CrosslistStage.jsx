@@ -17,7 +17,7 @@ const cellText = (c) => (!c || !c.entered ? '—' : c.absent ? 'AB' : String(c.o
    one table per page (used by the subject-wise crosslist). */
 async function exportPDF({ title, subtitle, head, body, fileName, tables }) {
   const [{ default: jsPDF }, { default: autoTable }] = await Promise.all([import('jspdf'), import('jspdf-autotable')])
-  const [banner, crest] = await Promise.all([loadImage('/banner-light.png?v=3', 480), loadImage('/crest.png', 96)])
+  const [banner, crest, skolix] = await Promise.all([loadImage('/banner-light.png?v=3', 480), loadImage('/crest.png', 96), loadImage('/skolix-lockup.png', 540)])
   // Portrait when the table is narrow (≤ 14 columns — Term 1 / Term 2, subject sheets, graded areas):
   // ~50 rows fit a page instead of ~30. Wide half-yearly / annual tables stay landscape.
   const list = tables || [{ title, subtitle, head, body }]
@@ -49,7 +49,8 @@ async function exportPDF({ title, subtitle, head, body, fileName, tables }) {
       alternateRowStyles: { fillColor: 255 }, columnStyles: { ...columnStyles, ...(t.columnStyles || {}) } })
   })
   const pages = doc.getNumberOfPages()
-  for (let p = 1; p <= pages; p++) { doc.setPage(p); const pw = doc.internal.pageSize.getWidth(), ph = doc.internal.pageSize.getHeight(); doc.setFont('helvetica', 'normal').setFontSize(8).setTextColor(0); doc.text(`Generated ${new Date().toLocaleDateString('en-IN')} · AB = absent, — = not entered`, 8, ph - 5); doc.text(`Page ${p} of ${pages}`, pw - 8, ph - 5, { align: 'right' }) }
+  // Footer: Skolix product mark, then the legend; page numbers on the right.
+  for (let p = 1; p <= pages; p++) { doc.setPage(p); const pw = doc.internal.pageSize.getWidth(), ph = doc.internal.pageSize.getHeight(); doc.setFont('helvetica', 'normal').setFontSize(8).setTextColor(0); let fx = 8; if (skolix) { const lh = 4.2, lw = (skolix.w / skolix.h) * lh; doc.addImage(skolix.data, 'PNG', fx, ph - 5 - lh + 1.1, lw, lh); fx += lw + 1.5 } doc.text(`Generated ${new Date().toLocaleDateString('en-IN')} · AB = absent, — = not entered`, fx, ph - 5); doc.text(`Page ${p} of ${pages}`, pw - 8, ph - 5, { align: 'right' }) }
   doc.save(fileName + '.pdf')
 }
 async function exportXLSX({ title, subtitle, head, body, fileName, sheet, tables }) {
