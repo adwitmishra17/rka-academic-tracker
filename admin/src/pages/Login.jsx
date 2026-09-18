@@ -3,6 +3,7 @@ import { signInWithPopup, signInWithCustomToken } from 'firebase/auth'
 import { auth, googleProvider } from '../firebase/config'
 import crest from '../assets/crest.png'
 import banner from '../assets/banner-light.png'
+import SkolixLockup from '../components/SkolixLockup'
 
 // Supabase Edge Functions base URL (rka-attendance project).
 const FUNCTIONS_URL = 'https://yegxwxutdalmdubrozrm.supabase.co/functions/v1'
@@ -129,7 +130,7 @@ export default function Login() {
           <img src={crest} alt="RKA Crest" style={{ width: 80, height: 80, objectFit: 'contain', display: 'block', margin: '0 auto 16px', borderRadius: '50%', border: '2px solid var(--gray-200)', background: 'var(--white)', padding: 4 }} />
           <img src={banner} alt="Radhakrishna Academy" style={{ width: '100%', maxWidth: 320, height: 'auto', objectFit: 'contain', display: 'block', margin: '0 auto 10px' }} />
           <div style={{ width: 36, height: 1.5, background: 'var(--green)', margin: '10px auto 8px', borderRadius: 1, opacity: 0.7 }} />
-          <p style={{ fontSize: 11, color: 'var(--gray-800)', fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase' }}>Admin Portal</p>
+          <div style={{ display: 'flex', justifyContent: 'center', color: 'var(--text)' }}><SkolixLockup app="Academics" color="#7C3AED" height={20} /></div>
         </div>
 
         {/* Login card */}

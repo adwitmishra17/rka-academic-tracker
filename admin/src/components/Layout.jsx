@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react'
 import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom'
 import { signOut } from 'firebase/auth'
+import SkolixLockup from './SkolixLockup'
 import { auth } from '../firebase/config'
 import { useAuth } from '../App'
 import { examApi } from '../lib/api'
@@ -167,7 +168,7 @@ export default function Layout() {
         <img src={crest} alt="RKA" style={{ width: 34, height: 34, borderRadius: '50%', border: '1px solid var(--gray-200)', objectFit: 'contain', background: 'var(--gray-50)', padding: 2, flexShrink: 0 }} />
         <div style={{ minWidth: 0 }}>
           <img src={dark ? banner : bannerLight} alt="Radhakrishna Academy" style={{ width: '100%', maxWidth: 150, height: 'auto', objectFit: 'contain', display: 'block' }} />
-          <div style={{ fontSize: 9.5, color: 'var(--text-muted)', letterSpacing: '0.12em', textTransform: 'uppercase', marginTop: 2 }}>Academic Tracker</div>
+          <div style={{ marginTop: 4, color: 'var(--text)' }}><SkolixLockup app="Academics" color="#7C3AED" height={13} /></div>
         </div>
       </div>
 
