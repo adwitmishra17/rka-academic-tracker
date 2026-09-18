@@ -62,7 +62,7 @@ export async function exportSheetPDF({ data, groups, vals, withMarks, meta }) {
   const doc = new jsPDF({ unit: 'mm', format: 'a4', orientation: nPapersAll + 3 <= 14 ? 'portrait' : 'landscape' })
   const pageW = doc.internal.pageSize.getWidth()
   let y = 8
-  if (banner) { const bw = 56, bh = (banner.h / banner.w) * bw; if (crest) { const ch = 11, cw = (crest.w / crest.h) * ch; doc.addImage(crest.data, 'PNG', pageW / 2 - bw / 2 - cw - 4, y + (bh - ch) / 2, cw, ch) } doc.addImage(banner.data, 'PNG', pageW / 2 - bw / 2, y, bw, bh); y += bh + 2 }
+  if (banner) { const bw = 56, bh = (banner.h / banner.w) * bw; if (crest) { const ch = 11, cw = (crest.w / crest.h) * ch; doc.addImage(crest.data, 'PNG', pageW / 2 - bw / 2 - cw - 4, y + (bh - ch) / 2, cw, ch) } doc.addImage(banner.data, 'PNG', pageW / 2 - bw / 2, y, bw, bh); if (skolix) { const lh = 6.5, lw = (skolix.w / skolix.h) * lh; doc.addImage(skolix.data, 'PNG', pageW - 6 - lw, y + (bh - lh) / 2, lw, lh) }; y += bh + 2 }
   doc.setFont('helvetica', 'bold').setFontSize(12).setTextColor(0); doc.text(`MARKS ENTRY SHEET — ${(meta.term || '').toUpperCase()}`, pageW / 2, y + 4, { align: 'center' })
   doc.setFont('helvetica', 'normal').setFontSize(9).setTextColor(0); doc.text(`${meta.className}${meta.section ? ' - ' + meta.section : ''}  ·  ${meta.branch} branch  ·  Session ${meta.session}  ·  ${withMarks ? 'current entries' : 'blank — enter raw marks, AB for absent'}`, pageW / 2, y + 8.5, { align: 'center' }); y += 12
   const nPapers = groups.reduce((s, g) => s + g.papers.length, 0)
@@ -83,7 +83,7 @@ export async function exportSheetPDF({ data, groups, vals, withMarks, meta }) {
       d.cell.styles.fontSize = fs
     } })
   const pages = doc.getNumberOfPages()
-  for (let p = 1; p <= pages; p++) { doc.setPage(p); doc.setFont('helvetica', 'normal').setFontSize(8).setTextColor(0); const ph = doc.internal.pageSize.getHeight(); let fx = 6; if (skolix) { const lh = 4.2, lw = (skolix.w / skolix.h) * lh; doc.addImage(skolix.data, 'PNG', fx, ph - 5 - lh + 1.1, lw, lh); fx += lw + 1.5 } doc.text(`Printed ${new Date().toLocaleDateString('en-IN')} · ${data.students.length} students · Teacher signature: ____________________`, fx, ph - 5); doc.text(`Page ${p} of ${pages}`, pageW - 6, ph - 5, { align: 'right' }) }
+  for (let p = 1; p <= pages; p++) { doc.setPage(p); doc.setFont('helvetica', 'normal').setFontSize(8).setTextColor(0); const ph = doc.internal.pageSize.getHeight(); doc.text(`Printed ${new Date().toLocaleDateString('en-IN')} · ${data.students.length} students · Teacher signature: ____________________`, 6, ph - 5); doc.text(`Page ${p} of ${pages}`, pageW - 6, ph - 5, { align: 'right' }) }
   doc.save(fileBase(meta, withMarks) + '.pdf')
 }
 export async function exportSheetXLSX({ data, groups, vals, withMarks, meta }) {

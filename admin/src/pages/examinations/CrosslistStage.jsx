@@ -27,7 +27,7 @@ async function exportPDF({ title, subtitle, head, body, fileName, tables }) {
     if (idx > 0) doc.addPage('a4', orient(t))
     const pageW = doc.internal.pageSize.getWidth()
     let y = 10
-    if (banner) { const bw = 62, bh = (banner.h / banner.w) * bw; if (crest) { const ch = 12, cw = (crest.w / crest.h) * ch; doc.addImage(crest.data, 'PNG', pageW / 2 - bw / 2 - cw - 4, y + (bh - ch) / 2, cw, ch) } doc.addImage(banner.data, 'PNG', pageW / 2 - bw / 2, y, bw, bh); y += bh + 2 }
+    if (banner) { const bw = 62, bh = (banner.h / banner.w) * bw; if (crest) { const ch = 12, cw = (crest.w / crest.h) * ch; doc.addImage(crest.data, 'PNG', pageW / 2 - bw / 2 - cw - 4, y + (bh - ch) / 2, cw, ch) } doc.addImage(banner.data, 'PNG', pageW / 2 - bw / 2, y, bw, bh); if (skolix) { const lh = 6.5, lw = (skolix.w / skolix.h) * lh; doc.addImage(skolix.data, 'PNG', pageW - 8 - lw, y + (bh - lh) / 2, lw, lh) } y += bh + 2 }
     doc.setFont('helvetica', 'bold').setFontSize(12).setTextColor(0); doc.text(t.title, pageW / 2, y + 4, { align: 'center' })
     doc.setFont('helvetica', 'normal').setFontSize(9).setTextColor(0); doc.text(t.subtitle, pageW / 2, y + 9, { align: 'center' }); y += 13
     // Fixed, equal mark columns (instead of autotable's content-proportional shrink, which splits
@@ -49,8 +49,7 @@ async function exportPDF({ title, subtitle, head, body, fileName, tables }) {
       alternateRowStyles: { fillColor: 255 }, columnStyles: { ...columnStyles, ...(t.columnStyles || {}) } })
   })
   const pages = doc.getNumberOfPages()
-  // Footer: Skolix product mark, then the legend; page numbers on the right.
-  for (let p = 1; p <= pages; p++) { doc.setPage(p); const pw = doc.internal.pageSize.getWidth(), ph = doc.internal.pageSize.getHeight(); doc.setFont('helvetica', 'normal').setFontSize(8).setTextColor(0); let fx = 8; if (skolix) { const lh = 4.2, lw = (skolix.w / skolix.h) * lh; doc.addImage(skolix.data, 'PNG', fx, ph - 5 - lh + 1.1, lw, lh); fx += lw + 1.5 } doc.text(`Generated ${new Date().toLocaleDateString('en-IN')} · AB = absent, — = not entered`, fx, ph - 5); doc.text(`Page ${p} of ${pages}`, pw - 8, ph - 5, { align: 'right' }) }
+  for (let p = 1; p <= pages; p++) { doc.setPage(p); const pw = doc.internal.pageSize.getWidth(), ph = doc.internal.pageSize.getHeight(); doc.setFont('helvetica', 'normal').setFontSize(8).setTextColor(0); doc.text(`Generated ${new Date().toLocaleDateString('en-IN')} · AB = absent, — = not entered`, 8, ph - 5); doc.text(`Page ${p} of ${pages}`, pw - 8, ph - 5, { align: 'right' }) }
   doc.save(fileName + '.pdf')
 }
 async function exportXLSX({ title, subtitle, head, body, fileName, sheet, tables }) {
