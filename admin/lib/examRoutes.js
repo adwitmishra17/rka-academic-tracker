@@ -592,7 +592,8 @@ export function registerExamRoutes(app, { supabase, admin, verifyAuth, branchIdF
       }
       // which subjects the rules generate papers for — the Papers stage splits on-card papers from leftovers
       const onCard = b.template && b.terms.length ? [...new Set(paperSpecsFor(b, className).specs.map((sp) => sp.subjectId))] : null
-      res.json({ terms: b.terms, subjects: b.subjects, template: b.template ? { id: b.template.id, family: b.template.family, name: b.template.name } : null, onCard, papers: b.papers.map((p) => ({ ...p, marks: counts.get(p.id) || 0 })) })
+      const roster = (await supabase.from('students').select('id', { count: 'exact', head: true }).eq('branch_id', bid).eq('class_name', className).eq('is_active', true).eq('deleted_in_sms', false).eq('enrollment_kind', 'regular')).count || 0
+      res.json({ terms: b.terms, subjects: b.subjects, template: b.template ? { id: b.template.id, family: b.template.family, name: b.template.name } : null, onCard, roster, papers: b.papers.map((p) => ({ ...p, marks: counts.get(p.id) || 0 })) })
     } catch (e) { err(res, e, 'GET /api/exam/class-papers') }
   })
 
