@@ -242,7 +242,7 @@ export default function CrosslistStage({ branch, sessionCode, className, config 
           </div>
         </Note>
       )}
-      {sync?.synced && <div style={{ fontSize: 11.5, color: 'var(--green)', marginTop: -6 }}>✓ Papers match the scoring rules ({sync.papers} papers).{sync.notes?.length ? <span style={{ color: 'var(--text-muted)' }}> Note: {sync.notes.join('; ')} — marks are scaled from the paper's own max.</span> : null}</div>}
+      {sync?.synced && <div style={{ fontSize: 11.5, color: 'var(--green)', marginTop: -6 }}>✓ Papers match the scoring rules ({sync.papers} papers).{sync.notes?.length ? <span style={{ color: 'var(--text-muted)' }}> Note: {sync.notes.join('; ')} — marks are scaled from the paper's own max.</span> : null}{Array.isArray(sync.leftover) && sync.leftover.length ? <span style={{ color: 'var(--text-muted)' }}> {sync.leftover.length} leftover paper{sync.leftover.length === 1 ? '' : 's'} off the card ({sync.leftover.filter((x) => x.marks > 0).length} with marks) — ignored here; manage them in Papers.</span> : null}</div>}
 
       {mode === 'graded' && !busy && pack && gradedTable && (
         <div style={{ ...card, padding: 0, overflow: 'auto' }}>

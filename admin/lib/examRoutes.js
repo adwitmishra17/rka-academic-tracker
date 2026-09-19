@@ -440,10 +440,14 @@ export function registerExamRoutes(app, { supabase, admin, verifyAuth, branchIdF
       // Papers of subjects that left the card altogether are hidden everywhere — reported as leftovers, not blocking.
       const onCard = new Set(specs.map((sp) => sp.subjectId))
       const staleRows = [...typed.values()].filter((p) => onCard.has(p.subject_id) && !wanted.has(`${p.subject_id}|${p.term_id}|${p.component_key}`))
-      const leftover = [...typed.values()].filter((p) => !onCard.has(p.subject_id)).length
+      const leftoverRows = b.papers.filter((p) => !onCard.has(p.subject_id) || !p.component_key)
       let markCount = new Map()
-      if (staleRows.length) { const m = await pagedAll(() => supabase.from('exam_marks').select('paper_id').in('paper_id', staleRows.map((p) => p.id))); for (const r of m) markCount.set(r.paper_id, (markCount.get(r.paper_id) || 0) + 1) }
+      const countFor = [...staleRows, ...leftoverRows]
+      if (countFor.length) { const m = await pagedAll(() => supabase.from('exam_marks').select('paper_id').in('paper_id', countFor.map((p) => p.id))); for (const r of m) markCount.set(r.paper_id, (markCount.get(r.paper_id) || 0) + 1) }
       const stale = staleRows.map((p) => ({ id: p.id, label: label(p.subject_id, p.term_id, p.component_key), marks: markCount.get(p.id) || 0 }))
+      // Leftover = papers of subjects off the card + untyped legacy papers. Never blocking: a sync deletes the
+      // empty ones; the ones with marks are reported so the office knows they exist.
+      const leftover = leftoverRows.map((p) => ({ id: p.id, label: `${subjName[p.subject_id] || '?'} · ${termName[p.term_id] || '?'} · ${p.paper_name}`, marks: markCount.get(p.id) || 0 }))
       // card max is what the rule controls and what a sync rewrites; a raw-max drift on a paper that already
       // holds marks is deliberate (the marks are out of the old max) and is reported, not blocking
       const changed = [], notes = []
@@ -550,6 +554,18 @@ export function registerExamRoutes(app, { supabase, admin, verifyAuth, branchIdF
           per.removed += 1
         }
         summary.removed = (summary.removed || 0) + per.removed
+        // Leftover: papers of subjects no card row uses, and untyped legacy papers (pre-rules free text) —
+        // deleted when empty so the Papers stage matches the rules; ones holding marks stay and are listed.
+        const leftover = b.papers.filter((p) => !onCard.has(p.subject_id) || !p.component_key).filter((p) => !stale.includes(p))
+        per.leftoverRemoved = 0; per.leftoverKept = []
+        const subjName = Object.fromEntries(b.subjects.map((x) => [x.id, x.subject_name]))
+        for (const p of leftover) {
+          if ((markCount.get(p.id) || 0) > 0) { per.leftoverKept.push(`${subjName[p.subject_id] || '?'} · ${p.paper_name}`); continue }
+          const { error } = await supabase.from('exam_papers').delete().eq('id', p.id)
+          if (error) throw error
+          per.leftoverRemoved += 1
+        }
+        summary.leftoverRemoved = (summary.leftoverRemoved || 0) + per.leftoverRemoved
         summary.created += per.created; summary.adopted += per.adopted; summary.existing += per.existing
         summary.perClass[cls] = per
       }
@@ -569,7 +585,9 @@ export function registerExamRoutes(app, { supabase, admin, verifyAuth, branchIdF
         const rows = await pagedAll(() => supabase.from('exam_marks').select('paper_id').in('paper_id', b.papers.map((p) => p.id)))
         for (const m of rows) counts.set(m.paper_id, (counts.get(m.paper_id) || 0) + 1)
       }
-      res.json({ terms: b.terms, subjects: b.subjects, template: b.template ? { id: b.template.id, family: b.template.family, name: b.template.name } : null, papers: b.papers.map((p) => ({ ...p, marks: counts.get(p.id) || 0 })) })
+      // which subjects the rules generate papers for — the Papers stage splits on-card papers from leftovers
+      const onCard = b.template && b.terms.length ? [...new Set(paperSpecsFor(b, className).specs.map((sp) => sp.subjectId))] : null
+      res.json({ terms: b.terms, subjects: b.subjects, template: b.template ? { id: b.template.id, family: b.template.family, name: b.template.name } : null, onCard, papers: b.papers.map((p) => ({ ...p, marks: counts.get(p.id) || 0 })) })
     } catch (e) { err(res, e, 'GET /api/exam/class-papers') }
   })
 
@@ -577,10 +595,12 @@ export function registerExamRoutes(app, { supabase, admin, verifyAuth, branchIdF
   app.delete('/api/exam/papers/:id', verifyAuth, async (req, res) => {
     try {
       const { count } = await supabase.from('exam_marks').select('id', { count: 'exact', head: true }).eq('paper_id', req.params.id)
-      if (count > 0) return res.status(409).json({ error: `Paper has ${count} marks — cannot delete` })
+      const force = req.query.force === '1'
+      if (count > 0 && !force) return res.status(409).json({ error: `Paper has ${count} marks — cannot delete` })
+      if (count > 0) { const { error: e1 } = await supabase.from('exam_marks').delete().eq('paper_id', req.params.id); if (e1) throw e1 }
       const { error } = await supabase.from('exam_papers').delete().eq('id', req.params.id)
       if (error) throw error
-      res.json({ ok: true })
+      res.json({ ok: true, marksDeleted: count || 0 })
     } catch (e) { err(res, e, 'DELETE /api/exam/papers/:id') }
   })
 
