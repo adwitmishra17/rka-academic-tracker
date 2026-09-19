@@ -183,6 +183,14 @@ export default function SetupStage({ branch, sessionCode, className, config, ref
     } catch (e) { fail(e) }
     setBusy('')
   }
+  async function renameTemplate(cls) {
+    const cur = templates.find((t) => t.id === classMap[cls]); if (!cur) return
+    const name = prompt('New name for this report-card template (shown in the picker and the card editor):', cur.name)
+    if (!name || !name.trim() || name.trim() === cur.name) return
+    setBusy('tpl'); setErr('')
+    try { await reportTemplateApi.save(cur.id, { name: name.trim() }); await refreshConfig(); setTplNonce((n) => n + 1); say(`Template renamed to "${name.trim()}"`) } catch (e) { fail(e) }
+    setBusy('')
+  }
   // ── Template binding (clones the lowest class's rows for marks-card families) ──
   async function bindTemplate(cls, templateId) {
     const cur = templates.find((t) => t.id === classMap[cls])
@@ -296,7 +304,7 @@ export default function SetupStage({ branch, sessionCode, className, config, ref
                       <span>Shared with {others.join(', ')} — components and card areas are common.</span>
                       <button onClick={() => ownCopy(selected)} disabled={busy === 'tpl'} style={{ border: '1px solid var(--gray-200)', background: 'var(--white)', borderRadius: 6, padding: '2px 8px', fontSize: 11, cursor: 'pointer', color: 'var(--text)' }} title="Copy this template for this class only, so it can be configured independently">Own copy for {selected}</button>
                     </div>
-                  ) : <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>Only {selected} uses this template.</div> })()}
+                  ) : <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4, display: 'flex', alignItems: 'center', gap: 8 }}><span>Only {selected} uses this template.</span><button onClick={() => renameTemplate(selected)} disabled={busy === 'tpl'} style={{ border: '1px solid var(--gray-200)', background: 'var(--white)', borderRadius: 6, padding: '2px 8px', fontSize: 11, cursor: 'pointer', color: 'var(--text)' }}>Rename template</button></div> })()}
                 </div>
                 {classMap[selected] && <Btn small onClick={async () => { const t = templates.find((x) => x.id === classMap[selected]); const n = prompt('Template name (shown in the list; not printed):', t?.name || ''); if (!n || !n.trim() || n.trim() === t?.name) return; setBusy('tpl'); try { await reportTemplateApi.save(t.id, { name: n.trim() }); await refreshConfig(); say('Template renamed') } catch (e) { fail(e) } setBusy('') }} title="Rename this template">Rename</Btn>}
                 <Btn small onClick={() => setStage('rules')} disabled={!classMap[selected]}>Scoring rules →</Btn>
