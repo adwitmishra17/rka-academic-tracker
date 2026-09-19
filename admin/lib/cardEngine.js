@@ -133,7 +133,8 @@ export function planCard(def, family) {
     return {
       family, rounding, subjectTotal: d.subjectTotal || 100, iaTotal: Number(d.ia?.total ?? 20),
       // Skill subjects (AI, IT …): no internal assessment; one theory + practical paper per exam, half yearly AND annual.
-      skillExam: { hy: d.skill?.halfYearlyTerm || 'HY', annual: annualTerm },
+      // …plus periodic tests (PT-1 / PT-2) that are entered and crosslisted but never printed on the card.
+      skillExam: { hy: d.skill?.halfYearlyTerm || 'HY', annual: annualTerm, ptTerms: comps.find((c) => c.agg === 'avg')?.terms || ['T1', 'T2'], ptRawMax: comps.find((c) => c.agg === 'avg')?.rawMax || 40 },
       cardTerms: [{ key: 'annual', label: 'ANNUAL' }],
       cardKeys: [{ key: 'annual', label: 'Annual card', showTerms: ['annual'], gateTerms: ['annual'] }],
       components: comps,
@@ -268,6 +269,11 @@ export function generatePaperSpecs(plan, rows, termsByCode) {
         for (const [code, name] of [[plan.skillExam.hy, 'Half Yearly Exam'], [plan.skillExam.annual, 'Annual Exam']]) {
           const term = termsByCode[code]; if (!term) continue
           push({ subjectId: subj.id, termId: term.id, termCode: code, componentKey: 'exam', paperName: name, maxMarks: total, cardMax: total, hasPractical: pr > 0, theoryMax: pr > 0 ? th : null, practicalMax: pr > 0 ? pr : 0 })
+        }
+        // Periodic tests: recorded (marks entry, crosslists), not on the card → cardMax 0
+        for (const code of plan.skillExam.ptTerms) {
+          const term = termsByCode[code]; if (!term) continue
+          push({ subjectId: subj.id, termId: term.id, termCode: code, componentKey: 'pt', paperName: 'Periodic Test', maxMarks: plan.skillExam.ptRawMax, cardMax: 0, hasPractical: false })
         }
         continue
       }

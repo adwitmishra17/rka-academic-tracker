@@ -104,7 +104,9 @@ export default function PapersStage({ branch, sessionCode, className, refreshCon
                               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                                 <Pill tone={p.component_key === 'exam' ? 'green' : p.component_key === 'pt' ? 'ink' : 'muted'}>{p.component_key}</Pill>
                                 <span style={{ fontSize: 12, fontWeight: 600, flex: 1 }}>{p.paper_name}</span>
-                                <span style={{ fontSize: 10.5, color: 'var(--text-muted)' }} title="raw max → on the card">/{Number(p.max_marks)} → /{p.card_max != null ? Number(p.card_max) : Number(p.max_marks)}</span>
+                                {Number(p.card_max) === 0
+                                  ? <span style={{ fontSize: 10.5, color: 'var(--text-muted)' }} title="Recorded and crosslisted, never printed on the card">/{Number(p.max_marks)} · not on card</span>
+                                  : <span style={{ fontSize: 10.5, color: 'var(--text-muted)' }} title="raw max → on the card">/{Number(p.max_marks)} → /{p.card_max != null ? Number(p.card_max) : Number(p.max_marks)}</span>}
                               </div>
                               <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4, flexWrap: 'wrap' }}>
                                 <input type="date" value={e?.examDate !== undefined ? e.examDate : (p.exam_date || '')} onChange={(ev) => setEdit((x) => ({ ...x, [p.id]: { ...x[p.id], examDate: ev.target.value } }))} style={{ ...inp, padding: '3px 6px', fontSize: 11 }} />
