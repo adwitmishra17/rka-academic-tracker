@@ -1182,6 +1182,33 @@ app.post('/api/report-templates/assign', verifyAuth, async (req, res) => {
   } catch (e) { console.error('[admin] POST /api/report-templates/assign:', e); res.status(500).json({ error: e.message }) }
 })
 
+// POST /api/report-templates/duplicate { templateId, className, sessionCode, name? }
+// Gives one class its OWN copy of the template it is bound to (same family, same definition,
+// only that class's rows kept) and binds the class to it — so a class can be configured
+// without touching the classes that stay on the shared template.
+app.post('/api/report-templates/duplicate', verifyAuth, async (req, res) => {
+  try {
+    const { templateId, className, sessionCode } = req.body || {}
+    if (!templateId || !className || !sessionCode) return res.status(400).json({ error: 'templateId, className and sessionCode required' })
+    const { data: src, error: e1 } = await supabase.from('report_card_templates').select('id, session_code, family, name, definition').eq('id', templateId).single()
+    if (e1) throw e1
+    const def = JSON.parse(JSON.stringify(src.definition || {}))
+    for (const k of ['classRows', 'coreOrder', 'optionalOrder']) if (def[k] && typeof def[k] === 'object') def[k] = def[k][className] !== undefined ? { [className]: def[k][className] } : {}
+    const base = String(req.body.name || src.name.replace(/\s*·\s*[^·]+$/, '')).trim()
+    let name = `${base} · ${className}`
+    const { data: taken } = await supabase.from('report_card_templates').select('name').eq('session_code', src.session_code).like('name', `${name}%`)
+    if ((taken || []).some((t) => t.name === name)) name = `${name} (${(taken || []).length + 1})`
+    const { data: created, error: e2 } = await supabase.from('report_card_templates')
+      .insert({ session_code: src.session_code, family: src.family, name, definition: def, is_active: true, updated_by: req.user?.email || req.user?.uid || null })
+      .select('id, session_code, family, name, definition, is_active').single()
+    if (e2) throw e2
+    const { error: e3 } = await supabase.from('report_card_template_classes')
+      .upsert({ session_code: sessionCode, class_name: className, template_id: created.id }, { onConflict: 'session_code,class_name' })
+    if (e3) throw e3
+    res.json({ ok: true, template: created })
+  } catch (e) { console.error('[admin] POST /api/report-templates/duplicate:', e); res.status(500).json({ error: e.message }) }
+})
+
 // ─── Examinations window (single-window exam pipeline) ─────────────────────
 if (supabase) registerExamRoutes(app, { supabase, admin, verifyAuth, branchIdForCode })
 

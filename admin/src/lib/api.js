@@ -151,6 +151,7 @@ export const reportTemplateApi = {
   list:   (sessionCode)                        => apiGet('/api/report-templates', { sessionCode }),
   save:   (id, patch)                          => apiPut(`/api/report-templates/${id}`, patch),
   assign: (sessionCode, className, templateId) => apiPost('/api/report-templates/assign', { sessionCode, className, templateId }),
+  duplicate: (sessionCode, className, templateId) => apiPost('/api/report-templates/duplicate', { sessionCode, className, templateId }),
 }
 
 // ── HPC helpers ──

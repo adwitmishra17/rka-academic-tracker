@@ -170,6 +170,19 @@ export default function SetupStage({ branch, sessionCode, className, config, ref
     setBusy('')
   }
 
+  // ── Own copy: split this class off the shared template so it can be configured alone ──
+  async function ownCopy(cls) {
+    const cur = templates.find((t) => t.id === classMap[cls]); if (!cur) return
+    const shared = Object.entries(classMap).filter(([c, id]) => id === cur.id && c !== cls).map(([c]) => c)
+    if (!shared.length) { say(`${cls} is already the only class on "${cur.name}"`); return }
+    if (!confirm(`Give ${cls} its own report-card template?\n\nA copy of "${cur.name}" is created as "${cur.name.replace(/\s*·\s*[^·]+$/, '')} · ${cls}" with the same components, card areas and ${cls}'s rows, and ${cls} is moved onto it. ${shared.join(', ')} stay on the shared template. From then on the two are edited separately (Copy rows / Copy components can still push changes across).\n\nPapers are unaffected; re-sync is not needed unless you change the rules afterwards.`)) return
+    setBusy('tpl'); setErr('')
+    try {
+      const r = await reportTemplateApi.duplicate(sessionCode, cls, cur.id)
+      await refreshConfig(); setTplNonce((n) => n + 1); say(`${cls} now uses its own template "${r.template.name}"`)
+    } catch (e) { fail(e) }
+    setBusy('')
+  }
   // ── Template binding (clones the lowest class's rows for marks-card families) ──
   async function bindTemplate(cls, templateId) {
     const cur = templates.find((t) => t.id === classMap[cls])
@@ -278,6 +291,12 @@ export default function SetupStage({ branch, sessionCode, className, config, ref
                   {classMap[selected] && !familyFits(templates.find((t) => t.id === classMap[selected])?.family, selected) && (
                     <div style={{ fontSize: 11, color: 'var(--crimson)', marginTop: 4 }}>This template does not fit {selected} — no rows or composites will resolve. Pick the matching card.</div>
                   )}
+                  {classMap[selected] && (() => { const others = Object.entries(classMap).filter(([c, id]) => id === classMap[selected] && c !== selected).map(([c]) => c); return others.length ? (
+                    <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                      <span>Shared with {others.join(', ')} — components and card areas are common.</span>
+                      <button onClick={() => ownCopy(selected)} disabled={busy === 'tpl'} style={{ border: '1px solid var(--gray-200)', background: 'var(--white)', borderRadius: 6, padding: '2px 8px', fontSize: 11, cursor: 'pointer', color: 'var(--text)' }} title="Copy this template for this class only, so it can be configured independently">Own copy for {selected}</button>
+                    </div>
+                  ) : <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>Only {selected} uses this template.</div> })()}
                 </div>
                 {classMap[selected] && <Btn small onClick={async () => { const t = templates.find((x) => x.id === classMap[selected]); const n = prompt('Template name (shown in the list; not printed):', t?.name || ''); if (!n || !n.trim() || n.trim() === t?.name) return; setBusy('tpl'); try { await reportTemplateApi.save(t.id, { name: n.trim() }); await refreshConfig(); say('Template renamed') } catch (e) { fail(e) } setBusy('') }} title="Rename this template">Rename</Btn>}
                 <Btn small onClick={() => setStage('rules')} disabled={!classMap[selected]}>Scoring rules →</Btn>
