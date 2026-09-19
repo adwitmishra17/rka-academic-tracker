@@ -96,7 +96,7 @@ const CSS = `
   .box .kv{display:grid;grid-template-columns:auto 1fr;gap:0 10px}
   .box .kv span{color:#1A1A1A;font-size:11.5px}
   .box .kv b{font-weight:600}
-  .box .result{font-family:Lora,Georgia,serif;font-size:16px;font-weight:700;color:#7B1F2B;margin-top:2px;letter-spacing:.04em}
+  .box .result{font-family:Lora,Georgia,serif;font-size:16px;font-weight:700;color:#C8102E;margin-top:2px;letter-spacing:.04em}
   .box .note{font-size:11px;color:#1A1A1A;margin-top:5px}
   .key{font-size:10px;color:#1A1A1A;line-height:1.5}
   .sig{display:flex;justify-content:space-between;margin-top:auto;padding-top:14mm;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:#1A1A1A}
@@ -113,12 +113,11 @@ const CSS = `
     .photo{background:#fff}
     tbody tr:nth-child(even) td{background:transparent}
     tr.sum td{background:#E6E6E6!important}
-    .meta b,.metrics .v.red,td.g,td.fail,.co b,.box .result{color:#000}
+    .meta b,.metrics .v.red,td.g,td.fail,.co b{color:#000}
+    .box .result{color:#C8102E}
     .chart .gl{stroke:#C4C4C4}
-    .chart .b-me{fill:#000}
     .chart .b-avg{fill:#D4D4D4;stroke:#000;stroke-width:.5}
     .chart .vl{fill:#000}
-    .legend .sw-me{background:#000!important}
     .legend .sw-avg{background:#D4D4D4!important;border:1px solid #000}
     .legend .sw-hi{background:#fff!important}
     .meta,.cell small,.metrics .k,th,h4,.box .who,.key,.foot,td small.mm,td.sub small,.legend,.co small,.box .kv span,.box .note{font-size:10.5px}
@@ -326,6 +325,10 @@ function shortName(s) {
   const t = title(s).replace(/^English.*/, 'English').replace(/^Hindi.*/, 'Hindi').replace('Social Science', 'Soc. Sci.').replace('Mathematics', 'Maths').replace('Artificial Intelligence', 'A.I.').replace('English Lng & Lit.', 'English').replace('Hindi Course-A', 'Hindi').replace('Hindi Course-B', 'Hindi').replace(/ Core$/, '').replace('General Awareness', 'Gen. Aw.').replace('Environmental Studies', 'EVS').replace('Computer Science', 'Comp. Sci.').replace('Informatics Practices', 'IP').replace('Physical Education', 'Phy. Ed.').replace('Business Studies', 'Bus. St.').replace('Accountancy', 'Accounts').replace('Political Science', 'Pol. Sci.').replace('Fine Arts', 'Arts')
   return t.length > 12 ? t.slice(0, 11) + '.' : t
 }
+// One colour per subject bar — the student's bars are the card's one lively element; section-average /
+// first-term bars stay a quiet grey so the comparison still reads. Kept in print (print-color-adjust: exact).
+const BAR_COLOURS = ['#7B1F2B', '#1F4E79', '#2E7D32', '#B26A00', '#5E35B1', '#00838F', '#AD1457', '#4E342E', '#3949AB', '#6D4C41']
+const barColour = (i) => BAR_COLOURS[i % BAR_COLOURS.length]
 function chart(card, shown, final) {
   const rows = card.rows.filter((r) => !r.unmapped && !r.additional)
   if (!rows.length) return ''
@@ -341,9 +344,9 @@ function chart(card, shown, final) {
     const [a, b] = shown
     bars = rows.map((r, i) => {
       const x = i * gw + gw / 2, ca = r.byTerm[a.key], cb = r.byTerm[b.key]; const va = ca?.complete ? ca.obtained : 0, vb = cb?.complete ? cb.obtained : 0
-      return `<rect x="${x - bw - 1}" y="${y(va)}" width="${bw}" height="${base - y(va)}" class="b-avg" fill="#D8D2C2"/><rect x="${x + 1}" y="${y(vb)}" width="${bw}" height="${base - y(vb)}" class="b-me" fill="#7B1F2B"/>${cb?.complete ? `<text class="vl" x="${x + 1 + bw / 2}" y="${y(vb) - 2}" text-anchor="middle" font-size="8.5" font-weight="700" fill="#7B1F2B" font-family="Inter,sans-serif">${vb}</text>` : ''}`
+      return `<rect x="${x - bw - 1}" y="${y(va)}" width="${bw}" height="${base - y(va)}" class="b-avg" fill="#D8D2C2"/><rect x="${x + 1}" y="${y(vb)}" width="${bw}" height="${base - y(vb)}" class="b-me" fill="${barColour(i)}"/>${cb?.complete ? `<text class="vl" x="${x + 1 + bw / 2}" y="${y(vb) - 2}" text-anchor="middle" font-size="8.5" font-weight="700" fill="#1A1A1A" font-family="Inter,sans-serif">${vb}</text>` : ''}`
     }).join('')
-    legend = `<span><i class="sw-avg" style="background:#D8D2C2"></i>${esc(a.label)}</span><span><i class="sw-me" style="background:#7B1F2B"></i>${esc(b.label)}</span>`
+    legend = `<span><i class="sw-avg" style="background:#D8D2C2"></i>${esc(a.label)}</span><span><i class="sw-me" style="background:linear-gradient(90deg,${BAR_COLOURS.slice(0, 4).join(',')})"></i>${esc(b.label)}</span>`
     h4 = `${esc(a.label)} against ${esc(b.label)} · marks out of ${per}`
   } else {
     const t = shown[0]?.key
@@ -351,11 +354,11 @@ function chart(card, shown, final) {
     bars = rows.map((r, i) => {
       const x = i * gw + gw / 2, c = r.byTerm[t]; const v = c?.complete ? c.obtained : 0
       const avg = card.sectionAverageByTerm?.[`${r.subject}|${t}`] ?? card.sectionAverage?.[r.subject]; const hi = card.sectionHighest?.[r.subject]
-      const mine = hasSection ? `<rect x="${x + 1}" y="${y(v)}" width="${bw}" height="${base - y(v)}" class="b-me" fill="#7B1F2B"/>` : `<rect x="${x - bw / 2}" y="${y(v)}" width="${bw}" height="${base - y(v)}" class="b-me" fill="#7B1F2B"/>`
+      const mine = hasSection ? `<rect x="${x + 1}" y="${y(v)}" width="${bw}" height="${base - y(v)}" class="b-me" fill="${barColour(i)}"/>` : `<rect x="${x - bw / 2}" y="${y(v)}" width="${bw}" height="${base - y(v)}" class="b-me" fill="${barColour(i)}"/>`
       const lx = hasSection ? x + 1 + bw / 2 : x
-      return `${hasSection && avg != null ? `<rect x="${x - bw - 1}" y="${y(avg)}" width="${bw}" height="${base - y(avg)}" class="b-avg" fill="#D8D2C2"/>` : ''}${mine}${hasSection && hi != null ? `<line x1="${x - bw - 2}" x2="${x + bw + 2}" y1="${y(hi)}" y2="${y(hi)}" stroke="#1A1A1A" stroke-width=".9"/>` : ''}${c?.complete ? `<text class="vl" x="${lx}" y="${y(v) - 2}" text-anchor="middle" font-size="8.5" font-weight="700" fill="#7B1F2B" font-family="Inter,sans-serif">${v}</text>` : ''}`
+      return `${hasSection && avg != null ? `<rect x="${x - bw - 1}" y="${y(avg)}" width="${bw}" height="${base - y(avg)}" class="b-avg" fill="#D8D2C2"/>` : ''}${mine}${hasSection && hi != null ? `<line x1="${x - bw - 2}" x2="${x + bw + 2}" y1="${y(hi)}" y2="${y(hi)}" stroke="#1A1A1A" stroke-width=".9"/>` : ''}${c?.complete ? `<text class="vl" x="${lx}" y="${y(v) - 2}" text-anchor="middle" font-size="8.5" font-weight="700" fill="#1A1A1A" font-family="Inter,sans-serif">${v}</text>` : ''}`
     }).join('')
-    legend = `<span><i class="sw-me" style="background:#7B1F2B"></i>${esc((card.student?.name || 'Student').split(' ')[0])}</span>${hasSection ? '<span><i class="sw-avg" style="background:#D8D2C2"></i>Section average</span><span><i class="sw-hi" style="border:1px solid #1A1A1A;background:#FAF7F0"></i>Section highest</span>' : ''}`
+    legend = `<span><i class="sw-me" style="background:linear-gradient(90deg,${BAR_COLOURS.slice(0, 4).join(',')})"></i>${esc((card.student?.name || 'Student').split(' ')[0])}</span>${hasSection ? '<span><i class="sw-avg" style="background:#D8D2C2"></i>Section average</span><span><i class="sw-hi" style="border:1px solid #1A1A1A;background:#FAF7F0"></i>Section highest</span>' : ''}`
     h4 = `${esc(shown[0]?.label || '')} · marks out of ${per}${hasSection ? ' against the section' : ''}`
   }
   return `<h4>${h4}</h4><svg viewBox="0 0 400 166">${grid}${bars}<line x1="0" x2="${W}" y1="${base}" y2="${base}" stroke="#1A1A1A" stroke-width=".8"/>${labels}</svg><div class="legend">${legend}</div>`
