@@ -388,7 +388,7 @@ export default function RulesStage({ branch, sessionCode, className, config, ref
             <div style={{ display: 'flex', gap: 6 }}>{copyPanel}<Btn small onClick={addRow}>+ Row</Btn></div>
           </div>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <thead><tr><th style={th}></th><th style={th}>Row on card</th>{family === 'secondary_annual' && <><th style={th}>LoC code</th><th style={th}>Written</th><th style={th}>Practical</th><th style={th}>Additional</th></>}{family === 'pre_primary' && <><th style={th}>Oral</th><th style={th}>Written</th></>}<th style={th}>Fed by (class subjects)</th><th style={th}></th></tr></thead>
+            <thead><tr><th style={th}></th><th style={th}>Row on card</th>{family === 'secondary_annual' && <><th style={th}>LoC code</th><th style={th}>Written</th><th style={th}>Practical</th><th style={th}>Skill</th><th style={th}>Additional</th></>}{family === 'pre_primary' && <><th style={th}>Oral</th><th style={th}>Written</th></>}<th style={th}>Fed by (class subjects)</th><th style={th}></th></tr></thead>
             <tbody>{rows.map((r, i) => {
               const m = mappedRows.find((x) => x.subject === r.subject)
               const auto = m?.mapped || []
@@ -405,6 +405,7 @@ export default function RulesStage({ branch, sessionCode, className, config, ref
                     <td style={td}><input value={r.locCode || ''} onChange={(e) => setRow(i, { locCode: e.target.value })} style={{ ...inp, width: 56 }} /></td>
                     <td style={td}><input type="number" value={r.written ?? 80} onChange={(e) => setRow(i, { written: Number(e.target.value) })} style={{ ...inp, width: 60 }} /></td>
                     <td style={td}><input type="number" value={r.practical ?? 0} onChange={(e) => setRow(i, { practical: Number(e.target.value) })} style={{ ...inp, width: 60 }} /></td>
+                    <td style={td}><input type="checkbox" checked={!!r.skill} onChange={(e) => setRow(i, e.target.checked ? { skill: true, written: r.written ?? 50, practical: r.practical || 50 } : { skill: false })} title="Skill subject (AI, IT …): no internal assessment — one theory + practical paper in the half-yearly exam and one in the annual exam. The card row is the annual exam; the half-yearly prints beside it." /></td>
                     <td style={td}><input type="checkbox" checked={!!r.additional} onChange={(e) => setRow(i, { additional: e.target.checked, countsInAggregate: !e.target.checked })} title="Not counted in the grand total" /></td>
                   </>}
                   <td style={td}>

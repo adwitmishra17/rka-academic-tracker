@@ -74,6 +74,8 @@ const CSS = `
   table.dense td{padding:4px 1px}
   table.dense th{letter-spacing:.02em;padding:3px 1.5px;font-size:8.5px}
   table.dense td.sub{font-size:11px;white-space:normal}
+  td.skill{font-size:10.5px;text-align:center;white-space:nowrap}
+  td.skill small{display:block;font-size:8.5px;letter-spacing:.06em;text-transform:uppercase;color:#1A1A1A}
   table.roomy td{padding:8px 3px}
   tr.sum td{border-top:1.5px solid #1A1A1A;border-bottom:1.5px solid #1A1A1A;font-weight:700;background:#EFE9DC!important;white-space:nowrap;padding-top:6px;padding-bottom:6px}
   td.t,td.g{white-space:nowrap}
@@ -262,7 +264,12 @@ function tableSecondary(card, shown) {
     const wr = has ? (ex.absent ? 'AB' : fmt(ex.theoryMax ? ex.theory : ex.value)) : dash
     const pr = has ? (ex.absent ? 'AB' : (ex.practicalMax ? fmt(ex.practical) : dash)) : dash
     const exT = has ? (ex.absent ? 'AB' : fmt(ex.value)) : dash
-    return `<tr><td class="l sub">${esc(title(r.subject))}${r.additional ? '<small>Additional · not in aggregate</small>' : ''}</td>${grey(esc(r.locCode || ''))}${ia.map((c) => `<td>${cellVal(cell.comps?.[c.key])}</td>`).join('')}<td class="t">${iaOk ? iaSum : dash}</td><td class="sep">${pr}</td><td>${wr}</td><td class="t">${exT}</td><td class="t sep">${cell.complete ? cell.obtained : dash}</td>${gradeCell(cell.complete ? cell.grade : null)}${sc.cell(r)}</tr>`
+    const hy = cell.comps?.hy
+    const hyText = !hy || hy.missing ? dash : hy.absent ? 'AB' : (hy.theoryMax ? `${fmt(hy.theory)} + ${fmt(hy.practical)} = <b>${fmt(hy.value)}</b>` : `<b>${fmt(hy.value)}</b>`)
+    const iaCells = r.skill
+      ? `<td colspan="${ia.length + 1}" class="skill"><small>Skill subject · no internal assessment</small>Half yearly ${hyText} /${hy?.max || card.plan.subjectTotal}</td>`
+      : `${ia.map((c) => `<td>${cellVal(cell.comps?.[c.key])}</td>`).join('')}<td class="t">${iaOk ? iaSum : dash}</td>`
+    return `<tr><td class="l sub">${esc(title(r.subject))}${r.additional ? '<small>Additional · not in aggregate</small>' : ''}</td>${grey(esc(r.locCode || ''))}${iaCells}<td class="sep">${pr}</td><td>${wr}</td><td class="t">${exT}</td><td class="t sep">${cell.complete ? cell.obtained : dash}</td>${gradeCell(cell.complete ? cell.grade : null)}${sc.cell(r)}</tr>`
   }).join('')
   const o = card.overall
   return `<table class="dense"><thead>${head}</thead><tbody>${body}<tr class="sum"><td class="l" colspan="${ia.length + 6}">Aggregate · excluding additional subjects</td><td class="sep">${totalCell(o)}</td>${gradeCell(o.grade)}${sc.sum}</tr></tbody></table>`

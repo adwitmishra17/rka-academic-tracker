@@ -357,7 +357,7 @@ export function registerExamRoutes(app, { supabase, admin, verifyAuth, branchIdF
       const b = await loadBundle(bid, sessionCode, className)
       if (!b.template) return res.json({ template: null, plan: null, rows: [], terms: b.terms })
       const plan = planCard(b.template.definition, b.template.family)
-      const shape = (r, extra = {}) => ({ subject: r.subject, locCode: r.locCode, written: r.written, practical: r.practical, additional: r.additional, mapped: r.sources.map((s) => s.subject_name), unmapped: r.sources.length === 0, ...extra })
+      const shape = (r, extra = {}) => ({ subject: r.subject, locCode: r.locCode, written: r.written, practical: r.practical, additional: r.additional, skill: !!r.skill, mapped: r.sources.map((s) => s.subject_name), unmapped: r.sources.length === 0, ...extra })
       const rows = resolveRows(b.template.definition, b.template.family, className, b.subjects, null).map((r) => shape(r))
       // Senior classes: the core prints for everyone; each student adds ONE optional (chosen in SMS)
       if (b.template.family === 'senior_progress') rows.push(...resolveSeniorNames(b.template.definition, seniorOptionals(b.template.definition, className), b.subjects).map((r) => shape(r, { optional: true })))

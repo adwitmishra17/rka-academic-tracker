@@ -132,6 +132,8 @@ export function planCard(def, family) {
     comps.push({ key: 'exam', label: 'Annual Exam', max: Number(d.annualExam?.total || 80), kind: 'exam', ia: false, termMap: { annual: annualTerm }, parts: d.annualExam?.parts || ['practical', 'written'] })
     return {
       family, rounding, subjectTotal: d.subjectTotal || 100, iaTotal: Number(d.ia?.total ?? 20),
+      // Skill subjects (AI, IT …): no internal assessment; one theory + practical paper per exam, half yearly AND annual.
+      skillExam: { hy: d.skill?.halfYearlyTerm || 'HY', annual: annualTerm },
       cardTerms: [{ key: 'annual', label: 'ANNUAL' }],
       cardKeys: [{ key: 'annual', label: 'Annual card', showTerms: ['annual'], gateTerms: ['annual'] }],
       components: comps,
@@ -246,7 +248,7 @@ export function resolveRows(def, family, className, subjects, student) {
   if (rows?.length) {
     return rows.map((r) => {
       const ids = resolveRowSubjects(r, scholastic, { composite: isComposite })
-      return { subject: r.subject, locCode: r.locCode || null, sources: ids, subjectIds: ids.map((s) => s.id), written: r.written != null ? Number(r.written) : null, practical: r.practical != null ? Number(r.practical) : 0, oral: r.oral != null ? Number(r.oral) : (family === 'pre_primary' ? 40 : null), additional: !!r.additional, countsInAggregate: r.countsInAggregate !== false }
+      return { subject: r.subject, locCode: r.locCode || null, sources: ids, subjectIds: ids.map((s) => s.id), skill: !!r.skill, written: r.written != null ? Number(r.written) : null, practical: r.practical != null ? Number(r.practical) : 0, oral: r.oral != null ? Number(r.oral) : (family === 'pre_primary' ? 40 : null), additional: !!r.additional, countsInAggregate: r.countsInAggregate !== false }
     })
   }
   // No template rows → every scholastic subject, one row each (legacy behaviour)
@@ -260,6 +262,15 @@ export function generatePaperSpecs(plan, rows, termsByCode) {
   const push = (s) => { if (!specs.some((x) => x.subjectId === s.subjectId && x.termId === s.termId && x.componentKey === s.componentKey)) specs.push(s) }
   for (const row of rows) {
     for (const subj of row.sources) {
+      if (plan.family === 'secondary_annual' && row.skill) {
+        // Skill subject: no IA papers; theory + practical in the half-yearly and the annual exam
+        const th = Number(row.written ?? 50), pr = Number(row.practical ?? 50), total = th + pr
+        for (const [code, name] of [[plan.skillExam.hy, 'Half Yearly Exam'], [plan.skillExam.annual, 'Annual Exam']]) {
+          const term = termsByCode[code]; if (!term) continue
+          push({ subjectId: subj.id, termId: term.id, termCode: code, componentKey: 'exam', paperName: name, maxMarks: total, cardMax: total, hasPractical: pr > 0, theoryMax: pr > 0 ? th : null, practicalMax: pr > 0 ? pr : 0 })
+        }
+        continue
+      }
       for (const c of plan.components) {
         if (c.agg === 'avg') {
           for (const tc of c.terms) {
@@ -347,14 +358,16 @@ export function computeCard(p) {
 
   const gateTerms = new Set(cardKey.gateTerms)
   const outRows = rows.map((row) => {
-    const r = { subject: row.subject, locCode: row.locCode, additional: !!row.additional, countsInAggregate: row.countsInAggregate !== false, unmapped: row.sources.length === 0, oralMax: row.oral ?? null, writtenMax: row.written ?? null, byTerm: {}, total: { obtained: 0, max: 0, pct: null, grade: null } }
+    const r = { subject: row.subject, locCode: row.locCode, skill: !!row.skill, additional: !!row.additional, countsInAggregate: row.countsInAggregate !== false, unmapped: row.sources.length === 0, oralMax: row.oral ?? null, writtenMax: row.written ?? null, byTerm: {}, total: { obtained: 0, max: 0, pct: null, grade: null } }
     if (r.unmapped) { missing.push({ row: row.subject, reason: 'no subject mapped for this row' }); return r }
     let cumO = 0, cumM = 0
     for (const ct of plan.cardTerms) {
       const shown = cardKey.showTerms.includes(ct.key)
       const gated = gateTerms.has(ct.key)
       const cell = { comps: {}, obtained: 0, max: 0, pct: null, grade: null, complete: true }
+      const skillRow = plan.family === 'secondary_annual' && row.skill
       for (const c of plan.components) {
+        if (skillRow && c.ia) continue   // skill subject: no internal assessment
         let v
         if (c.agg === 'avg') {
           const parts = c.terms.map((tc) => cellFor(row, tc, c.paperKey || c.key, c.max, c.rawMax))
@@ -381,6 +394,13 @@ export function computeCard(p) {
         cell.max += v.max ?? (c.max || 0)
         if (v.missing) { cell.complete = false; if (gated && shown && !v.soft) missing.push({ row: row.subject, term: ct.label, component: c.label, reason: v.reason }); if (v.soft && gated) warnings.push({ row: row.subject, term: ct.label, component: c.label, reason: v.reason }) }
         else cell.obtained += v.value || 0
+      }
+      if (skillRow) {
+        // Half-yearly theory + practical: entered and printed, but the row total is the annual exam (like every other row)
+        const cardMax = Number(row.written ?? 50) + Number(row.practical || 0)
+        const hy = cellFor(row, plan.skillExam.hy, 'exam', cardMax, cardMax)
+        cell.comps.hy = { ...hy, soft: true }
+        if (hy.missing && gated && shown) warnings.push({ row: row.subject, term: 'Half Yearly', component: 'Skill exam', reason: hy.reason })
       }
       if (cell.max > 0 && cell.complete) { cell.pct = 100 * cell.obtained / cell.max; cell.grade = gradeFor(cell.pct, scale) }
       if (plan.family === 'senior_progress') {
