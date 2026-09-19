@@ -356,7 +356,7 @@ export default function RulesStage({ branch, sessionCode, className, config, ref
                   ) : c.agg === 'avg' ? (
                     <>Office enters the periodic test out of <b><input type="number" value={c.rawMax ?? ''} onChange={(e) => setComp(c.key, { rawMax: e.target.value })} style={{ ...inp, width: 60, padding: '2px 6px' }} /></b> in {(c.terms || []).map((t) => <Pill key={t} tone="muted">{t} · {termName(t)}</Pill>)}; the average of those tests becomes <b>/<input type="number" value={c.max ?? ''} onChange={(e) => setComp(c.key, { max: e.target.value })} style={{ ...inp, width: 56, padding: '2px 6px' }} /></b> on the card.</>
                   ) : (
-                    <>Office enters marks out of <b><input type="number" value={c.rawMax ?? ''} onChange={(e) => setComp(c.key, { rawMax: e.target.value })} style={{ ...inp, width: 60, padding: '2px 6px' }} /></b>
+                    <>Office enters marks out of {fixedCard ? <b title="Each row sets its own written + practical max below">the row's written + practical</b> : <b><input type="number" value={c.rawMax ?? ''} onChange={(e) => setComp(c.key, { rawMax: e.target.value })} style={{ ...inp, width: 60, padding: '2px 6px' }} /></b>}
                       {family === 'secondary_annual' ? (
                         <> in <select value={c.termMap?.annual || 'AN'} onChange={(e) => setComp(c.key, { termMap: { annual: e.target.value } })} style={{ ...inp, padding: '2px 6px' }}>{EXAM_CODES.map((x) => <option key={x} value={x}>{x} · {termName(x)}</option>)}</select></>
                       ) : cardTerms.map((t) => (
