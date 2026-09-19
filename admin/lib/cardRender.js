@@ -30,9 +30,9 @@ const CSS = `
   @import url('https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,600;0,700;1,400&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap');
   *{box-sizing:border-box}
   html{color-scheme:light}
-  body{margin:0;background:#e9e7e0;font-family:Inter,system-ui,-apple-system,"Segoe UI",sans-serif;color:#1A1A1A;font-variant-numeric:tabular-nums;-webkit-print-color-adjust:exact;print-color-adjust:exact}
-  .page{width:210mm;height:297mm;margin:0 auto;background:#FAF7F0;color:#1A1A1A;position:relative;padding:10mm 12mm 8mm;display:flex;flex-direction:column;gap:6px;overflow:hidden}
-  .hd{display:flex;align-items:center;gap:12px;border-bottom:1px solid #D8D2C2;padding-bottom:7px}
+  body{margin:0;background:#E6E6E6;font-family:Inter,system-ui,-apple-system,"Segoe UI",sans-serif;color:#1A1A1A;font-variant-numeric:tabular-nums;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .page{width:210mm;height:297mm;margin:0 auto;background:#FFFFFF;color:#1A1A1A;position:relative;padding:10mm 12mm 8mm;display:flex;flex-direction:column;gap:6px;overflow:hidden}
+  .hd{display:flex;align-items:center;gap:12px;border-bottom:1px solid #CFCFCF;padding-bottom:7px}
   .hd img.crest{width:62px;height:62px;object-fit:contain;flex-shrink:0}
   .school img.wordmark{display:block;height:50px;width:auto;max-width:300px}
   .school b{display:block;font-family:Lora,Georgia,serif;font-size:22px;letter-spacing:.06em;line-height:1.1}
@@ -42,16 +42,16 @@ const CSS = `
   .title{display:flex;align-items:baseline;justify-content:space-between;padding:1px 0}
   .title h2{margin:0;font-family:Lora,Georgia,serif;font-size:21px;letter-spacing:.2em;font-weight:600;white-space:nowrap}
   .title span{font-family:"JetBrains Mono",ui-monospace,monospace;font-size:11px;color:#1A1A1A;letter-spacing:.06em;white-space:nowrap}
-  .strip{display:grid;grid-template-columns:1fr;gap:12px;border:1px solid #D8D2C2;padding:7px 9px}
+  .strip{display:grid;grid-template-columns:1fr;gap:12px;border:1px solid #CFCFCF;padding:7px 9px}
   .strip.hasphoto{grid-template-columns:26mm 1fr}
-  .photo{width:26mm;height:30mm;background:#E8E4D8;object-fit:cover;display:block}
+  .photo{width:26mm;height:30mm;background:#EDEDED;object-fit:cover;display:block}
   .cells{display:grid;grid-template-columns:repeat(3,1fr);gap:5px 12px;align-content:center}
   .cell small{display:block;font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;color:#1A1A1A}
   .cell b{font-size:13px;font-weight:600}
   .cell b.mono{font-family:"JetBrains Mono",ui-monospace,monospace;font-weight:500}
   .cell b.name{font-family:Lora,Georgia,serif;font-size:16px}
-  .metrics{display:grid;grid-template-columns:1.2fr 1.35fr .9fr .7fr .7fr;border:1px solid #D8D2C2}
-  .metrics div{padding:5px 6px;border-right:1px solid #D8D2C2;text-align:center}
+  .metrics{display:grid;grid-template-columns:1.2fr 1.35fr .9fr .7fr .7fr;border:1px solid #CFCFCF}
+  .metrics div{padding:5px 6px;border-right:1px solid #CFCFCF;text-align:center}
   .metrics div:last-child{border-right:0}
   .metrics .v{font-family:Lora,Georgia,serif;font-size:19px;font-weight:600;line-height:1.15;white-space:nowrap}
   .metrics .v.red{color:#7B1F2B}
@@ -59,9 +59,9 @@ const CSS = `
   table{width:100%;border-collapse:collapse;font-size:12.5px}
   th{font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;color:#1A1A1A;text-align:center;padding:4px 3px;border-bottom:1px solid #1A1A1A;line-height:1.3;font-weight:600;vertical-align:bottom}
   th.l,td.l{text-align:left}
-  th.band{border-bottom:1px solid #D8D2C2;color:#1A1A1A;letter-spacing:.14em;padding-bottom:2px}
-  th.sep,td.sep{border-left:1px solid #D8D2C2}
-  td{padding:5.5px 3px;text-align:center;border-bottom:1px solid #D8D2C2;color:#1A1A1A}
+  th.band{border-bottom:1px solid #CFCFCF;color:#1A1A1A;letter-spacing:.14em;padding-bottom:2px}
+  th.sep,td.sep{border-left:1px solid #CFCFCF}
+  td{padding:5.5px 3px;text-align:center;border-bottom:1px solid #CFCFCF;color:#1A1A1A}
   tbody tr:nth-child(even) td{background:rgba(123,31,43,.035)}
   td.sub{font-weight:600;font-size:13px;white-space:nowrap}
   td.sub small{display:block;font-weight:400;font-size:10.5px;color:#1A1A1A}
@@ -77,20 +77,20 @@ const CSS = `
   td.skill{font-size:10.5px;text-align:center;white-space:nowrap}
   td.skill small{display:block;font-size:8.5px;letter-spacing:.06em;text-transform:uppercase;color:#1A1A1A}
   table.roomy td{padding:8px 3px}
-  tr.sum td{border-top:1.5px solid #1A1A1A;border-bottom:1.5px solid #1A1A1A;font-weight:700;background:#EFE9DC!important;white-space:nowrap;padding-top:6px;padding-bottom:6px}
+  tr.sum td{border-top:1.5px solid #1A1A1A;border-bottom:1.5px solid #1A1A1A;font-weight:700;background:#EFEFEF!important;white-space:nowrap;padding-top:6px;padding-bottom:6px}
   td.t,td.g{white-space:nowrap}
   h4{font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;color:#1A1A1A;margin:0 0 3px;font-weight:600}
   .row2{display:grid;grid-template-columns:1.05fr 1fr;gap:16px;margin-top:14px}
   .chart svg{width:100%;height:auto;display:block;margin-top:10px}
   .legend{display:flex;gap:12px;font-size:10.5px;color:#1A1A1A;margin-top:2px}
   .legend i{display:inline-block;width:9px;height:9px;margin-right:4px;vertical-align:-1px;border-radius:2px}
-  .co div{display:flex;justify-content:space-between;align-items:baseline;border-bottom:1px dotted #D8D2C2;padding:5px 0;font-size:13px}
+  .co div{display:flex;justify-content:space-between;align-items:baseline;border-bottom:1px dotted #CFCFCF;padding:5px 0;font-size:13px}
   .co small{color:#1A1A1A;font-style:italic;font-family:Lora,Georgia,serif;font-size:11px;margin-left:5px}
   .co b{color:#7B1F2B;font-family:"JetBrains Mono",ui-monospace,monospace;font-weight:700;font-size:14px}
   .co b.plain{color:#1A1A1A;font-family:Inter,sans-serif;font-weight:600}
   .bottom{display:grid;grid-template-columns:1.4fr 1fr;gap:14px;margin-top:2px;flex:0 0 auto}
   .bottom>div{display:flex;flex-direction:column}
-  .box{border:1px solid #D8D2C2;padding:6px 9px;font-size:12.5px;line-height:1.45;min-height:20mm}
+  .box{border:1px solid #CFCFCF;padding:6px 9px;font-size:12.5px;line-height:1.45;min-height:20mm}
   .box i{font-family:Lora,Georgia,serif}
   .box .who{display:block;font-size:10px;color:#1A1A1A;margin-top:4px;letter-spacing:.06em;text-transform:uppercase}
   .box .kv{display:grid;grid-template-columns:auto 1fr;gap:0 10px}
@@ -119,7 +119,6 @@ const CSS = `
     .chart .b-avg{fill:#D4D4D4;stroke:#000;stroke-width:.5}
     .chart .vl{fill:#000}
     .legend .sw-avg{background:#D4D4D4!important;border:1px solid #000}
-    .legend .sw-hi{background:#fff!important}
     .meta,.cell small,.metrics .k,th,h4,.box .who,.key,.foot,td small.mm,td.sub small,.legend,.co small,.box .kv span,.box .note{font-size:10.5px}
     table.dense th{font-size:9.5px;letter-spacing:0}
   }
@@ -336,7 +335,7 @@ function chart(card, shown, final) {
   const per = card.family === 'secondary_annual' ? (card.plan.subjectTotal || 100) : (Math.max(...rows.map((r) => perRow(r, shown[0]?.key) || 0)) || 100)
   const W = 400, base = 150, H = 134, n = rows.length, gw = W / n
   const y = (v) => base - Math.max(0, Math.min(per, v)) * H / per
-  const grid = [25, 50, 75, 100].map((p) => { const v = Math.round(per * p / 100); return `<line x1="0" x2="${W}" y1="${y(v)}" y2="${y(v)}" class="gl" stroke="#E8E4D8" stroke-width=".6"/><text x="0" y="${y(v) - 1.5}" font-size="8" fill="#1A1A1A" font-family="Inter,sans-serif">${v}</text>` }).join('')
+  const grid = [25, 50, 75, 100].map((p) => { const v = Math.round(per * p / 100); return `<line x1="0" x2="${W}" y1="${y(v)}" y2="${y(v)}" class="gl" stroke="#E3E3E3" stroke-width=".6"/><text x="0" y="${y(v) - 1.5}" font-size="8" fill="#1A1A1A" font-family="Inter,sans-serif">${v}</text>` }).join('')
   const labels = rows.map((r, i) => `<text x="${i * gw + gw / 2}" y="${base + 9}" text-anchor="middle" font-size="8" fill="#1A1A1A" font-family="Inter,sans-serif">${esc(shortName(r.subject).toUpperCase())}</text>`).join('')
   const bw = Math.min(12, gw / 2.6)
   let bars, legend, h4
@@ -344,21 +343,21 @@ function chart(card, shown, final) {
     const [a, b] = shown
     bars = rows.map((r, i) => {
       const x = i * gw + gw / 2, ca = r.byTerm[a.key], cb = r.byTerm[b.key]; const va = ca?.complete ? ca.obtained : 0, vb = cb?.complete ? cb.obtained : 0
-      return `<rect x="${x - bw - 1}" y="${y(va)}" width="${bw}" height="${base - y(va)}" class="b-avg" fill="#D8D2C2"/><rect x="${x + 1}" y="${y(vb)}" width="${bw}" height="${base - y(vb)}" class="b-me" fill="${barColour(i)}"/>${cb?.complete ? `<text class="vl" x="${x + 1 + bw / 2}" y="${y(vb) - 2}" text-anchor="middle" font-size="8.5" font-weight="700" fill="#1A1A1A" font-family="Inter,sans-serif">${vb}</text>` : ''}`
+      return `<rect x="${x - bw - 1}" y="${y(va)}" width="${bw}" height="${base - y(va)}" class="b-avg" fill="#CFCFCF"/><rect x="${x + 1}" y="${y(vb)}" width="${bw}" height="${base - y(vb)}" class="b-me" fill="${barColour(i)}"/>${cb?.complete ? `<text class="vl" x="${x + 1 + bw / 2}" y="${y(vb) - 2}" text-anchor="middle" font-size="8.5" font-weight="700" fill="#1A1A1A" font-family="Inter,sans-serif">${vb}</text>` : ''}`
     }).join('')
-    legend = `<span><i class="sw-avg" style="background:#D8D2C2"></i>${esc(a.label)}</span><span><i class="sw-me" style="background:linear-gradient(90deg,${BAR_COLOURS.slice(0, 4).join(',')})"></i>${esc(b.label)}</span>`
+    legend = `<span><i class="sw-avg" style="background:#CFCFCF"></i>${esc(a.label)}</span><span><i class="sw-me" style="background:linear-gradient(90deg,${BAR_COLOURS.slice(0, 4).join(',')})"></i>${esc(b.label)}</span>`
     h4 = `${esc(a.label)} against ${esc(b.label)} · marks out of ${per}`
   } else {
     const t = shown[0]?.key
     const hasSection = !!card.sectionAverage
     bars = rows.map((r, i) => {
       const x = i * gw + gw / 2, c = r.byTerm[t]; const v = c?.complete ? c.obtained : 0
-      const avg = card.sectionAverageByTerm?.[`${r.subject}|${t}`] ?? card.sectionAverage?.[r.subject]; const hi = card.sectionHighest?.[r.subject]
+      const avg = card.sectionAverageByTerm?.[`${r.subject}|${t}`] ?? card.sectionAverage?.[r.subject]
       const mine = hasSection ? `<rect x="${x + 1}" y="${y(v)}" width="${bw}" height="${base - y(v)}" class="b-me" fill="${barColour(i)}"/>` : `<rect x="${x - bw / 2}" y="${y(v)}" width="${bw}" height="${base - y(v)}" class="b-me" fill="${barColour(i)}"/>`
       const lx = hasSection ? x + 1 + bw / 2 : x
-      return `${hasSection && avg != null ? `<rect x="${x - bw - 1}" y="${y(avg)}" width="${bw}" height="${base - y(avg)}" class="b-avg" fill="#D8D2C2"/>` : ''}${mine}${hasSection && hi != null ? `<line x1="${x - bw - 2}" x2="${x + bw + 2}" y1="${y(hi)}" y2="${y(hi)}" stroke="#1A1A1A" stroke-width=".9"/>` : ''}${c?.complete ? `<text class="vl" x="${lx}" y="${y(v) - 2}" text-anchor="middle" font-size="8.5" font-weight="700" fill="#1A1A1A" font-family="Inter,sans-serif">${v}</text>` : ''}`
+      return `${hasSection && avg != null ? `<rect x="${x - bw - 1}" y="${y(avg)}" width="${bw}" height="${base - y(avg)}" class="b-avg" fill="#CFCFCF"/>` : ''}${mine}${c?.complete ? `<text class="vl" x="${lx}" y="${y(v) - 2}" text-anchor="middle" font-size="8.5" font-weight="700" fill="#1A1A1A" font-family="Inter,sans-serif">${v}</text>` : ''}`
     }).join('')
-    legend = `<span><i class="sw-me" style="background:linear-gradient(90deg,${BAR_COLOURS.slice(0, 4).join(',')})"></i>${esc((card.student?.name || 'Student').split(' ')[0])}</span>${hasSection ? '<span><i class="sw-avg" style="background:#D8D2C2"></i>Section average</span><span><i class="sw-hi" style="border:1px solid #1A1A1A;background:#FAF7F0"></i>Section highest</span>' : ''}`
+    legend = `<span><i class="sw-me" style="background:linear-gradient(90deg,${BAR_COLOURS.slice(0, 4).join(',')})"></i>${esc((card.student?.name || 'Student').split(' ')[0])}</span>${hasSection ? '<span><i class="sw-avg" style="background:#CFCFCF"></i>Section average</span>' : ''}`
     h4 = `${esc(shown[0]?.label || '')} · marks out of ${per}${hasSection ? ' against the section' : ''}`
   }
   return `<h4>${h4}</h4><svg viewBox="0 0 400 166">${grid}${bars}<line x1="0" x2="${W}" y1="${base}" y2="${base}" stroke="#1A1A1A" stroke-width=".8"/>${labels}</svg><div class="legend">${legend}</div>`
