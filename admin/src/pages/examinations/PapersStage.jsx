@@ -26,7 +26,7 @@ export default function PapersStage({ branch, sessionCode, className, refreshCon
       const r = await examApi.generatePapers(branch, sessionCode, all ? undefined : className)
       const skipped = r.skipped?.length ? ` · skipped: ${r.skipped.map((s) => `${s.className} (${s.reason})`).join(', ')}` : ''
       const kept = all ? [] : (r.perClass?.[className]?.leftoverKept || [])
-      setFlash(`Created ${r.created}, adopted ${r.adopted} existing papers, ${r.existing} already in place${r.removed ? `, ${r.removed} stale empty paper${r.removed === 1 ? '' : 's'} removed` : ''}${r.leftoverRemoved ? `, ${r.leftoverRemoved} empty leftover paper${r.leftoverRemoved === 1 ? '' : 's'} removed` : ''}${kept.length ? ` · kept ${kept.length} leftover${kept.length === 1 ? '' : 's'} with marks` : ''}${skipped}`)
+      setFlash(`Created ${r.created}, adopted ${r.adopted} existing papers, ${r.existing} already in place${r.removed ? `, ${r.removed} stale empty paper${r.removed === 1 ? '' : 's'} removed` : ''}${r.leftoverRemoved ? `, ${r.leftoverRemoved} empty leftover paper${r.leftoverRemoved === 1 ? '' : 's'} removed` : ''}${r.renamed ? `, ${r.renamed} renamed to the rule's name` : ''}${kept.length ? ` · kept ${kept.length} leftover${kept.length === 1 ? '' : 's'} with marks` : ''}${skipped}`)
       setTimeout(() => setFlash(''), 6000)
       await refreshConfig(); load()
     } catch (e) { setErr(e.message) }

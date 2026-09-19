@@ -511,7 +511,10 @@ export function registerExamRoutes(app, { supabase, admin, verifyAuth, branchIdF
             // keep card_max in sync with the rule; raw max only when no marks are riding on it
             const patch = {}
             if (Number(ex.card_max) !== Number(sp.cardMax)) patch.card_max = sp.cardMax
-            if (Object.keys(patch).length) await supabase.from('exam_papers').update(patch).eq('id', ex.id)
+            // and the name: adopted legacy papers kept their free-text spelling ("PaA-1", "PA - 1") — align it
+            // with the rule (PA-1 / PA-2 …) unless another paper in the slot already carries that name
+            if (ex.paper_name !== sp.paperName && !b.papers.some((p) => p.id !== ex.id && p.subject_id === ex.subject_id && p.term_id === ex.term_id && p.paper_name === sp.paperName)) { patch.paper_name = sp.paperName; per.renamed = (per.renamed || 0) + 1 }
+            if (Object.keys(patch).length) { const { error } = await supabase.from('exam_papers').update(patch).eq('id', ex.id); if (error) throw error }
             continue
           }
           // adopt a legacy free-text paper in the same subject+term whose name matches
@@ -524,6 +527,7 @@ export function registerExamRoutes(app, { supabase, admin, verifyAuth, branchIdF
             const hasMarks = (markCount.get(pick.id) || 0) > 0
             const patch = { component_key: sp.componentKey, card_max: sp.cardMax, generated: true, updated_at: new Date().toISOString() }
             if (!hasMarks) { patch.max_marks = sp.maxMarks; patch.has_practical = !!sp.hasPractical; patch.theory_max = sp.theoryMax ?? null; patch.practical_max = sp.practicalMax ?? 0; patch.paper_name = sp.paperName; patch.passing_marks = Math.ceil(sp.maxMarks * 0.33) }
+            else if (!b.papers.some((p) => p.id !== pick.id && p.subject_id === pick.subject_id && p.term_id === pick.term_id && p.paper_name === sp.paperName)) patch.paper_name = sp.paperName
             const { error } = await supabase.from('exam_papers').update(patch).eq('id', pick.id)
             if (error) throw error
             untyped.splice(untyped.indexOf(pick), 1)
@@ -566,6 +570,7 @@ export function registerExamRoutes(app, { supabase, admin, verifyAuth, branchIdF
           per.leftoverRemoved += 1
         }
         summary.leftoverRemoved = (summary.leftoverRemoved || 0) + per.leftoverRemoved
+        summary.renamed = (summary.renamed || 0) + (per.renamed || 0)
         summary.created += per.created; summary.adopted += per.adopted; summary.existing += per.existing
         summary.perClass[cls] = per
       }

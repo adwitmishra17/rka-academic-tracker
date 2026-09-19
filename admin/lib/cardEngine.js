@@ -273,7 +273,7 @@ export function generatePaperSpecs(plan, rows, termsByCode) {
         // Periodic tests: recorded (marks entry, crosslists), not on the card → cardMax 0
         for (const code of plan.skillExam.ptTerms) {
           const term = termsByCode[code]; if (!term) continue
-          push({ subjectId: subj.id, termId: term.id, termCode: code, componentKey: 'pt', paperName: 'Periodic Test', maxMarks: plan.skillExam.ptRawMax, cardMax: 0, hasPractical: false })
+          push({ subjectId: subj.id, termId: term.id, termCode: code, componentKey: 'pt', paperName: `PA-${plan.skillExam.ptTerms.indexOf(code) + 1}`, maxMarks: plan.skillExam.ptRawMax, cardMax: 0, hasPractical: false })
         }
         continue
       }
@@ -281,7 +281,7 @@ export function generatePaperSpecs(plan, rows, termsByCode) {
         if (c.agg === 'avg') {
           for (const tc of c.terms) {
             const term = termsByCode[tc]; if (!term) continue
-            push({ subjectId: subj.id, termId: term.id, termCode: tc, componentKey: c.paperKey || c.key, paperName: 'Periodic Test', maxMarks: c.rawMax, cardMax: c.max, hasPractical: false })
+            push({ subjectId: subj.id, termId: term.id, termCode: tc, componentKey: c.paperKey || c.key, paperName: `PA-${c.terms.indexOf(tc) + 1}`, maxMarks: c.rawMax, cardMax: c.max, hasPractical: false })
           }
           continue
         }
@@ -298,7 +298,10 @@ export function generatePaperSpecs(plan, rows, termsByCode) {
             push({ subjectId: subj.id, termId: term.id, termCode: examCode, componentKey: 'exam', paperName: plan.family === 'senior_progress' ? `${plan.cardTerms.find((t) => t.key === cardTerm)?.label || cardTerm} Exam` : 'Annual Exam',
               maxMarks: total, cardMax: total, hasPractical: pr > 0, theoryMax: pr > 0 ? th : null, practicalMax: pr > 0 ? pr : 0 })
           } else {
-            push({ subjectId: subj.id, termId: term.id, termCode: examCode, componentKey: c.key, paperName: c.label, maxMarks: c.rawMax ?? c.max, cardMax: c.max, hasPractical: false })
+            // Periodic tests are named by their card term (PA-1 for the Term-1 column, PA-2 for Term-2) — the
+            // name the card, the rules and Setup all use; other components keep the rule's label.
+            const ptIdx = c.key === 'pt' ? plan.cardTerms.findIndex((t) => t.key === cardTerm) : -1
+            push({ subjectId: subj.id, termId: term.id, termCode: examCode, componentKey: c.key, paperName: ptIdx >= 0 ? `PA-${ptIdx + 1}` : c.label, maxMarks: c.rawMax ?? c.max, cardMax: c.max, hasPractical: false })
           }
         }
       }

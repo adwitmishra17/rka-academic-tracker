@@ -2,7 +2,8 @@
 // Used by the Crosslist stage; the grid itself no longer carries the buttons.
 
 export const isAB = (v) => ['AB', 'A'].includes(String(v ?? '').trim().toUpperCase())
-export const COMP = { pt: 'PT', portfolio: 'Portfolio', se: 'Sub. Enr.', notebook: 'Notebook', exam: 'Exam', oral: 'Oral', written: 'Written' }
+// pt is deliberately absent: periodic-test papers carry their own name (PA-1 / PA-2), which the grids and sheets show
+export const COMP = { portfolio: 'Portfolio', se: 'Sub. Enr.', notebook: 'Notebook', exam: 'Exam', oral: 'Oral', written: 'Written' }
 
 /** class-grid marks → editable cell values keyed `${studentId}|${paperId}` */
 export function valsFromGrid(d) {
