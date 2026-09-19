@@ -37,8 +37,10 @@ const CSS = `
   .school img.wordmark{display:block;height:50px;width:auto;max-width:300px}
   .school b{display:block;font-family:Lora,Georgia,serif;font-size:22px;letter-spacing:.06em;line-height:1.1}
   .school span{font-size:12px;color:#1A1A1A}
-  .meta{margin-left:auto;text-align:right;font-family:"JetBrains Mono",ui-monospace,monospace;font-size:10px;color:#1A1A1A;line-height:1.6;white-space:nowrap}
+  .meta{margin-left:auto;display:flex;align-items:center;gap:10px}
+  .meta .txt{text-align:right;font-family:"JetBrains Mono",ui-monospace,monospace;font-size:10px;color:#1A1A1A;line-height:1.6;white-space:nowrap}
   .meta b{color:#7B1F2B;font-size:12.5px}
+  .meta img.cbse{width:58px;height:58px;object-fit:contain;flex-shrink:0}
   .title{display:flex;align-items:baseline;justify-content:space-between;padding:1px 0}
   .title h2{margin:0;font-family:Lora,Georgia,serif;font-size:21px;letter-spacing:.2em;font-weight:600;white-space:nowrap}
   .title span{font-family:"JetBrains Mono",ui-monospace,monospace;font-size:11px;color:#1A1A1A;letter-spacing:.06em;white-space:nowrap}
@@ -165,7 +167,7 @@ function recordNo(card) { return `RC/${card.student?.branchCode || 'RKA'}/${card
 function header(card) {
   return `<div class="hd"><img class="crest" src="${assetBase()}/crest-card.png" alt="" onerror="this.style.visibility='hidden'">
     <div class="school"><img class="wordmark" src="${assetBase()}/banner-card.png?v=3" alt="RADHAKRISHNA ACADEMY" onerror="this.replaceWith(Object.assign(document.createElement('b'),{textContent:'RADHAKRISHNA ACADEMY'}))"></div>
-    <div class="meta">AFFILIATION <b>${AFFILIATION}</b><br>SCHOOL CODE <b>${SCHOOL_CODE}</b><br>RECORD ${esc(recordNo(card))}</div></div>`
+    <div class="meta"><div class="txt">AFFILIATION <b>${AFFILIATION}</b><br>SCHOOL CODE <b>${SCHOOL_CODE}</b><br>RECORD ${esc(recordNo(card))}</div><img class="cbse" src="${assetBase()}/cbse-card.png" alt="CBSE" onerror="this.remove()"></div></div>`
 }
 function titleStrip(card, shown) {
   const t = 'REPORT CARD'   // same heading on every class
