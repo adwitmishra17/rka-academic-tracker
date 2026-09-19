@@ -253,8 +253,9 @@ function tableSecondary(card, shown) {
   const ia = card.plan.components.filter((c) => c.ia)
   const iaTotal = card.plan.iaTotal || ia.reduce((s, c) => s + c.max, 0)
   const sc = sectionCols(card, shown, false, 2)
-  const head = `<tr><th class="l" rowspan="2">Scholastic area</th><th rowspan="2">Code</th><th class="band" colspan="${ia.length + 1}">Internal assessment · ${iaTotal}</th><th class="band sep" colspan="3">Annual examination</th><th rowspan="2" class="sep">Total<br>/${card.plan.subjectTotal}</th><th rowspan="2" style="text-align:center;padding-left:0;padding-right:0">Grade</th>${sc.head}</tr>
-    <tr>${ia.map((c) => `<th>${esc(/portfolio/i.test(c.label) || c.key === 'portfolio' ? 'PF' : /subject\s*enrich/i.test(c.label) || c.key === 'se' ? 'SE' : c.label)}<br>/${c.max}</th>`).join('')}<th>Total</th><th class="sep">Prac.</th><th>Written</th><th>Total</th></tr>`
+  // Half-yearly columns: printed for information (written + practical + total per row); the subject total is IA + annual.
+  const head = `<tr><th class="l" rowspan="2">Scholastic area</th><th rowspan="2">Code</th><th class="band sep" colspan="3">Half-yearly examination</th><th class="band sep" colspan="${ia.length + 1}">Internal assessment · ${iaTotal}</th><th class="band sep" colspan="3">Annual examination</th><th rowspan="2" class="sep">Total<br>/${card.plan.subjectTotal}</th><th rowspan="2" style="text-align:center;padding-left:0;padding-right:0">Grade</th>${sc.head}</tr>
+    <tr><th class="sep">Prac.</th><th>Written</th><th>Total</th>${ia.map((c) => `<th class="${!ia.indexOf(c) ? 'sep' : ''}">${esc(/portfolio/i.test(c.label) || c.key === 'portfolio' ? 'PF' : /subject\s*enrich/i.test(c.label) || c.key === 'se' ? 'SE' : c.label)}<br>/${c.max}</th>`).join('')}<th class="${ia.length ? '' : 'sep'}">Total</th><th class="sep">Prac.</th><th>Written</th><th>Total</th></tr>`
   const body = card.rows.map((r) => {
     const cell = r.byTerm.annual || {}
     const iaOk = ia.every((c) => cell.comps?.[c.key] && !cell.comps[c.key].missing)
@@ -265,14 +266,18 @@ function tableSecondary(card, shown) {
     const pr = has ? (ex.absent ? 'AB' : (ex.practicalMax ? fmt(ex.practical) : dash)) : dash
     const exT = has ? (ex.absent ? 'AB' : fmt(ex.value)) : dash
     const hy = cell.comps?.hy
-    const hyText = !hy || hy.missing ? dash : hy.absent ? 'AB' : (hy.theoryMax ? `${fmt(hy.theory)} + ${fmt(hy.practical)} = <b>${fmt(hy.value)}</b>` : `<b>${fmt(hy.value)}</b>`)
+    const hyHas = hy && !hy.missing
+    const hyWr = hyHas ? (hy.absent ? 'AB' : fmt(hy.theoryMax ? hy.theory : hy.value)) : dash
+    const hyPr = hyHas ? (hy.absent ? 'AB' : (hy.practicalMax ? fmt(hy.practical) : dash)) : dash
+    const hyT = hyHas ? (hy.absent ? 'AB' : fmt(hy.value)) : dash
+    const hyCells = `<td class="sep">${hyPr}</td><td>${hyWr}</td><td class="t">${hyT}</td>`
     const iaCells = r.skill
-      ? `<td colspan="${ia.length + 1}" class="skill"><small>Skill subject · no internal assessment</small>Half yearly ${hyText} /${hy?.max || card.plan.subjectTotal}</td>`
-      : `${ia.map((c) => `<td>${cellVal(cell.comps?.[c.key])}</td>`).join('')}<td class="t">${iaOk ? iaSum : dash}</td>`
-    return `<tr><td class="l sub">${esc(title(r.subject))}${r.additional ? '<small>Additional · not in aggregate</small>' : ''}</td>${grey(esc(r.locCode || ''))}${iaCells}<td class="sep">${pr}</td><td>${wr}</td><td class="t">${exT}</td><td class="t sep">${cell.complete ? cell.obtained : dash}</td>${gradeCell(cell.complete ? cell.grade : null)}${sc.cell(r)}</tr>`
+      ? `<td colspan="${ia.length + 1}" class="skill sep"><small>Skill subject</small>no internal assessment</td>`
+      : `${ia.map((c, i) => `<td class="${i ? '' : 'sep'}">${cellVal(cell.comps?.[c.key])}</td>`).join('')}<td class="t ${ia.length ? '' : 'sep'}">${iaOk ? iaSum : dash}</td>`
+    return `<tr><td class="l sub">${esc(title(r.subject))}${r.additional ? '<small>Additional · not in aggregate</small>' : ''}</td>${grey(esc(r.locCode || ''))}${hyCells}${iaCells}<td class="sep">${pr}</td><td>${wr}</td><td class="t">${exT}</td><td class="t sep">${cell.complete ? cell.obtained : dash}</td>${gradeCell(cell.complete ? cell.grade : null)}${sc.cell(r)}</tr>`
   }).join('')
   const o = card.overall
-  return `<table class="dense"><thead>${head}</thead><tbody>${body}<tr class="sum"><td class="l" colspan="${ia.length + 6}">Aggregate · excluding additional subjects</td><td class="sep">${totalCell(o)}</td>${gradeCell(o.grade)}${sc.sum}</tr></tbody></table>`
+  return `<table class="dense"><thead>${head}</thead><tbody>${body}<tr class="sum"><td class="l" colspan="${ia.length + 9}">Aggregate · excluding additional subjects</td><td class="sep">${totalCell(o)}</td>${gradeCell(o.grade)}${sc.sum}</tr></tbody></table>`
 }
 
 // ── family: senior_progress (XI–XII) ────────────────────────────────────────

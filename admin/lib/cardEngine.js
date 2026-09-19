@@ -135,6 +135,9 @@ export function planCard(def, family) {
       // Skill subjects (AI, IT …): no internal assessment; one theory + practical paper per exam, half yearly AND annual.
       // …plus periodic tests (PT-1 / PT-2) that are entered and crosslisted but never printed on the card.
       skillExam: { hy: d.skill?.halfYearlyTerm || 'HY', annual: annualTerm, ptTerms: comps.find((c) => c.agg === 'avg')?.terms || ['T1', 'T2'], ptRawMax: comps.find((c) => c.agg === 'avg')?.rawMax || 40 },
+      // Every IX–X subject also sits a half-yearly exam (written + practical per row). It is entered and
+      // printed beside the annual columns but never counted in the subject total (CBSE: annual counts).
+      halfYearlyExam: { term: d.halfYearly?.term || 'HY' },
       cardTerms: [{ key: 'annual', label: 'ANNUAL' }],
       cardKeys: [{ key: 'annual', label: 'Annual card', showTerms: ['annual'], gateTerms: ['annual'] }],
       components: comps,
@@ -263,6 +266,11 @@ export function generatePaperSpecs(plan, rows, termsByCode) {
   const push = (s) => { if (!specs.some((x) => x.subjectId === s.subjectId && x.termId === s.termId && x.componentKey === s.componentKey)) specs.push(s) }
   for (const row of rows) {
     for (const subj of row.sources) {
+      if (plan.family === 'secondary_annual' && !row.skill) {
+        const th = Number(row.written ?? 80), pr = Number(row.practical || 0), total = th + pr
+        const term = termsByCode[plan.halfYearlyExam.term]
+        if (term && total > 0) push({ subjectId: subj.id, termId: term.id, termCode: plan.halfYearlyExam.term, componentKey: 'exam', paperName: 'Half Yearly Exam', maxMarks: total, cardMax: total, hasPractical: pr > 0, theoryMax: pr > 0 ? th : null, practicalMax: pr > 0 ? pr : 0 })
+      }
       if (plan.family === 'secondary_annual' && row.skill) {
         // Skill subject: no IA papers; theory + practical in the half-yearly and the annual exam
         const th = Number(row.written ?? 50), pr = Number(row.practical ?? 50), total = th + pr
@@ -404,12 +412,13 @@ export function computeCard(p) {
         if (v.missing) { cell.complete = false; if (gated && shown && !v.soft) missing.push({ row: row.subject, term: ct.label, component: c.label, reason: v.reason }); if (v.soft && gated) warnings.push({ row: row.subject, term: ct.label, component: c.label, reason: v.reason }) }
         else cell.obtained += v.value || 0
       }
-      if (skillRow) {
-        // Half-yearly theory + practical: entered and printed, but the row total is the annual exam (like every other row)
-        const cardMax = Number(row.written ?? 50) + Number(row.practical || 0)
-        const hy = cellFor(row, plan.skillExam.hy, 'exam', cardMax, cardMax)
+      if (plan.family === 'secondary_annual') {
+        // Half-yearly written + practical: entered and printed beside the annual columns, but the row total
+        // is the annual exam (+ IA) like every other row — CBSE counts the annual sitting.
+        const cardMax = Number(row.written ?? (skillRow ? 50 : 80)) + Number(row.practical || 0)
+        const hy = cellFor(row, skillRow ? plan.skillExam.hy : plan.halfYearlyExam.term, 'exam', cardMax, cardMax)
         cell.comps.hy = { ...hy, soft: true }
-        if (hy.missing && gated && shown) warnings.push({ row: row.subject, term: 'Half Yearly', component: 'Skill exam', reason: hy.reason })
+        if (hy.missing && gated && shown) warnings.push({ row: row.subject, term: 'Half Yearly', component: 'Half Yearly Exam', reason: hy.reason })
       }
       if (cell.max > 0 && cell.complete) { cell.pct = 100 * cell.obtained / cell.max; cell.grade = gradeFor(cell.pct, scale) }
       if (plan.family === 'senior_progress') {

@@ -371,6 +371,17 @@ export default function RulesStage({ branch, sessionCode, className, config, ref
             )
           })}
         </div>
+        {family === 'secondary_annual' && (
+          <div style={{ padding: '10px 14px', borderTop: '1px solid var(--gray-100)', display: 'flex', gap: 14, alignItems: 'flex-start', fontSize: 12.5 }}>
+            <div style={{ width: 280, flexShrink: 0 }}>
+              <div style={{ ...inp, fontWeight: 600, background: 'var(--gray-50)' }}>Half Yearly Exam</div>
+              <div style={{ marginTop: 4 }}><Pill tone="green">Exam paper</Pill></div>
+            </div>
+            <div style={{ lineHeight: 2 }}>
+              Office enters marks out of <b title="Each row sets its own written + practical max below">the row's written + practical</b> in <select value={def?.halfYearly?.term || 'HY'} onChange={(e) => upd((d) => { d.halfYearly = { ...(d.halfYearly || {}), term: e.target.value } })} style={{ ...inp, padding: '2px 6px' }}>{EXAM_CODES.map((x) => <option key={x} value={x}>{x} · {termName(x)}</option>)}</select>; it prints on the card beside the annual columns and is <b>not</b> part of the subject total — the total is internal assessment + annual exam.
+            </div>
+          </div>
+        )}
         {/* arithmetic check */}
         <div style={{ padding: '10px 14px', borderTop: '1px solid var(--gray-100)', background: arithmetic.ok ? 'var(--green-light)' : 'var(--crimson-light)', fontSize: 12.5, color: arithmetic.ok ? 'var(--green-dark)' : 'var(--crimson)' }}>
           <b>{arithmetic.text}</b>{!arithmetic.ok && <> — {arithmetic.problem}</>}
