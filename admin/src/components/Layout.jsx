@@ -65,6 +65,7 @@ const NAV_GROUPS = [
     { to: '/examinations', label: 'Examinations' },
     { to: '/hpc', label: 'HPC cards' },
     { to: '/board-candidates', label: 'Board candidates' },
+    { to: '/senior-subjects', label: 'Senior subjects' },
   ] },
   { key: 'people', label: 'People', items: [
     { to: '/students', label: 'Students' },
