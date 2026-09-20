@@ -16,10 +16,12 @@ import React, { useState, useEffect, useMemo } from 'react'
 import { useAuth } from '../App'
 import { apiGet, examApi } from '../lib/api'
 import { SENIOR_CLASSES, isSeniorClass, resolveSubjects } from '../lib/seniorSubjects'
+import { exportOptionalPDF, exportAllSubjectsPDF } from '../lib/seniorSubjectsPdf'
 
 const inputStyle = { padding:'9px 12px', border:'1px solid var(--gray-200)', borderRadius:'var(--radius-sm)', fontSize:14, fontFamily:'var(--font-body)', color:'var(--text)', outline:'none', background:'var(--white)' }
 const btnGhost = { padding:'9px 15px', background:'var(--white)', color:'var(--green-dark)', border:'1px solid var(--gray-200)', borderRadius:'var(--radius-md)', fontSize:13, fontWeight:600, cursor:'pointer', whiteSpace:'nowrap', display:'inline-flex', alignItems:'center', gap:6 }
 const btnPrimary = { ...btnGhost, background:'var(--green)', color:'white', border:'1px solid var(--green)' }
+const dlLabel = { fontSize:11, fontWeight:700, color:'var(--text-muted)', textTransform:'uppercase', letterSpacing:'0.06em' }
 const th = { textAlign:'left', padding:'10px 12px', fontSize:11, fontWeight:600, color:'var(--text-muted)', textTransform:'uppercase', letterSpacing:'0.05em', background:'var(--gray-50)', whiteSpace:'nowrap', borderBottom:'1px solid var(--gray-200)' }
 const td = { padding:'10px 12px', fontSize:13, color:'var(--text)', verticalAlign:'top', borderBottom:'1px solid var(--gray-100)' }
 
@@ -54,6 +56,7 @@ export default function SeniorSubjects() {
   const [rows, setRows]             = useState(null)
   const [loading, setLoading]       = useState(false)
   const [error, setError]           = useState('')
+  const [exporting, setExporting]   = useState(null)
 
   useEffect(() => {
     examApi.sessions()
@@ -142,6 +145,16 @@ export default function SeniorSubjects() {
       { label:'Status',          get:(r) => statusOf(r).label },
     ])
   }
+  async function downloadPDF(kind) {
+    if (!rows?.length) return
+    setExporting(kind)
+    try {
+      const meta = { branch: currentBranch || '', className, session: sessionCode }
+      if (kind === 'optional-pdf') await exportOptionalPDF(rows, meta)
+      else await exportAllSubjectsPDF(rows, meta)
+    } catch (e) { setError(e.message || String(e)) }
+    finally { setExporting(null) }
+  }
 
   return (
     <div style={{ padding:'32px 36px', maxWidth:1200 }}>
@@ -154,9 +167,17 @@ export default function SeniorSubjects() {
             <div style={{ width:48, height:2, background:'linear-gradient(90deg, var(--gold), transparent)', marginTop:10, borderRadius:1 }} />
           </div>
           {rows?.length > 0 && (
-            <div style={{ display:'flex', gap:8 }}>
-              <button onClick={downloadOptional} style={btnGhost}>↓ Optional list</button>
-              <button onClick={downloadAll} style={btnGhost}>↓ All subjects</button>
+            <div style={{ display:'flex', gap:16, flexWrap:'wrap' }}>
+              <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+                <span style={dlLabel}>Optional</span>
+                <button onClick={downloadOptional} style={btnGhost}>CSV</button>
+                <button onClick={() => downloadPDF('optional-pdf')} style={btnGhost} disabled={!!exporting}>{exporting === 'optional-pdf' ? '…' : 'PDF'}</button>
+              </div>
+              <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+                <span style={dlLabel}>All subjects</span>
+                <button onClick={downloadAll} style={btnGhost}>CSV</button>
+                <button onClick={() => downloadPDF('all-pdf')} style={btnGhost} disabled={!!exporting}>{exporting === 'all-pdf' ? '…' : 'PDF'}</button>
+              </div>
             </div>
           )}
         </div>
