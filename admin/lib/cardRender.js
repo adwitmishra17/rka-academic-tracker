@@ -31,7 +31,7 @@ const CSS = `
   *{box-sizing:border-box}
   html{color-scheme:light}
   body{margin:0;background:#E6E6E6;font-family:Inter,system-ui,-apple-system,"Segoe UI",sans-serif;color:#1A1A1A;font-variant-numeric:tabular-nums;-webkit-print-color-adjust:exact;print-color-adjust:exact}
-  .page{width:210mm;height:297mm;margin:0 auto;background:#FFFFFF;color:#1A1A1A;position:relative;padding:10mm 12mm 8mm;display:flex;flex-direction:column;gap:6px;overflow:hidden}
+  .page{width:210mm;height:297mm;margin:0 auto;background:#FFFFFF;color:#1A1A1A;position:relative;padding:10mm 12mm 8mm;display:flex;flex-direction:column;gap:5px;overflow:hidden}
   .hd{display:flex;align-items:center;gap:12px;border-bottom:1px solid #CFCFCF;padding-bottom:7px}
   .hd img.crest{width:62px;height:62px;object-fit:contain;flex-shrink:0}
   .school img.wordmark{display:block;height:50px;width:auto;max-width:300px}
@@ -64,7 +64,7 @@ const CSS = `
   th.band{border-bottom:1px solid #CFCFCF;color:#1A1A1A;letter-spacing:.14em;padding-bottom:2px}
   th .csub{font-weight:400;font-size:.82em;letter-spacing:0;text-transform:none}
   th.sep,td.sep{border-left:1px solid #CFCFCF}
-  td{padding:5.5px 3px;text-align:center;border-bottom:1px solid #CFCFCF;color:#1A1A1A}
+  td{padding:4.5px 3px;text-align:center;border-bottom:1px solid #CFCFCF;color:#1A1A1A}
   tbody tr:nth-child(even) td{background:rgba(123,31,43,.035)}
   td.sub{font-weight:600;font-size:13px;white-space:nowrap}
   td.sub small{display:block;font-weight:400;font-size:10.5px;color:#1A1A1A}
@@ -83,17 +83,17 @@ const CSS = `
   tr.sum td{border-top:1.5px solid #1A1A1A;border-bottom:1.5px solid #1A1A1A;font-weight:700;background:#EFEFEF!important;white-space:nowrap;padding-top:6px;padding-bottom:6px}
   td.t,td.g{white-space:nowrap}
   h4{font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;color:#1A1A1A;margin:0 0 3px;font-weight:600}
-  .row2{display:grid;grid-template-columns:1.05fr 1fr;gap:16px;margin-top:14px}
-  .chart svg{width:100%;height:auto;display:block;margin-top:10px}
+  .row2{display:grid;grid-template-columns:1.05fr 1fr;gap:16px;margin-top:9px}
+  .chart svg{width:100%;height:auto;display:block;margin-top:6px}
   .legend{display:flex;gap:12px;font-size:10.5px;color:#1A1A1A;margin-top:2px}
   .legend i{display:inline-block;width:9px;height:9px;margin-right:4px;vertical-align:-1px;border-radius:2px}
-  .co div{display:flex;justify-content:space-between;align-items:baseline;border-bottom:1px dotted #CFCFCF;padding:5px 0;font-size:13px}
+  .co div{display:flex;justify-content:space-between;align-items:baseline;border-bottom:1px dotted #CFCFCF;padding:3px 0;font-size:13px}
   .co small{color:#1A1A1A;font-style:italic;font-family:Lora,Georgia,serif;font-size:11px;margin-left:5px}
   .co b{color:#7B1F2B;font-family:"JetBrains Mono",ui-monospace,monospace;font-weight:700;font-size:14px}
   .co b.plain{color:#1A1A1A;font-family:Inter,sans-serif;font-weight:600}
   .bottom{display:grid;grid-template-columns:1.4fr 1fr;gap:14px;margin-top:2px;flex:0 0 auto}
   .bottom>div{display:flex;flex-direction:column}
-  .box{border:1px solid #CFCFCF;padding:6px 9px;font-size:12.5px;line-height:1.45;min-height:20mm}
+  .box{border:1px solid #CFCFCF;padding:6px 9px;font-size:12.5px;line-height:1.45;min-height:15mm}
   .box i{font-family:Lora,Georgia,serif}
   .box .who{display:block;font-size:10px;color:#1A1A1A;margin-top:4px;letter-spacing:.06em;text-transform:uppercase}
   .box .kv{display:grid;grid-template-columns:auto 1fr;gap:0 10px}
@@ -101,8 +101,10 @@ const CSS = `
   .box .kv b{font-weight:600}
   .box .result{font-family:Lora,Georgia,serif;font-size:16px;font-weight:700;color:#C8102E;margin-top:2px;letter-spacing:.04em}
   .box .note{font-size:11px;color:#1A1A1A;margin-top:5px}
+  /* A very long class-teacher remark is bounded so it can never push the signature block off the page. */
+  .remarkbox{max-height:30mm;overflow:hidden}
   .key{font-size:10px;color:#1A1A1A;line-height:1.5}
-  .sig{display:flex;justify-content:space-between;margin-top:auto;padding-top:14mm;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:#1A1A1A}
+  .sig{display:flex;justify-content:space-between;margin-top:auto;padding-top:9mm;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:#1A1A1A}
   .sig div{border-top:1px solid #1A1A1A;width:44mm;text-align:center;padding-top:4px}
   .foot{display:flex;justify-content:space-between;font-family:"JetBrains Mono",ui-monospace,monospace;font-size:9.5px;color:#1A1A1A}
   /* Print: ink-safe. White paper, black rules, no tints, maroon accents → black, nothing under 10.5px.
@@ -154,7 +156,7 @@ export function renderCardBody(card) {
       <div>${coScholastic(card, shown)}</div>
     </div>
     <div class="bottom">
-      <div><h4>Class teacher's remarks</h4><div class="box"><i>${esc(card.remark || '')}</i></div></div>
+      <div><h4>Class teacher's remarks</h4><div class="box remarkbox"><i>${esc(card.remark || '')}</i></div></div>
       <div><h4>${esc(resultTitle)}</h4><div class="box">${resultBox(card, final)}</div></div>
     </div>
     <div class="key">${gradeKey(card)}</div>
