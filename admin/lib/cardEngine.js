@@ -100,8 +100,13 @@ export function planCard(def, family) {
       // with the half-yearly / annual exam — the office fills them in at the same sitting.
       const isPT = c.source?.kind === 'PT' || c.key === 'pt'
       const termMap = c.source?.termMap || Object.fromEntries(terms.map((t) => [t.key, isPT ? t.key : ({ T1: 'HY', T2: 'AN' }[t.key] || t.key)]))
-      const rawMax = c.rawMax ?? (c.key === 'pt' ? 40 : c.max)
-      return { key: c.key, label: c.label, max: Number(c.max), rawMax: Number(rawMax), kind: c.source?.type === 'sheet' || c.source?.type === 'monthlyAvg' ? 'sheet' : 'exam', termMap }
+      // A periodic-test component can be split into two entered parts (e.g. Periodic Marks /30 + Group
+      // Work /10). The parts sum to the raw max and print as ONE card column; each becomes its own paper.
+      const parts = Array.isArray(c.parts) && c.parts.length >= 2
+        ? c.parts.map((p, i) => ({ key: p.key || (i === 0 ? c.key : `${c.key}_${i}`), label: p.label || `Part ${i + 1}`, rawMax: Number(p.rawMax || 0) }))
+        : null
+      const rawMax = parts ? parts.reduce((s, p) => s + p.rawMax, 0) : (c.rawMax ?? (c.key === 'pt' ? 40 : c.max))
+      return { key: c.key, label: c.label, max: Number(c.max), rawMax: Number(rawMax), kind: c.source?.type === 'sheet' || c.source?.type === 'monthlyAvg' ? 'sheet' : 'exam', termMap, ...(parts ? { parts } : {}) }
     })
     return {
       family, rounding, subjectTotal: d.subjectTotal || 100,
@@ -305,6 +310,11 @@ export function generatePaperSpecs(plan, rows, termsByCode) {
             const total = th + pr
             push({ subjectId: subj.id, termId: term.id, termCode: examCode, componentKey: 'exam', paperName: plan.family === 'senior_progress' ? `${plan.cardTerms.find((t) => t.key === cardTerm)?.label || cardTerm} Exam` : 'Annual Exam',
               maxMarks: total, cardMax: total, hasPractical: pr > 0, theoryMax: pr > 0 ? th : null, practicalMax: pr > 0 ? pr : 0 })
+          } else if (c.parts) {
+            // Split periodic assessment: one paper per part (Periodic Marks, Group Work). They sum on the
+            // card into a single column; the first part carries the card max, the rest are recorded (cardMax 0).
+            const ptIdx = c.key === 'pt' ? plan.cardTerms.findIndex((t) => t.key === cardTerm) : -1
+            c.parts.forEach((part, pi) => push({ subjectId: subj.id, termId: term.id, termCode: examCode, componentKey: part.key, paperName: part.key === c.key ? (ptIdx >= 0 ? `PA-${ptIdx + 1}` : c.label) : part.label, maxMarks: part.rawMax, cardMax: pi === 0 ? c.max : 0, hasPractical: false }))
           } else {
             // Periodic tests are named by their card term (PA-1 for the Term-1 column, PA-2 for Term-2) — the
             // name the card, the rules and Setup all use; other components keep the rule's label.
@@ -373,6 +383,31 @@ export function computeCard(p) {
     return out
   }
 
+  // A periodic-test cell built from split parts (Periodic Marks + Group Work): sum every part's paper
+  // (across composite sources), scale the combined raw to the single card column. All parts must be
+  // entered for the cell to count — otherwise the denominator would be wrong.
+  function cellForParts(row, examCode, parts, cardMax) {
+    const term = termsByCode[examCode]
+    if (!term) return { missing: true, reason: `Term ${examCode} not set up` }
+    const expected = row.sources.length * parts.length
+    let raw = 0, rawMax = 0, found = 0, answered = 0, absent = 0
+    for (const subj of row.sources) for (const part of parts) {
+      const paper = paperIndex.get(`${subj.id}|${term.id}|${part.key}`)
+      if (!paper) continue
+      found += 1; rawMax += Number(paper.max_marks)
+      const mk = markByPaper.get(paper.id)
+      if (!mk) continue
+      if (mk.is_absent) { absent += 1; continue }
+      if (mk.marks_obtained == null) continue
+      answered += 1; raw += Number(mk.marks_obtained)
+    }
+    if (found < expected) return { missing: true, reason: 'paper not generated', noPaper: true }
+    if (!answered && !absent) return { missing: true, reason: 'marks not entered' }
+    if (answered + absent < found) return { missing: true, reason: 'periodic / group work not fully entered', partial: true }
+    const value = roundHalfUp(raw * cardMax / (rawMax || 1))
+    return { raw, rawMax, value, max: cardMax, absent: answered === 0 && absent > 0 }
+  }
+
   const gateTerms = new Set(cardKey.gateTerms)
   const outRows = rows.map((row) => {
     const r = { subject: row.subject, locCode: row.locCode, skill: !!row.skill, additional: !!row.additional, countsInAggregate: row.countsInAggregate !== false, unmapped: row.sources.length === 0, oralMax: row.oral ?? null, writtenMax: row.written ?? null, byTerm: {}, total: { obtained: 0, max: 0, pct: null, grade: null } }
@@ -401,6 +436,8 @@ export function computeCard(p) {
             const rowMax = Number(row[c.perRow] ?? 0)
             if (!(rowMax > 0)) continue // this row has no such paper (e.g. written-only)
             v = cellFor(row, examCode, c.key, rowMax, rowMax)
+          } else if (c.parts) {
+            v = cellForParts(row, examCode, c.parts, c.max)
           } else {
             // Senior/secondary exam papers: card max is the row's own scheme
             const cardMax = c.key === 'exam' && (plan.family !== 'performance_profile') ? (Number(row.written ?? c.max) + Number(row.practical || 0)) : c.max

@@ -508,9 +508,14 @@ export function registerExamRoutes(app, { supabase, admin, verifyAuth, branchIdF
               continue
             }
             per.existing += 1
-            // keep card_max in sync with the rule; raw max only when no marks are riding on it
+            // keep card_max in sync with the rule; raw max / practical shape only when no marks are riding
+            // on it (a raw-max drift on a marked paper is deliberate — the marks are out of the old max)
             const patch = {}
             if (Number(ex.card_max) !== Number(sp.cardMax)) patch.card_max = sp.cardMax
+            if ((markCount.get(ex.id) || 0) === 0) {
+              if (Number(ex.max_marks) !== Number(sp.maxMarks)) { patch.max_marks = sp.maxMarks; patch.passing_marks = Math.ceil(sp.maxMarks * 0.33) }
+              if (!!ex.has_practical !== !!sp.hasPractical) { patch.has_practical = !!sp.hasPractical; patch.theory_max = sp.theoryMax ?? null; patch.practical_max = sp.practicalMax ?? 0 }
+            }
             // and the name: adopted legacy papers kept their free-text spelling ("PaA-1", "PA - 1") — align it
             // with the rule (PA-1 / PA-2 …) unless another paper in the slot already carries that name
             if (ex.paper_name !== sp.paperName && !b.papers.some((p) => p.id !== ex.id && p.subject_id === ex.subject_id && p.term_id === ex.term_id && p.paper_name === sp.paperName)) { patch.paper_name = sp.paperName; per.renamed = (per.renamed || 0) + 1 }
@@ -632,7 +637,7 @@ export function registerExamRoutes(app, { supabase, admin, verifyAuth, branchIdF
         subjects = subjects.filter((x) => onCard.has(x.id)).sort((a, c) => (pos.get(a.id) ?? 999) - (pos.get(c.id) ?? 999))
       }
       const subjOrder = new Map(subjects.map((x, i) => [x.id, i]))
-      const ORDER = ['oral', 'written', 'pt', 'portfolio', 'se', 'notebook', 'exam']
+      const ORDER = ['oral', 'written', 'pt', 'pt_group', 'portfolio', 'se', 'notebook', 'exam']
       const papers = b.papers.filter((p) => p.term_id === termId && p.component_key && subjOrder.has(p.subject_id))
         .sort((a, c) => (subjOrder.get(a.subject_id) - subjOrder.get(c.subject_id)) || ((ORDER.indexOf(a.component_key) + 1 || 99) - (ORDER.indexOf(c.component_key) + 1 || 99)))
       const sids = students.map((x) => x.id)

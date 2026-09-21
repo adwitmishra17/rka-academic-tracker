@@ -73,7 +73,7 @@ export default function RulesStage({ branch, sessionCode, className, config, ref
   // serialise the editable component list back into the template definition
   function writeComps(d, list) {
     if (family === 'performance_profile') {
-      d.components = list.map((c) => ({ key: c.key, label: c.label, max: Number(c.max), rawMax: Number(c.rawMax ?? c.max), source: { type: c.kind === 'sheet' ? 'sheet' : 'exam', kind: c.key === 'exam' ? 'TERM' : 'PT', termMap: c.termMap } }))
+      d.components = list.map((c) => ({ key: c.key, label: c.label, max: Number(c.max), rawMax: Number(c.rawMax ?? c.max), source: { type: c.kind === 'sheet' ? 'sheet' : 'exam', kind: c.key === 'exam' ? 'TERM' : 'PT', termMap: c.termMap }, ...(Array.isArray(c.parts) && c.parts.length ? { parts: c.parts.map((p) => ({ key: p.key, label: p.label, rawMax: Number(p.rawMax) })) } : {}) }))
     } else if (family === 'secondary_annual') {
       d.ia = d.ia || { total: 20, components: [] }
       const ia = list.filter((c) => c.ia)
@@ -104,7 +104,7 @@ export default function RulesStage({ branch, sessionCode, className, config, ref
   function setComp(key, patch) {
     upd((d) => {
       if (family === 'performance_profile') {
-        d.components = comps.map((c) => c.key === key ? { ...c, ...patch } : c).map((c) => ({ key: c.key, label: c.label, max: Number(c.max), rawMax: Number(c.rawMax), source: { type: c.kind === 'sheet' ? 'sheet' : 'exam', kind: c.key === 'exam' ? 'TERM' : 'PT', termMap: c.termMap } }))
+        d.components = comps.map((c) => c.key === key ? { ...c, ...patch } : c).map((c) => ({ key: c.key, label: c.label, max: Number(c.max), rawMax: Number(c.rawMax), source: { type: c.kind === 'sheet' ? 'sheet' : 'exam', kind: c.key === 'exam' ? 'TERM' : 'PT', termMap: c.termMap }, ...(Array.isArray(c.parts) && c.parts.length ? { parts: c.parts.map((p) => ({ key: p.key, label: p.label, rawMax: Number(p.rawMax) })) } : {}) }))
       } else if (family === 'secondary_annual') {
         d.ia = d.ia || { total: 20, components: [] }
         const list = comps.filter((c) => c.ia).map((c) => c.key === key ? { ...c, ...patch } : c)
@@ -113,6 +113,15 @@ export default function RulesStage({ branch, sessionCode, className, config, ref
         if (key === 'exam') { d.annualExam = { ...(d.annualExam || {}), total: Number(patch.max ?? d.annualExam?.total ?? 80), term: patch.termMap?.annual || d.annualExam?.term || 'AN' } }
       }
     })
+  }
+  // Periodic-test split (performance_profile): toggle two entered parts (Periodic Marks + Group Work)
+  // that print as one card column, or edit a part's raw max / label.
+  function togglePtSplit(on) {
+    setComp('pt', on ? { parts: [{ key: 'pt', label: 'Periodic Marks', rawMax: 30 }, { key: 'pt_group', label: 'Group Work', rawMax: 10 }] } : { parts: undefined })
+  }
+  function setPtPart(idx, patch) {
+    const cur = comps.find((c) => c.key === 'pt')?.parts || []
+    setComp('pt', { parts: cur.map((p, i) => i === idx ? { ...p, ...patch } : p) })
   }
   function setCardTermExam(ctKey, examCode) {
     upd((d) => {
@@ -345,7 +354,28 @@ export default function RulesStage({ branch, sessionCode, className, config, ref
                   </div>
                 </div>
                 <div style={{ fontSize: 12.5, lineHeight: 2.1, color: 'var(--text)' }}>
-                  {c.perRow ? (
+                  {(family === 'performance_profile' && c.key === 'pt') ? (
+                    <>
+                      <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
+                        <input type="checkbox" checked={!!c.parts} onChange={(e) => togglePtSplit(e.target.checked)} />
+                        <span>Split into two entries — periodic marks + group work (still one column on the card)</span>
+                      </label>
+                      <div style={{ marginTop: 2 }}>
+                        {c.parts ? (
+                          <>Office enters {c.parts.map((p, pi) => (
+                            <span key={p.key || pi}>{pi > 0 ? ' and ' : ''}
+                              <input value={p.label} onChange={(e) => setPtPart(pi, { label: e.target.value })} style={{ ...inp, width: 118, padding: '2px 6px', fontWeight: 600 }} /> out of <b><input type="number" value={p.rawMax ?? ''} onChange={(e) => setPtPart(pi, { rawMax: e.target.value })} style={{ ...inp, width: 54, padding: '2px 6px' }} /></b></span>
+                          ))} {cardTerms.map((t, ti) => (
+                            <span key={t.key}> {ti === 0 ? 'in' : 'and'} <select value={c.termMap?.[t.key] || ''} onChange={(e) => setComp('pt', { termMap: { ...c.termMap, [t.key]: e.target.value } })} style={{ ...inp, padding: '2px 6px' }}>{EXAM_CODES.map((x) => <option key={x} value={x}>{x} · {termName(x)}</option>)}</select> <span style={{ color: 'var(--text-muted)' }}>for the {t.label} column</span></span>
+                          ))}; the two together <b>/{c.parts.reduce((s, p) => s + Number(p.rawMax || 0), 0)}</b> are scaled to <b>/<input type="number" value={c.max ?? ''} onChange={(e) => setComp('pt', { max: e.target.value })} style={{ ...inp, width: 54, padding: '2px 6px' }} /></b> and print as one column (<b>PA-1 / PA-2</b>).</>
+                        ) : (
+                          <>Office enters the periodic test out of <b><input type="number" value={c.rawMax ?? ''} onChange={(e) => setComp('pt', { rawMax: e.target.value })} style={{ ...inp, width: 60, padding: '2px 6px' }} /></b> {cardTerms.map((t, ti) => (
+                            <span key={t.key}> {ti === 0 ? 'in' : 'and'} <select value={c.termMap?.[t.key] || ''} onChange={(e) => setComp('pt', { termMap: { ...c.termMap, [t.key]: e.target.value } })} style={{ ...inp, padding: '2px 6px' }}>{EXAM_CODES.map((x) => <option key={x} value={x}>{x} · {termName(x)}</option>)}</select> <span style={{ color: 'var(--text-muted)' }}>for the {t.label} column</span></span>
+                          ))}; it is scaled to <b>/<input type="number" value={c.max ?? ''} onChange={(e) => setComp('pt', { max: e.target.value })} style={{ ...inp, width: 54, padding: '2px 6px' }} /></b> on the card.</>
+                        )}
+                      </div>
+                    </>
+                  ) : c.perRow ? (
                     <>One <b>{c.label}</b> paper per subject in each exam; its max is set per subject in the rows below (Oral 40 + Written 60, or Written 100 alone).
                       {cardTerms.map((t) => <span key={t.key} style={{ display: 'inline-block', marginLeft: 10 }}>{t.label} ← <select value={c.termMap?.[t.key] || ''} onChange={(e) => setCardTermExam(t.key, e.target.value)} style={{ ...inp, padding: '2px 6px' }}>{EXAM_CODES.map((x) => <option key={x} value={x}>{x} · {termName(x)}</option>)}</select></span>)}
                     </>

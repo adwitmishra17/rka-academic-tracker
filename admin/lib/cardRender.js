@@ -394,6 +394,15 @@ function resultBox(card, final) {
 function gradeKey(card) {
   const b = card.scales?.gradeScale?.bands || []
   const parts = b.map(([m, g]) => `${g} ≥ ${m}`)
-  const extra = card.family === 'performance_profile' ? ' PA = periodic assessment (out of 40, shown out of 10) · PF = portfolio · S.E. = subject enrichment · HY / AN = half-yearly / annual exam.' : card.family === 'secondary_annual' ? ' P.P.T. = pen-paper test; M.A. = multiple assessment; internal assessment as per CBSE.' : ''
+  let extra = ''
+  if (card.family === 'performance_profile') {
+    const pt = (card.plan?.components || []).find((c) => c.key === 'pt')
+    const rawTot = pt?.parts?.length ? pt.parts.reduce((s, p) => s + Number(p.rawMax || 0), 0) : 40
+    const shown = pt?.max ?? 10
+    const paTxt = pt?.parts?.length
+      ? `PA = periodic assessment (${pt.parts.map((p) => `${title(p.label)} ${p.rawMax}`).join(' + ')} = ${rawTot}, shown out of ${shown})`
+      : `PA = periodic assessment (out of ${rawTot}, shown out of ${shown})`
+    extra = ` ${paTxt} · PF = portfolio · S.E. = subject enrichment · HY / AN = half-yearly / annual exam.`
+  } else if (card.family === 'secondary_annual') extra = ' P.P.T. = pen-paper test; M.A. = multiple assessment; internal assessment as per CBSE.'
   return `Grades · ${parts.join(' · ')} · ${esc(card.scales?.gradeScale?.floorLabel || 'E')} below ${b[b.length - 1]?.[0] ?? 33}.${extra} AB = absent.`
 }
