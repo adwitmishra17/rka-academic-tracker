@@ -62,6 +62,7 @@ const CSS = `
   th{font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;color:#1A1A1A;text-align:center;padding:4px 3px;border-bottom:1px solid #1A1A1A;line-height:1.3;font-weight:600;vertical-align:bottom}
   th.l,td.l{text-align:left}
   th.band{border-bottom:1px solid #CFCFCF;color:#1A1A1A;letter-spacing:.14em;padding-bottom:2px}
+  th .csub{font-weight:400;font-size:.82em;letter-spacing:0;text-transform:none}
   th.sep,td.sep{border-left:1px solid #CFCFCF}
   td{padding:5.5px 3px;text-align:center;border-bottom:1px solid #CFCFCF;color:#1A1A1A}
   tbody tr:nth-child(even) td{background:rgba(123,31,43,.035)}
@@ -229,7 +230,10 @@ function tablePerformance(card, shown, final) {
   // print labels: PA-1 / PA-2 for the periodic test, PF, S.E., and HY / AN for the term exam
   const short = (c, ti) => c.key === 'pt' ? `PA-${ti + 1}` : (c.key === 'portfolio' || /portfolio/i.test(c.label)) ? 'PF' : (c.key === 'se' || /subject\s*enrich/i.test(c.label)) ? 'S.E.' : c.key === 'exam' ? (ti === 0 ? 'HY' : 'AN') : c.label
   const termIdx = (key) => Math.max(0, card.plan.cardTerms.findIndex((x) => x.key === key))
-  const compHead = (first, ti = 0) => comps.map((c, j) => `<th class="${!first && !j ? 'sep' : ''}">${esc(short(c, ti))}<br>/${c.max}</th>`).join('')
+  // A split periodic-test column (Periodic Marks + Group Work) prints its group part under the PA label,
+  // so the single column names what it includes.
+  const compSub = (c) => (c.key === 'pt' && Array.isArray(c.parts) && c.parts.length >= 2) ? `<br><span class="csub">+ ${esc(title(c.parts[c.parts.length - 1].label))}</span>` : ''
+  const compHead = (first, ti = 0) => comps.map((c, j) => `<th class="${!first && !j ? 'sep' : ''}">${esc(short(c, ti))}${compSub(c)}<br>/${c.max}</th>`).join('')
   const head = final
     ? `<tr><th class="l" rowspan="2">Scholastic area</th>${shown.map((t, i) => `<th class="band ${i ? 'sep' : ''}" colspan="${comps.length + 2}">${esc(t.label)}${t.examLabel ? ' · ' + esc(t.examLabel) : ''}</th>`).join('')}<th class="band sep" colspan="2">Session</th></tr>
        <tr>${shown.map((t, i) => compHead(i === 0, termIdx(t.key)) + `<th>Total<br>/${perTerm}</th><th>Grade</th>`).join('')}<th class="sep">Total<br>/${perTerm * shown.length}</th><th>Grade</th></tr>`
