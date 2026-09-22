@@ -59,13 +59,13 @@ const CSS = `
   .metrics .v.red{color:#7B1F2B}
   .metrics .k{font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;color:#1A1A1A}
   table{width:100%;border-collapse:collapse;font-size:12.5px}
-  th{font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;color:#1A1A1A;text-align:center;padding:4px 3px;border-bottom:1px solid #1A1A1A;line-height:1.3;font-weight:600;vertical-align:bottom}
+  th{font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;color:#1A1A1A;text-align:center;padding:4px 3px;border-bottom:1px solid #1A1A1A;line-height:1.3;font-weight:600;vertical-align:bottom;background:#E7E7E7}
   th.l,td.l{text-align:left}
-  th.band{border-bottom:1px solid #CFCFCF;color:#1A1A1A;letter-spacing:.14em;padding-bottom:2px;background:#EDEDED}
+  th.band{border-bottom:1px solid #CFCFCF;color:#1A1A1A;letter-spacing:.14em;padding-bottom:2px;background:#E7E7E7}
   th .csub{font-weight:400;font-size:.82em;letter-spacing:0;text-transform:none}
   th.sep,td.sep{border-left:1px solid #CFCFCF}
   td{padding:4.5px 3px;text-align:center;border-bottom:1px solid #CFCFCF;color:#1A1A1A}
-  tbody tr:nth-child(even) td{background:rgba(123,31,43,.035)}
+  tbody tr:nth-child(even) td{background:#F2F2F2}
   td.sub{font-weight:600;font-size:13px;white-space:nowrap}
   td.sub small{display:block;font-weight:400;font-size:10.5px;color:#1A1A1A}
   td.t{font-weight:700}
@@ -116,9 +116,9 @@ const CSS = `
     .hd,.strip,.metrics,.metrics div,.box,th.band,th.sep,td.sep,td{border-color:#1A1A1A}
     .co div{border-bottom-color:#1A1A1A}
     .photo{background:#fff}
-    tbody tr:nth-child(even) td{background:transparent}
-    tr.sum td{background:#E6E6E6!important}
-    th.band{background:#E6E6E6}
+    tbody tr:nth-child(even) td{background:#F2F2F2}
+    tr.sum td{background:#E0E0E0!important}
+    th,th.band{background:#E3E3E3}
     .meta b,.metrics .v.red,td.g,td.fail,.co b{color:#000}
     .box .result{color:#C8102E}
     .chart .gl{stroke:#C4C4C4}
