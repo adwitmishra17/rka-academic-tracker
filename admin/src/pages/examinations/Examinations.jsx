@@ -96,7 +96,7 @@ export default function Examinations() {
 
   const ctx = { branch, sessionCode, className, config, refreshConfig, classNames, classBadges, setStage: (s) => setParam({ stage: s }), setClass: (c) => setParam({ class: c }) }
   const Stage = { setup: SetupStage, rules: RulesStage, papers: PapersStage, datesheet: DatesheetStage, status: MarksStage, crosslist: CrosslistStage, cards: CardsStage }[stage] || SetupStage
-  const needsClass = stage !== 'setup'
+  const needsClass = !['setup', 'datesheet'].includes(stage)
   const termsOk = (config?.terms || []).length > 0
 
   return (

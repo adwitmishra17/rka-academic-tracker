@@ -857,37 +857,52 @@ th{background:#1a4a2e;color:#fff;font-size:11px;text-transform:uppercase;letter-
 .foot{padding:16px 24px;color:#8a978e;font-size:11.5px;text-align:center}.err{padding:40px 24px;text-align:center;color:#8b1a1a}</style></head>
 <body><div class="wrap"><div class="card">${body}</div><p class="foot" style="text-align:center;color:#98a89e">Powered by skolix.app</p></div></body></html>`
     try {
-      const { b, s, c, t } = req.query
-      if (!b || !s || !c || !t) return res.status(400).type('html').send(page('Date sheet', '<div class="err">Invalid verification link.</div>'))
+      const { b, s, t, c, label } = req.query
+      const classList = (req.query.classes ? String(req.query.classes).split(',') : (c ? [c] : [])).map((x) => x.trim()).filter(Boolean)
+      if (!b || !s || !t || !classList.length) return res.status(400).type('html').send(page('Date sheet', '<div class="err">Invalid verification link.</div>'))
       const bid = await branchIdForCode(b)
       if (!bid) return res.status(404).type('html').send(page('Date sheet', '<div class="err">Unknown branch.</div>'))
       const [termR, subsR, papersR] = await Promise.all([
-        supabase.from('exam_terms').select('name, starts_on, ends_on').eq('id', t).maybeSingle(),
-        supabase.from('exam_subjects').select('id, subject_name').eq('branch_id', bid).eq('session_code', s).eq('class_name', c),
-        supabase.from('exam_papers').select('subject_id, exam_date, exam_start_time, exam_end_time, venue').eq('term_id', t),
+        supabase.from('exam_terms').select('name').eq('id', t).maybeSingle(),
+        supabase.from('exam_subjects').select('id, subject_name, class_name').eq('branch_id', bid).eq('session_code', s).in('class_name', classList),
+        supabase.from('exam_papers').select('subject_id, exam_date, exam_start_time, exam_end_time').eq('term_id', t),
       ])
       const term = termR.data
-      const nameById = new Map((subsR.data || []).map((x) => [x.id, x.subject_name]))
-      // one row per subject that has a date; earliest date/time first
-      const bySub = new Map()
+      const norm = (x) => String(x || '').trim().toLowerCase()
+      const subById = new Map((subsR.data || []).map((x) => [x.id, { name: x.subject_name, cls: x.class_name }]))
+      // Union by subject name across the band's classes; earliest date/time wins.
+      const union = new Map()
       for (const p of (papersR.data || [])) {
-        if (!p.exam_date || !nameById.has(p.subject_id)) continue
-        const cur = bySub.get(p.subject_id)
-        if (!cur || String(p.exam_date) < String(cur.exam_date)) bySub.set(p.subject_id, p)
+        if (!p.exam_date) continue
+        const info = subById.get(p.subject_id); if (!info) continue
+        const key = norm(info.name)
+        const u = union.get(key) || { subject: info.name, date: p.exam_date, start: p.exam_start_time, end: p.exam_end_time, classes: new Set() }
+        if (String(p.exam_date) < String(u.date)) { u.date = p.exam_date; u.start = p.exam_start_time; u.end = p.exam_end_time }
+        u.classes.add(info.cls)
+        union.set(key, u)
       }
-      const rows = [...bySub.entries()].map(([id, p]) => ({ subject: nameById.get(id), ...p }))
-        .sort((a, b2) => String(a.exam_date).localeCompare(String(b2.exam_date)) || String(a.exam_start_time || '').localeCompare(String(b2.exam_start_time || '')))
+      const rows = [...union.values()].sort((a, b2) => String(a.date).localeCompare(String(b2.date)) || String(a.start || '').localeCompare(String(b2.start || '')))
       const dayName = (d) => { try { return new Date(d + 'T00:00:00Z').toLocaleDateString('en-GB', { weekday: 'long', timeZone: 'UTC' }) } catch { return '' } }
       const fmtDate = (d) => { try { return new Date(d + 'T00:00:00Z').toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'UTC' }) } catch { return esc(d) } }
       const fmtTime = (t2) => { if (!t2) return ''; const [h, m] = String(t2).split(':'); const H = Number(h); const ap = H >= 12 ? 'PM' : 'AM'; const h12 = ((H + 11) % 12) + 1; return `${h12}:${m} ${ap}` }
-      const time = (r) => [fmtTime(r.exam_start_time), fmtTime(r.exam_end_time)].filter(Boolean).join(' – ') || '—'
+      const time = (r) => [fmtTime(r.start), fmtTime(r.end)].filter(Boolean).join(' – ') || '—'
+      const gradeOf = (cl) => { const l = norm(cl); if (l.includes('nursery')) return -3; if (l.includes('lkg')) return -2; if (l.includes('ukg')) return -1; const m = l.match(/class\s*(\d+)/); return m ? Number(m[1]) : 999 }
+      const classesLabel = (set) => {
+        const names = [...set].sort((a2, b2) => gradeOf(a2) - gradeOf(b2))
+        if (names.length >= classList.length) return 'All'
+        const nums = names.map(gradeOf).filter((g) => g >= 1 && g <= 12)
+        if (nums.length === names.length && nums.length > 2) { const parts = []; let st = nums[0], pr = nums[0]; for (let i = 1; i <= nums.length; i++) { if (nums[i] === pr + 1) { pr = nums[i]; continue } parts.push(st === pr ? `${st}` : `${st}–${pr}`); st = nums[i]; pr = nums[i] } return parts.join(', ') }
+        return names.map((x) => String(x).replace(/^Class\s*/i, '')).join(', ')
+      }
+      const showClasses = classList.length > 1
+      const title = label || classList[0]
       const head = `<div class="head"><img src="/banner-light.png" alt="Radhakrishna Academy" onerror="this.style.display='none'"><h1>Examination Date Sheet</h1>
-        <div class="sub">${esc(c)} · ${esc(term?.name || 'Exam')} · Session ${esc(s)} · ${esc(b)} branch</div>
+        <div class="sub">${esc(title)} · ${esc(term?.name || 'Exam')} · Session ${esc(s)} · ${esc(b)} branch</div>
         <div class="badge">✓ Verified — official schedule</div></div>`
       const body = rows.length
-        ? `<table><thead><tr><th>Date</th><th>Day</th><th>Subject</th><th>Time</th><th>Venue</th></tr></thead><tbody>${rows.map((r) => `<tr><td>${esc(fmtDate(r.exam_date))}</td><td>${esc(dayName(r.exam_date))}</td><td><b>${esc(r.subject)}</b></td><td>${esc(time(r))}</td><td>${esc(r.venue || '—')}</td></tr>`).join('')}</tbody></table>`
+        ? `<table><thead><tr><th>Date</th><th>Day</th><th>Time</th><th>Subject</th>${showClasses ? '<th>Classes</th>' : ''}</tr></thead><tbody>${rows.map((r) => `<tr><td>${esc(fmtDate(r.date))}</td><td>${esc(dayName(r.date))}</td><td>${esc(time(r))}</td><td><b>${esc(r.subject)}</b></td>${showClasses ? `<td>${esc(classesLabel(r.classes))}</td>` : ''}</tr>`).join('')}</tbody></table>`
         : '<div class="err" style="color:#8a978e">No dates have been published for this exam yet.</div>'
-      res.type('html').send(page(`Date sheet · ${c}`, head + body + `<div class="foot">Verified ${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })} IST · This page reflects the school's live schedule.</div>`))
+      res.type('html').send(page(`Date sheet · ${title}`, head + body + `<div class="foot">Verified ${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })} IST · This page reflects the school's live schedule.</div>`))
     } catch (e) {
       console.error('[admin] GET /verify/datesheet:', e)
       res.status(500).type('html').send(page('Date sheet', '<div class="err">Could not load the schedule right now.</div>'))
