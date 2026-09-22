@@ -15,6 +15,10 @@
 // a .env.local override in local dev.
 const assetBase = () => (process.env.CARD_ASSET_BASE || 'https://tracker.rkacademyballia.in').replace(/\/$/, '')
 const AFFILIATION = '2133183', SCHOOL_CODE = '71447'
+// CITY branch, Nursery–Class 8 (pre-primary + performance-profile) is the state-board school:
+// it prints its UDISE code instead of the CBSE affiliation/school code and drops the CBSE logo.
+// CITY Classes 9–10 (secondary) and every MAIN card keep the CBSE header.
+const CITY_UDISE = '9631801404'
 const ADDRESS = 'Affiliated to CBSE, New Delhi · Ballia, Uttar Pradesh'
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]))
@@ -169,9 +173,15 @@ export function renderCardBody(card) {
 // ── shared blocks ───────────────────────────────────────────────────────────
 function recordNo(card) { return `RC/${card.student?.branchCode || 'RKA'}/${card.sessionCode}/${card.cardKey}/${card.student?.admissionNo || dash}` }
 function header(card) {
+  // CITY Nursery–Class 8 → UDISE code, no CBSE logo. Everything else keeps the CBSE affiliation header.
+  const cityLower = card.student?.branchCode === 'CITY' && (card.family === 'pre_primary' || card.family === 'performance_profile')
+  const metaTxt = cityLower
+    ? `UDISE CODE <b>${CITY_UDISE}</b><br>RECORD ${esc(recordNo(card))}`
+    : `AFFILIATION <b>${AFFILIATION}</b><br>SCHOOL CODE <b>${SCHOOL_CODE}</b><br>RECORD ${esc(recordNo(card))}`
+  const cbseLogo = cityLower ? '' : `<img class="cbse" src="${assetBase()}/cbse-card.png" alt="CBSE" onerror="this.remove()">`
   return `<div class="hd"><img class="crest" src="${assetBase()}/crest-card.png" alt="" onerror="this.style.visibility='hidden'">
     <div class="school"><img class="wordmark" src="${assetBase()}/banner-card.png?v=3" alt="RADHAKRISHNA ACADEMY" onerror="this.replaceWith(Object.assign(document.createElement('b'),{textContent:'RADHAKRISHNA ACADEMY'}))"></div>
-    <div class="meta"><div class="txt">AFFILIATION <b>${AFFILIATION}</b><br>SCHOOL CODE <b>${SCHOOL_CODE}</b><br>RECORD ${esc(recordNo(card))}</div><img class="cbse" src="${assetBase()}/cbse-card.png" alt="CBSE" onerror="this.remove()"></div></div>`
+    <div class="meta"><div class="txt">${metaTxt}</div>${cbseLogo}</div></div>`
 }
 function titleStrip(card, shown) {
   const t = 'REPORT CARD'   // same heading on every class
