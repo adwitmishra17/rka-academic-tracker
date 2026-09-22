@@ -436,7 +436,10 @@ export function computeCard(p) {
             const rowMax = Number(row[c.perRow] ?? 0)
             if (!(rowMax > 0)) continue // this row has no such paper (e.g. written-only)
             v = cellFor(row, examCode, c.key, rowMax, rowMax)
-          } else if (c.parts) {
+          } else if (c.parts && typeof c.parts[0] === 'object') {
+            // Structured parts = the split periodic test (separate papers per part). The
+            // secondary/senior annual exam also carries a legacy parts:['practical','written']
+            // (an in-paper theory/practical split, one 'exam' paper) — that must NOT route here.
             v = cellForParts(row, examCode, c.parts, c.max)
           } else {
             // Senior/secondary exam papers: card max is the row's own scheme

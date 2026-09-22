@@ -61,7 +61,7 @@ const CSS = `
   table{width:100%;border-collapse:collapse;font-size:12.5px}
   th{font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;color:#1A1A1A;text-align:center;padding:4px 3px;border-bottom:1px solid #1A1A1A;line-height:1.3;font-weight:600;vertical-align:bottom}
   th.l,td.l{text-align:left}
-  th.band{border-bottom:1px solid #CFCFCF;color:#1A1A1A;letter-spacing:.14em;padding-bottom:2px}
+  th.band{border-bottom:1px solid #CFCFCF;color:#1A1A1A;letter-spacing:.14em;padding-bottom:2px;background:#EDEDED}
   th .csub{font-weight:400;font-size:.82em;letter-spacing:0;text-transform:none}
   th.sep,td.sep{border-left:1px solid #CFCFCF}
   td{padding:4.5px 3px;text-align:center;border-bottom:1px solid #CFCFCF;color:#1A1A1A}
@@ -118,6 +118,7 @@ const CSS = `
     .photo{background:#fff}
     tbody tr:nth-child(even) td{background:transparent}
     tr.sum td{background:#E6E6E6!important}
+    th.band{background:#E6E6E6}
     .meta b,.metrics .v.red,td.g,td.fail,.co b{color:#000}
     .box .result{color:#C8102E}
     .chart .gl{stroke:#C4C4C4}
