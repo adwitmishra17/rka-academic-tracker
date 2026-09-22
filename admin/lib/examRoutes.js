@@ -813,4 +813,84 @@ export function registerExamRoutes(app, { supabase, admin, verifyAuth, branchIdF
       res.json({ withdrawn: ids.length })
     } catch (e) { err(res, e, 'POST /api/exam/unpublish') }
   })
+
+  // ── Date sheet (exam timetable) ────────────────────────────────────────────
+  // The schedule lives on exam_papers (exam_date / start / end / venue), one
+  // slot per subject × term. Save writes the slot onto every paper of that
+  // subject in the term (theory + practical share the exam day).
+  // POST /api/exam/datesheet { branchCode, sessionCode, className, termId, slots:[{subjectId, examDate, startTime, endTime, venue}] }
+  app.post('/api/exam/datesheet', verifyAuth, async (req, res) => {
+    try {
+      const { termId, slots } = req.body || {}
+      if (!termId || !Array.isArray(slots)) return bad(res, 'termId and slots[] required')
+      let saved = 0
+      for (const s of slots) {
+        if (!s.subjectId) continue
+        const patch = {
+          exam_date:       s.examDate || null,
+          exam_start_time: s.startTime || null,
+          exam_end_time:   s.endTime || null,
+          venue:           s.venue || null,
+          updated_at:      new Date().toISOString(),
+        }
+        const { error } = await supabase.from('exam_papers').update(patch).eq('term_id', termId).eq('subject_id', s.subjectId)
+        if (error) throw error
+        saved += 1
+      }
+      res.json({ saved })
+    } catch (e) { err(res, e, 'POST /api/exam/datesheet') }
+  })
+
+  // Public, no-auth verification page for a printed date sheet's QR code.
+  // The schedule is non-sensitive (it's meant to be shared); this renders the
+  // LIVE schedule from the database so a scanned sheet can be confirmed genuine.
+  // GET /verify/datesheet?b=<branchCode>&s=<session>&c=<className>&t=<termId>
+  app.get('/verify/datesheet', async (req, res) => {
+    const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (m) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]))
+    const page = (title, body) => `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${esc(title)}</title>
+<style>:root{color-scheme:light}body{margin:0;background:#f4f6f4;font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;color:#1a2b22}
+.wrap{max-width:720px;margin:0 auto;padding:24px 16px 60px}.card{background:#fff;border:1px solid #e2e8e2;border-radius:16px;overflow:hidden}
+.head{padding:22px 24px;text-align:center;border-bottom:1px solid #eef2ee}.head img{height:46px}.head h1{font-family:Georgia,serif;color:#1a4a2e;font-size:20px;margin:10px 0 2px}
+.head .sub{color:#5a6b60;font-size:13px}.badge{display:inline-flex;align-items:center;gap:6px;margin-top:12px;background:#e8f3ec;color:#1a4a2e;border:1px solid #bfe0cb;border-radius:999px;padding:5px 12px;font-size:12.5px;font-weight:600}
+table{width:100%;border-collapse:collapse}th,td{padding:11px 14px;text-align:left;font-size:13.5px;border-bottom:1px solid #eef2ee}
+th{background:#1a4a2e;color:#fff;font-size:11px;text-transform:uppercase;letter-spacing:.05em}tr:nth-child(even) td{background:#f7faf8}
+.foot{padding:16px 24px;color:#8a978e;font-size:11.5px;text-align:center}.err{padding:40px 24px;text-align:center;color:#8b1a1a}</style></head>
+<body><div class="wrap"><div class="card">${body}</div><p class="foot" style="text-align:center;color:#98a89e">Powered by skolix.app</p></div></body></html>`
+    try {
+      const { b, s, c, t } = req.query
+      if (!b || !s || !c || !t) return res.status(400).type('html').send(page('Date sheet', '<div class="err">Invalid verification link.</div>'))
+      const bid = await branchIdForCode(b)
+      if (!bid) return res.status(404).type('html').send(page('Date sheet', '<div class="err">Unknown branch.</div>'))
+      const [termR, subsR, papersR] = await Promise.all([
+        supabase.from('exam_terms').select('name, starts_on, ends_on').eq('id', t).maybeSingle(),
+        supabase.from('exam_subjects').select('id, subject_name').eq('branch_id', bid).eq('session_code', s).eq('class_name', c),
+        supabase.from('exam_papers').select('subject_id, exam_date, exam_start_time, exam_end_time, venue').eq('term_id', t),
+      ])
+      const term = termR.data
+      const nameById = new Map((subsR.data || []).map((x) => [x.id, x.subject_name]))
+      // one row per subject that has a date; earliest date/time first
+      const bySub = new Map()
+      for (const p of (papersR.data || [])) {
+        if (!p.exam_date || !nameById.has(p.subject_id)) continue
+        const cur = bySub.get(p.subject_id)
+        if (!cur || String(p.exam_date) < String(cur.exam_date)) bySub.set(p.subject_id, p)
+      }
+      const rows = [...bySub.entries()].map(([id, p]) => ({ subject: nameById.get(id), ...p }))
+        .sort((a, b2) => String(a.exam_date).localeCompare(String(b2.exam_date)) || String(a.exam_start_time || '').localeCompare(String(b2.exam_start_time || '')))
+      const dayName = (d) => { try { return new Date(d + 'T00:00:00Z').toLocaleDateString('en-GB', { weekday: 'long', timeZone: 'UTC' }) } catch { return '' } }
+      const fmtDate = (d) => { try { return new Date(d + 'T00:00:00Z').toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'UTC' }) } catch { return esc(d) } }
+      const fmtTime = (t2) => { if (!t2) return ''; const [h, m] = String(t2).split(':'); const H = Number(h); const ap = H >= 12 ? 'PM' : 'AM'; const h12 = ((H + 11) % 12) + 1; return `${h12}:${m} ${ap}` }
+      const time = (r) => [fmtTime(r.exam_start_time), fmtTime(r.exam_end_time)].filter(Boolean).join(' – ') || '—'
+      const head = `<div class="head"><img src="/banner-light.png" alt="Radhakrishna Academy" onerror="this.style.display='none'"><h1>Examination Date Sheet</h1>
+        <div class="sub">${esc(c)} · ${esc(term?.name || 'Exam')} · Session ${esc(s)} · ${esc(b)} branch</div>
+        <div class="badge">✓ Verified — official schedule</div></div>`
+      const body = rows.length
+        ? `<table><thead><tr><th>Date</th><th>Day</th><th>Subject</th><th>Time</th><th>Venue</th></tr></thead><tbody>${rows.map((r) => `<tr><td>${esc(fmtDate(r.exam_date))}</td><td>${esc(dayName(r.exam_date))}</td><td><b>${esc(r.subject)}</b></td><td>${esc(time(r))}</td><td>${esc(r.venue || '—')}</td></tr>`).join('')}</tbody></table>`
+        : '<div class="err" style="color:#8a978e">No dates have been published for this exam yet.</div>'
+      res.type('html').send(page(`Date sheet · ${c}`, head + body + `<div class="foot">Verified ${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })} IST · This page reflects the school's live schedule.</div>`))
+    } catch (e) {
+      console.error('[admin] GET /verify/datesheet:', e)
+      res.status(500).type('html').send(page('Date sheet', '<div class="err">Could not load the schedule right now.</div>'))
+    }
+  })
 }

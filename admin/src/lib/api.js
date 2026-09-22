@@ -127,6 +127,7 @@ export const examApi = {
   unpublish:          (ids)                               => apiPost('/api/exam/unpublish', { ids }),
   syncCardAreas:      (branchCode, sessionCode, templateId) => apiPost('/api/exam/card-areas/sync', { branchCode, sessionCode, templateId }),
   classGrid:          (branchCode, sessionCode, className, termId, section) => apiGet('/api/exam/class-grid', { branchCode, sessionCode, className, termId, section }),
+  saveDatesheet:      (body)                              => apiPost('/api/exam/datesheet', body),
 }
 
 export async function apiPut(path, body) {

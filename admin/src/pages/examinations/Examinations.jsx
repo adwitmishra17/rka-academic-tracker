@@ -12,6 +12,7 @@ import PapersStage from './PapersStage.jsx'
 import MarksStage from './MarksStage.jsx'
 import CrosslistStage from './CrosslistStage.jsx'
 import CardsStage from './CardsStage.jsx'
+import DatesheetStage from './DatesheetStage.jsx'
 
 /* ============================================================
    Examinations — the single window for the whole exam → report-card
@@ -29,10 +30,11 @@ import CardsStage from './CardsStage.jsx'
 const STAGES = [
   { key: 'setup', n: 1, label: 'Setup', hint: 'Terms, subjects, teachers, template' },
   { key: 'rules', n: 2, label: 'Scoring rules', hint: 'Components, max marks, normalisation' },
-  { key: 'papers', n: 3, label: 'Papers', hint: 'Generated from the rules · date sheet' },
-  { key: 'status', n: 4, label: 'Marks entry', hint: 'Class grid · card entries · progress' },
-  { key: 'crosslist', n: 5, label: 'Crosslist', hint: 'Class sheet · exports' },
-  { key: 'cards', n: 6, label: 'Report cards', hint: 'Gate · preview · publish' },
+  { key: 'papers', n: 3, label: 'Papers', hint: 'Generated from the rules' },
+  { key: 'datesheet', n: 4, label: 'Date sheet', hint: 'Exam timetable · PDF + verify QR' },
+  { key: 'status', n: 5, label: 'Marks entry', hint: 'Class grid · card entries · progress' },
+  { key: 'crosslist', n: 6, label: 'Crosslist', hint: 'Class sheet · exports' },
+  { key: 'cards', n: 7, label: 'Report cards', hint: 'Gate · preview · publish' },
 ]
 
 export default function Examinations() {
@@ -93,7 +95,7 @@ export default function Examinations() {
   }, [classNames, config])
 
   const ctx = { branch, sessionCode, className, config, refreshConfig, classNames, classBadges, setStage: (s) => setParam({ stage: s }), setClass: (c) => setParam({ class: c }) }
-  const Stage = { setup: SetupStage, rules: RulesStage, papers: PapersStage, status: MarksStage, crosslist: CrosslistStage, cards: CardsStage }[stage] || SetupStage
+  const Stage = { setup: SetupStage, rules: RulesStage, papers: PapersStage, datesheet: DatesheetStage, status: MarksStage, crosslist: CrosslistStage, cards: CardsStage }[stage] || SetupStage
   const needsClass = stage !== 'setup'
   const termsOk = (config?.terms || []).length > 0
 
