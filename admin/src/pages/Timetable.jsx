@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
 import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, getDoc, query, Timestamp } from 'firebase/firestore'
 import { useNavigate } from 'react-router-dom'
 import { db } from '../firebase/config'
-import { useClasses } from '../hooks/useClasses'
+import { useClasses, inferGradeBand } from '../hooks/useClasses'
 import { useAuth } from '../App'
 import { branchConstraints, branchConstraintsArray } from '../lib/branchQuery'
 import { branchLabel } from '../lib/branch'
@@ -12,8 +12,26 @@ const DAYS = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday']
 // Subjects loaded from settings/classSubjects
 const inp = { width:'100%', padding:'10px 12px', border:'1px solid var(--gray-200)', borderRadius:'var(--radius-sm)', fontSize:13, fontFamily:'var(--font-body)', color:'var(--text)', background:'var(--white)', outline:'none' }
 
+// Shared card vocabulary (matches Dashboard "command centre").
+const CARD = { background:'var(--white)', border:'1px solid var(--gray-100)', borderRadius:'var(--radius-lg)', overflow:'hidden' }
+const CARD_HEAD = { padding:'13px 18px', background:'var(--green-light)', borderBottom:'1px solid var(--green-muted)', display:'flex', justifyContent:'space-between', alignItems:'center', gap:12, flexWrap:'wrap' }
+
+// Subject → stable hue, so a subject reads as the same colour everywhere.
+// Rendered as a translucent tint + a solid dot, so it holds on both the
+// light (#FFF) and dark (#22231C) card grounds without hard-coded pastels.
+const SUBJECT_HUES = [152, 210, 32, 276, 4, 190, 96, 340, 50, 258, 128, 16, 168, 300]
+function subjHue(subject) {
+  if (!subject) return null
+  let h = 0
+  for (let i = 0; i < subject.length; i++) h = (h * 31 + subject.charCodeAt(i)) >>> 0
+  return SUBJECT_HUES[h % SUBJECT_HUES.length]
+}
+const tintBg  = (hue) => hue == null ? 'transparent' : `hsl(${hue} 48% 50% / 0.13)`
+const tintDot = (hue) => hue == null ? 'var(--gray-300)' : `hsl(${hue} 52% 52%)`
+
 function timeToMinutes(t) { const [h,m] = t.split(':').map(Number); return h*60+m }
 function minutesToTime(m) { return `${String(Math.floor(m/60)).padStart(2,'0')}:${String(m%60).padStart(2,'0')}` }
+const initials = (n) => (n || '').split(' ').filter(Boolean).map(w => w[0]).join('').slice(0,2).toUpperCase()
 
 // Breaks in the Period Times format (multiple), with the legacy single
 // breakAfter/breakDuration fields as fallback for pre-upgrade docs.
@@ -72,6 +90,7 @@ export default function Timetable() {
   const [showModal, setShowModal] = useState(false)
   const [editSlot, setEditSlot] = useState(null)
   const [saving, setSaving] = useState(false)
+  const [loaded, setLoaded] = useState(false)
   const [form, setForm] = useState({ day:'Monday', period:'1', teacherId:'', classNames:[], subject:'' })
 
   async function load() {
@@ -94,6 +113,7 @@ export default function Timetable() {
     const s = settingsDoc.exists() ? settingsDoc.data() : {}
     setSettings(s)
     setSchedule(buildSchedule(s))
+    setLoaded(true)
   }
 
   useEffect(() => { load() }, [effectiveBranches, currentBranch])
@@ -102,15 +122,21 @@ export default function Timetable() {
   const saturdayPeriods = Number(settings.saturdayPeriods || 5)
   const periodsForDay = (day) => day === 'Saturday' ? saturdayPeriods : weekdayPeriods
 
+  // A single, coherent branch drives the day grid (classes + slots): the
+  // active branch, else the first allowed one (super admin on "All Branches"
+  // can flip it with a small toggle so Main/City classes never merge into
+  // one row by shared name).
+  const gridBranch = currentBranch || formBranch || allowedBranches[0]
+
   // Get display time for a period number
   function periodLabel(p) {
     const row = schedule.find(s => !s.isBreak && s.period === p)
     return row ? row.label : ''
   }
 
-  function openAdd(day, period) {
+  function openAdd(day, period, preClass) {
     setEditSlot(null)
-    setForm({ day, period: String(period), teacherId:'', classNames:[], subject:'' })
+    setForm({ day, period: String(period), teacherId:'', classNames: preClass ? [preClass] : [], subject:'' })
     setShowModal(true)
   }
 
@@ -143,12 +169,48 @@ export default function Timetable() {
     await deleteDoc(doc(db, 'timetable', id)); await load()
   }
 
-  const clrs = ['#e8f2ec','#fdf6e3','#fdf0f0','#e6f1fb','#f0e8f5','#e8f5f0']
-  const clrMap = {}; let ci = 0
-  slots.forEach(s => { if (!clrMap[s.subject]) clrMap[s.subject] = clrs[ci++ % clrs.length] })
+  // ---- Day grid model: rows = classes, columns = periods --------------------
+  const gridClasses = useMemo(() => {
+    const list = classDocs.filter(c => !gridBranch || c.branchCode === gridBranch)
+    const seen = new Set(); const out = []
+    for (const c of list) { if (c.className && !seen.has(c.className)) { seen.add(c.className); out.push(c) } }
+    return out   // already grade-sorted by useClasses
+  }, [classDocs, gridBranch])
+
+  const dayColumns = useMemo(
+    () => schedule.filter(row => !row.isBreak ? row.period <= periodsForDay(selectedDay) : row.after < periodsForDay(selectedDay)),
+    [schedule, selectedDay, weekdayPeriods, saturdayPeriods]
+  )
+
+  // key `${className}|${period}` → slots[] (combined-class slots land in every row)
+  const cellMap = useMemo(() => {
+    const m = new Map()
+    for (const s of slots) {
+      if (gridBranch && s.branchCode !== gridBranch) continue
+      if (s.day !== selectedDay) continue
+      const cls = s.classNames?.length ? s.classNames : (s.className ? [s.className] : [])
+      for (const c of cls) {
+        const k = `${c}|${s.period}`
+        if (!m.has(k)) m.set(k, [])
+        m.get(k).push(s)
+      }
+    }
+    return m
+  }, [slots, gridBranch, selectedDay])
+
+  const daySummary = useMemo(() => {
+    const maxP = periodsForDay(selectedDay)
+    const dayS = slots.filter(s => s.day === selectedDay && (!gridBranch || s.branchCode === gridBranch))
+    const filledCells = new Set()
+    for (const s of dayS) {
+      const cls = s.classNames?.length ? s.classNames : (s.className ? [s.className] : [])
+      for (const c of cls) if (s.period <= maxP) filledCells.add(`${c}|${s.period}`)
+    }
+    return { assignments: dayS.length, filled: filledCells.size, total: gridClasses.length * maxP }
+  }, [slots, gridBranch, selectedDay, gridClasses, weekdayPeriods, saturdayPeriods])
 
   return (
-    <div style={{ padding:'24px 28px', maxWidth:1300 }}>
+    <div style={{ padding:'24px 28px', maxWidth:1320 }}>
       <div className="fade-in" style={{ marginBottom:20, display:'flex', alignItems:'flex-start', justifyContent:'space-between', flexWrap:'wrap', gap:12 }}>
         <div>
           <h1 style={{ fontFamily:'var(--font-display)', fontSize:24, fontWeight:600, color:'var(--green-dark)', marginBottom:3 }}>Timetable</h1>
@@ -168,103 +230,123 @@ export default function Timetable() {
         </div>
       </div>
 
-      {/* Day tabs */}
+      {/* Day tabs + (super-admin) grid-branch chooser */}
       {viewMode === 'day' && (
-        <div style={{ display:'flex', gap:6, flexWrap:'wrap', marginBottom:18 }}>
-          {DAYS.map(d => (
-            <button key={d} onClick={() => setSelectedDay(d)} style={{ padding:'7px 14px', borderRadius:20, border:'1px solid', borderColor: selectedDay===d ? 'var(--green)' : 'var(--gray-200)', background: selectedDay===d ? 'var(--green)' : 'var(--white)', color: selectedDay===d ? 'white' : 'var(--text-muted)', fontSize:12, fontWeight:500, cursor:'pointer', transition:'all 0.15s' }}>
-              {d.slice(0,3)} <span style={{ opacity:0.7, fontSize:10 }}>({periodsForDay(d)}p)</span>
-            </button>
-          ))}
+        <div style={{ display:'flex', gap:12, flexWrap:'wrap', marginBottom:18, alignItems:'center', justifyContent:'space-between' }}>
+          <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
+            {DAYS.map(d => (
+              <button key={d} onClick={() => setSelectedDay(d)} style={{ padding:'7px 14px', borderRadius:20, border:'1px solid', borderColor: selectedDay===d ? 'var(--green)' : 'var(--gray-200)', background: selectedDay===d ? 'var(--green)' : 'var(--white)', color: selectedDay===d ? 'white' : 'var(--text-muted)', fontSize:12, fontWeight:500, cursor:'pointer', transition:'all 0.15s' }}>
+                {d.slice(0,3)} <span style={{ opacity:0.7, fontSize:10 }}>({periodsForDay(d)}p)</span>
+              </button>
+            ))}
+          </div>
+          {showBranchPicker && (
+            <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+              <span style={{ fontSize:11, color:'var(--text-muted)', fontWeight:500 }}>Showing</span>
+              <div style={{ display:'flex', background:'var(--gray-50)', borderRadius:'var(--radius-sm)', padding:3, border:'1px solid var(--gray-100)' }}>
+                {allowedBranches.map(b => (
+                  <button key={b} onClick={() => setFormBranch(b)} style={{ padding:'5px 12px', borderRadius:6, border:'none', fontSize:12, fontWeight:500, cursor:'pointer', background: gridBranch===b ? 'var(--white)' : 'transparent', color: gridBranch===b ? 'var(--green)' : 'var(--text-muted)', boxShadow: gridBranch===b ? 'var(--shadow-sm)' : 'none' }}>{branchLabel(b)}</button>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
-      {/* DAY VIEW */}
+      {/* DAY VIEW — Class × Period grid */}
       {viewMode === 'day' && (
-        <div style={{ background:'var(--white)', borderRadius:'var(--radius-lg)', border:'1px solid var(--gray-100)', overflow:'hidden' }}>
-          <div style={{ padding:'13px 18px', background:'var(--green-light)', borderBottom:'1px solid var(--green-muted)', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-            <h2 style={{ fontFamily:'var(--font-display)', fontSize:15, fontWeight:600, color:'var(--green-dark)' }}>{selectedDay}</h2>
-            <span style={{ fontSize:12, color:'var(--green-mid)' }}>{(() => {
-                const daySlots = slots.filter(s=>s.day===selectedDay)
-                const filledPeriods = new Set(daySlots.map(s=>s.period)).size
-                const totalSlots = daySlots.length
-                const maxP = periodsForDay(selectedDay)
-                if (totalSlots === 0) return `0 of ${maxP} periods assigned`
-                if (totalSlots === filledPeriods) return `${filledPeriods} of ${maxP} periods assigned`
-                return `${filledPeriods} of ${maxP} periods assigned · ${totalSlots} total class slots`
-              })()}</span>
+        <div style={CARD}>
+          <div style={CARD_HEAD}>
+            <div>
+              <h2 style={{ fontFamily:'var(--font-display)', fontSize:15, fontWeight:600, color:'var(--green-dark)' }}>{selectedDay}</h2>
+              <div style={{ fontSize:12, color:'var(--green-mid)', marginTop:2 }}>
+                {daySummary.total === 0
+                  ? 'No classes to schedule'
+                  : `${daySummary.filled} of ${daySummary.total} cells filled · ${daySummary.assignments} assignment${daySummary.assignments===1?'':'s'}`}
+              </div>
+            </div>
+            <span style={{ fontSize:11.5, color:'var(--text-muted)' }}>Tap a cell to assign · colour = subject</span>
           </div>
-          <div style={{ overflowX:'auto' }}>
-            <table style={{ width:'100%', borderCollapse:'collapse', fontSize:13 }}>
-              <thead>
-                <tr style={{ background:'var(--gray-50)' }}>
-                  {['Period','Time','Teacher','Class','Subject',''].map(h => (
-                    <th key={h} style={{ padding:'9px 16px', textAlign:'left', fontSize:11, fontWeight:600, color:'var(--text-muted)', textTransform:'uppercase', letterSpacing:'0.04em', whiteSpace:'nowrap' }}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {schedule
-                  .filter(row => !row.isBreak ? row.period <= periodsForDay(selectedDay) : row.after < periodsForDay(selectedDay))
-                  .map((row, idx) => {
-                  if (row.isBreak) return (
-                    <tr key={`break-${row.after}`} style={{ background:'#fffbea', borderTop:'1px solid rgba(201,162,39,0.2)' }}>
-                      <td colSpan={6} style={{ padding:'8px 16px', fontSize:12, color:'var(--gold-dark)', fontWeight:500 }}>
-                        ☕ Interval — {row.duration} min &nbsp;·&nbsp; {row.start}–{row.end}
-                      </td>
-                    </tr>
-                  )
-                  const period = row.period
-                  const periodSlots = slots.filter(s => s.day === selectedDay && s.period === period)
-                  if (periodSlots.length === 0) return (
-                    <tr key={period} onClick={() => openAdd(selectedDay, period)} style={{ borderTop:'1px solid var(--gray-50)', cursor:'pointer' }}
-                      onMouseEnter={e=>e.currentTarget.style.background='var(--green-light)'}
-                      onMouseLeave={e=>e.currentTarget.style.background=''}>
-                      <td style={{ padding:'12px 16px', fontWeight:700, color:'var(--text-muted)' }}>P{period}</td>
-                      <td style={{ padding:'12px 16px', color:'var(--text-muted)', fontSize:12 }}>{row.label}</td>
-                      <td colSpan={3} style={{ padding:'12px 16px', color:'var(--gray-400)', fontStyle:'italic', fontSize:12 }}>Click to assign</td>
-                      <td style={{ padding:'12px 16px' }}><span style={{ fontSize:12, color:'var(--green)', fontWeight:500 }}>+ Add</span></td>
-                    </tr>
-                  )
-                  return [
-                    ...periodSlots.map((slot, si) => (
-                      <tr key={slot.id} style={{ borderTop:'1px solid var(--gray-50)', background: si%2===0 ? 'var(--white)' : 'var(--gray-50)' }}>
-                        {si===0 && <td rowSpan={periodSlots.length + 1} style={{ padding:'12px 16px', fontWeight:700, color:'var(--green-dark)', verticalAlign:'top' }}>P{period}</td>}
-                        {si===0 && <td rowSpan={periodSlots.length + 1} style={{ padding:'12px 16px', color:'var(--text-muted)', fontSize:12, verticalAlign:'top', whiteSpace:'nowrap' }}>{row.label}</td>}
-                        <td style={{ padding:'11px 16px' }}>
-                          <div style={{ display:'flex', alignItems:'center', gap:8 }}>
-                            <div style={{ width:28, height:28, borderRadius:'50%', background:'var(--green-light)', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
-                              <span style={{ fontSize:11, fontWeight:700, color:'var(--green)' }}>{slot.teacherName?.split(' ').map(n=>n[0]).join('').slice(0,2)}</span>
-                            </div>
-                            <span style={{ fontWeight:500 }}>{slot.teacherName}</span>
-                          </div>
-                        </td>
-                        <td style={{ padding:'11px 16px' }}><span style={{ fontSize:11, padding:'2px 8px', borderRadius:8, background:'var(--green-light)', color:'var(--green)', fontWeight:500 }}>{slot.className}</span></td>
-                        <td style={{ padding:'11px 16px' }}>{slot.subject}</td>
-                        <td style={{ padding:'11px 16px' }}>
-                          <div style={{ display:'flex', gap:10 }}>
-                            <button onClick={() => openEdit(slot)} style={{ fontSize:11, color:'var(--green)', background:'none', border:'none', cursor:'pointer', fontWeight:500 }}>Edit</button>
-                            <button onClick={() => handleDelete(slot.id)} style={{ fontSize:11, color:'var(--crimson)', background:'none', border:'none', cursor:'pointer' }}>✕</button>
-                          </div>
-                        </td>
+
+          {gridClasses.length === 0 ? (
+            <div style={{ padding:48, textAlign:'center', color:'var(--text-muted)', fontSize:14 }}>
+              {loaded ? 'No classes found for this branch.' : 'Loading…'}
+            </div>
+          ) : (
+            <div style={{ overflowX:'auto' }}>
+              <table style={{ borderCollapse:'separate', borderSpacing:0, fontSize:12.5, minWidth:'100%' }}>
+                <thead>
+                  <tr>
+                    <th style={{ position:'sticky', left:0, zIndex:3, background:'var(--gray-50)', textAlign:'left', padding:'10px 14px', fontSize:11, fontWeight:600, color:'var(--text-muted)', textTransform:'uppercase', letterSpacing:'0.04em', borderBottom:'1px solid var(--gray-100)', minWidth:118, boxShadow:'2px 0 0 var(--gray-100)' }}>Class</th>
+                    {dayColumns.map((col, i) => col.isBreak ? (
+                      <th key={`b-${col.after}`} title={`Interval · ${col.duration} min · ${col.start}–${col.end}`} style={{ background:'var(--gold-light)', borderBottom:'1px solid var(--gray-100)', borderLeft:'1px solid var(--gray-100)', minWidth:38, width:38, color:'var(--gold-dark)', fontSize:10, fontWeight:600 }}>
+                        <div style={{ writingMode:'vertical-rl', transform:'rotate(180deg)', margin:'0 auto', padding:'8px 0', whiteSpace:'nowrap' }}>☕ {col.duration}m</div>
+                      </th>
+                    ) : (
+                      <th key={col.period} style={{ background:'var(--gray-50)', borderBottom:'1px solid var(--gray-100)', borderLeft:'1px solid var(--gray-50)', padding:'8px 10px', textAlign:'center', minWidth:120, whiteSpace:'nowrap' }}>
+                        <div style={{ fontSize:12, fontWeight:700, color:'var(--green-dark)' }}>P{col.period}</div>
+                        <div style={{ fontSize:10, fontWeight:400, color:'var(--text-muted)', marginTop:1 }}>{col.label}</div>
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {gridClasses.map((c, ri) => {
+                    const band = c.gradeBand || inferGradeBand(c.className)
+                    const prevBand = ri > 0 ? (gridClasses[ri-1].gradeBand || inferGradeBand(gridClasses[ri-1].className)) : band
+                    const bandBreak = ri > 0 && band !== prevBand
+                    return (
+                      <tr key={c.className}>
+                        <th style={{ position:'sticky', left:0, zIndex:2, background:'var(--white)', textAlign:'left', padding:'8px 14px', fontWeight:600, color:'var(--text)', whiteSpace:'nowrap', borderBottom:'1px solid var(--gray-50)', borderTop: bandBreak ? '2px solid var(--green-muted)' : 'none', boxShadow:'2px 0 0 var(--gray-100)' }}>
+                          {c.className}
+                        </th>
+                        {dayColumns.map(col => {
+                          if (col.isBreak) return <td key={`b-${col.after}`} style={{ background:'var(--gold-light)', borderLeft:'1px solid var(--gray-100)', borderBottom:'1px solid var(--gray-50)', borderTop: bandBreak ? '2px solid var(--green-muted)' : 'none' }} />
+                          const cellSlots = cellMap.get(`${c.className}|${col.period}`) || []
+                          const cellBorder = { borderLeft:'1px solid var(--gray-50)', borderBottom:'1px solid var(--gray-50)', borderTop: bandBreak ? '2px solid var(--green-muted)' : 'none', verticalAlign:'top', padding:3 }
+                          if (cellSlots.length === 0) return (
+                            <td key={col.period} style={cellBorder}>
+                              <button onClick={() => openAdd(selectedDay, col.period, c.className)}
+                                title={`Assign ${c.className} · P${col.period}`}
+                                style={{ width:'100%', minHeight:48, border:'none', background:'transparent', borderRadius:8, cursor:'pointer', color:'var(--gray-200)', fontSize:16, transition:'all 0.12s' }}
+                                onMouseEnter={e=>{ e.currentTarget.style.background='var(--green-light)'; e.currentTarget.style.color='var(--green)' }}
+                                onMouseLeave={e=>{ e.currentTarget.style.background='transparent'; e.currentTarget.style.color='var(--gray-200)' }}>+</button>
+                            </td>
+                          )
+                          return (
+                            <td key={col.period} style={cellBorder}>
+                              <div style={{ display:'flex', flexDirection:'column', gap:3 }}>
+                                {cellSlots.map(slot => {
+                                  const hue = subjHue(slot.subject)
+                                  const combined = (slot.classNames?.length || 0) > 1
+                                  return (
+                                    <button key={slot.id} onClick={() => openEdit(slot)}
+                                      title={`${slot.subject} · ${slot.teacherName}${combined ? ' · combined: ' + slot.classNames.join(', ') : ''} — click to edit`}
+                                      style={{ textAlign:'left', width:'100%', minHeight:48, border:`1px solid ${tintBg(hue)}`, background:tintBg(hue), borderRadius:8, padding:'6px 8px', cursor:'pointer', display:'flex', flexDirection:'column', gap:2, transition:'all 0.12s' }}
+                                      onMouseEnter={e=>{ e.currentTarget.style.boxShadow='var(--shadow-sm)'; e.currentTarget.style.transform='translateY(-1px)' }}
+                                      onMouseLeave={e=>{ e.currentTarget.style.boxShadow='none'; e.currentTarget.style.transform='none' }}>
+                                      <div style={{ display:'flex', alignItems:'center', gap:5, minWidth:0 }}>
+                                        <span style={{ width:7, height:7, borderRadius:'50%', background:tintDot(hue), flexShrink:0 }} />
+                                        <span style={{ fontWeight:600, color:'var(--text)', fontSize:12, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{slot.subject}</span>
+                                      </div>
+                                      <div style={{ fontSize:11, color:'var(--text-muted)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                                        {slot.teacherName}
+                                        {combined && <span style={{ marginLeft:4, fontSize:9.5, padding:'0 5px', borderRadius:6, background:'var(--gold-light)', color:'var(--gold-dark)', fontWeight:600 }}>+{slot.classNames.length - 1}</span>}
+                                      </div>
+                                    </button>
+                                  )
+                                })}
+                              </div>
+                            </td>
+                          )
+                        })}
                       </tr>
-                    )),
-                    // Always show + Add another row at the bottom of each period
-                    <tr key={`add-${period}`} style={{ borderTop:'1px solid var(--gray-50)', background:'var(--gray-50)' }}>
-                      <td colSpan={3} style={{ padding:'8px 16px', color:'var(--text-muted)', fontSize:12, fontStyle:'italic' }}>
-                        {periodSlots.length} class{periodSlots.length > 1 ? 'es' : ''} assigned this period
-                      </td>
-                      <td colSpan={2} style={{ padding:'8px 16px' }}>
-                        <button onClick={() => openAdd(selectedDay, period)} style={{ fontSize:12, color:'var(--green)', background:'var(--green-light)', border:'1px solid var(--green-muted)', borderRadius:'var(--radius-sm)', padding:'4px 12px', cursor:'pointer', fontWeight:500 }}>
-                          + Add another class
-                        </button>
-                      </td>
-                    </tr>
-                  ]
-                })}
-              </tbody>
-            </table>
-          </div>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       )}
 
@@ -272,15 +354,15 @@ export default function Timetable() {
       {viewMode === 'teacher' && (
         <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
           {teachers.length === 0 ? (
-            <div style={{ textAlign:'center', padding:48, background:'var(--white)', borderRadius:'var(--radius-lg)', border:'1px solid var(--gray-100)', color:'var(--text-muted)', fontSize:14 }}>No teachers found.</div>
+            <div style={{ textAlign:'center', padding:48, ...CARD, color:'var(--text-muted)', fontSize:14 }}>No teachers found.</div>
           ) : teachers.map(t => {
             const tSlots = slots.filter(s => s.teacherId === t.id)
             const maxP = weekdayPeriods
             return (
-              <div key={t.id} style={{ background:'var(--white)', borderRadius:'var(--radius-lg)', border:'1px solid var(--gray-100)', overflow:'hidden' }}>
+              <div key={t.id} style={CARD}>
                 <div style={{ padding:'12px 18px', background:'var(--green-light)', borderBottom:'1px solid var(--green-muted)', display:'flex', alignItems:'center', gap:10 }}>
                   <div style={{ width:34, height:34, borderRadius:'50%', background:'var(--green)', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
-                    <span style={{ fontSize:12, fontWeight:700, color:'white' }}>{t.fullName?.split(' ').map(n=>n[0]).join('').slice(0,2)}</span>
+                    <span style={{ fontSize:12, fontWeight:700, color:'white' }}>{initials(t.fullName)}</span>
                   </div>
                   <div>
                     <div style={{ fontSize:14, fontWeight:600, color:'var(--green-dark)' }}>{t.fullName}</div>
@@ -291,12 +373,12 @@ export default function Timetable() {
                   <div style={{ padding:'14px 18px', fontSize:13, color:'var(--gray-400)', fontStyle:'italic' }}>No periods assigned yet.</div>
                 ) : (
                   <div style={{ overflowX:'auto' }}>
-                    <table style={{ borderCollapse:'collapse', fontSize:12, minWidth:600 }}>
+                    <table style={{ borderCollapse:'separate', borderSpacing:0, fontSize:12, minWidth:600 }}>
                       <thead>
                         <tr style={{ background:'var(--gray-50)' }}>
-                          <th style={{ padding:'8px 14px', textAlign:'left', color:'var(--text-muted)', fontWeight:600, fontSize:11, textTransform:'uppercase', whiteSpace:'nowrap' }}>Day</th>
+                          <th style={{ padding:'8px 14px', textAlign:'left', color:'var(--text-muted)', fontWeight:600, fontSize:11, textTransform:'uppercase', whiteSpace:'nowrap', borderBottom:'1px solid var(--gray-100)' }}>Day</th>
                           {schedule.filter(r => !r.isBreak && r.period <= maxP).map(r => (
-                            <th key={r.period} style={{ padding:'8px 6px', textAlign:'center', color:'var(--text-muted)', fontWeight:600, fontSize:10 }}>
+                            <th key={r.period} style={{ padding:'8px 6px', textAlign:'center', color:'var(--text-muted)', fontWeight:600, fontSize:10, borderBottom:'1px solid var(--gray-100)', borderLeft:'1px solid var(--gray-50)' }}>
                               <div>P{r.period}</div>
                               <div style={{ fontWeight:400, fontSize:9, opacity:0.7 }}>{r.start}</div>
                             </th>
@@ -305,17 +387,18 @@ export default function Timetable() {
                       </thead>
                       <tbody>
                         {DAYS.map(day => (
-                          <tr key={day} style={{ borderTop:'1px solid var(--gray-50)' }}>
-                            <td style={{ padding:'8px 14px', fontWeight:500, color:'var(--text)', whiteSpace:'nowrap' }}>{day}</td>
+                          <tr key={day}>
+                            <td style={{ padding:'8px 14px', fontWeight:500, color:'var(--text)', whiteSpace:'nowrap', borderBottom:'1px solid var(--gray-50)' }}>{day}</td>
                             {schedule.filter(r => !r.isBreak && r.period <= maxP).map(r => {
-                              if (r.period > periodsForDay(day)) return <td key={r.period} style={{ background:'var(--gray-50)', borderLeft:'1px solid var(--gray-100)' }} />
+                              if (r.period > periodsForDay(day)) return <td key={r.period} style={{ background:'var(--gray-50)', borderLeft:'1px solid var(--gray-100)', borderBottom:'1px solid var(--gray-50)' }} />
                               const slot = tSlots.find(s => s.day === day && s.period === r.period)
+                              const hue = slot ? subjHue(slot.subject) : null
                               return (
-                                <td key={r.period} style={{ padding:'4px 5px', textAlign:'center', borderLeft:'1px solid var(--gray-50)' }}>
+                                <td key={r.period} style={{ padding:'4px 5px', textAlign:'center', borderLeft:'1px solid var(--gray-50)', borderBottom:'1px solid var(--gray-50)' }}>
                                   {slot ? (
-                                    <div onClick={() => openEdit(slot)} style={{ background: clrMap[slot.subject] || 'var(--green-light)', borderRadius:6, padding:'4px 6px', fontSize:11, cursor:'pointer', whiteSpace:'nowrap' }}>
-                                      <div style={{ fontWeight:600, color:'var(--green-dark)' }}>{slot.subject}</div>
-                                      <div style={{ color:'var(--text-muted)', fontSize:10 }}>{slot.className?.replace('Class ','')}</div>
+                                    <div onClick={() => openEdit(slot)} style={{ background: tintBg(hue), borderRadius:6, padding:'4px 6px', fontSize:11, cursor:'pointer', whiteSpace:'nowrap' }}>
+                                      <div style={{ fontWeight:600, color:'var(--text)' }}>{slot.subject}</div>
+                                      <div style={{ color:'var(--text-muted)', fontSize:10 }}>{(slot.classNames?.length ? slot.classNames.join('+') : slot.className || '').replace(/Class /g,'')}</div>
                                     </div>
                                   ) : <span style={{ color:'var(--gray-200)' }}>—</span>}
                                 </td>
@@ -450,6 +533,9 @@ export default function Timetable() {
                 <button onClick={handleSave} disabled={saving||!form.teacherId||form.classNames.length===0||!form.subject} style={{ flex:1, padding:'11px', background:(!form.teacherId||form.classNames.length===0||!form.subject)?'var(--gray-200)':'var(--green)', color:(!form.teacherId||form.classNames.length===0||!form.subject)?'var(--gray-400)':'white', border:'none', borderRadius:'var(--radius-md)', fontSize:14, fontWeight:500, cursor:(!form.teacherId||form.classNames.length===0||!form.subject)?'not-allowed':'pointer' }}>
                   {saving ? 'Saving…' : editSlot ? 'Update' : 'Assign Period'}
                 </button>
+                {editSlot && (
+                  <button onClick={() => { handleDelete(editSlot.id); setShowModal(false) }} style={{ padding:'11px 16px', background:'var(--crimson-light)', color:'var(--crimson)', border:'1px solid var(--crimson)', borderRadius:'var(--radius-md)', fontSize:14, cursor:'pointer', fontWeight:500 }}>Remove</button>
+                )}
                 <button onClick={() => setShowModal(false)} style={{ padding:'11px 16px', background:'var(--gray-50)', color:'var(--text-muted)', border:'1px solid var(--gray-200)', borderRadius:'var(--radius-md)', fontSize:14, cursor:'pointer' }}>Cancel</button>
               </div>
             </div>
