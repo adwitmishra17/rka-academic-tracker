@@ -16,18 +16,12 @@ const inp = { width:'100%', padding:'10px 12px', border:'1px solid var(--gray-20
 const CARD = { background:'var(--white)', border:'1px solid var(--gray-100)', borderRadius:'var(--radius-lg)', overflow:'hidden' }
 const CARD_HEAD = { padding:'13px 18px', background:'var(--green-light)', borderBottom:'1px solid var(--green-muted)', display:'flex', justifyContent:'space-between', alignItems:'center', gap:12, flexWrap:'wrap' }
 
-// Subject → stable hue, so a subject reads as the same colour everywhere.
-// Rendered as a translucent tint + a solid dot, so it holds on both the
-// light (#FFF) and dark (#22231C) card grounds without hard-coded pastels.
-const SUBJECT_HUES = [152, 210, 32, 276, 4, 190, 96, 340, 50, 258, 128, 16, 168, 300]
-function subjHue(subject) {
-  if (!subject) return null
-  let h = 0
-  for (let i = 0; i < subject.length; i++) h = (h * 31 + subject.charCodeAt(i)) >>> 0
-  return SUBJECT_HUES[h % SUBJECT_HUES.length]
-}
-const tintBg  = (hue) => hue == null ? 'transparent' : `hsl(${hue} 48% 50% / 0.13)`
-const tintDot = (hue) => hue == null ? 'var(--gray-300)' : `hsl(${hue} 52% 52%)`
+// Assigned cells use the house green tint — the same treatment the Dashboard
+// coverage grid gives a scheduled period. The tracker palette stays
+// green/gold/crimson (no subject colour-coding); the subject name printed in
+// each cell is the identifier. Both tokens flip correctly in dark mode.
+const CELL_BG = 'var(--green-light)'
+const CELL_BORDER = 'var(--green-muted)'
 
 function timeToMinutes(t) { const [h,m] = t.split(':').map(Number); return h*60+m }
 function minutesToTime(m) { return `${String(Math.floor(m/60)).padStart(2,'0')}:${String(m%60).padStart(2,'0')}` }
@@ -265,7 +259,7 @@ export default function Timetable() {
                   : `${daySummary.filled} of ${daySummary.total} cells filled · ${daySummary.assignments} assignment${daySummary.assignments===1?'':'s'}`}
               </div>
             </div>
-            <span style={{ fontSize:11.5, color:'var(--text-muted)' }}>Tap a cell to assign · colour = subject</span>
+            <span style={{ fontSize:11.5, color:'var(--text-muted)' }}>Tap a cell to assign · tap an assignment to edit</span>
           </div>
 
           {gridClasses.length === 0 ? (
@@ -317,17 +311,16 @@ export default function Timetable() {
                             <td key={col.period} style={cellBorder}>
                               <div style={{ display:'flex', flexDirection:'column', gap:3 }}>
                                 {cellSlots.map(slot => {
-                                  const hue = subjHue(slot.subject)
                                   const combined = (slot.classNames?.length || 0) > 1
                                   return (
                                     <button key={slot.id} onClick={() => openEdit(slot)}
                                       title={`${slot.subject} · ${slot.teacherName}${combined ? ' · combined: ' + slot.classNames.join(', ') : ''} — click to edit`}
-                                      style={{ textAlign:'left', width:'100%', minHeight:48, border:`1px solid ${tintBg(hue)}`, background:tintBg(hue), borderRadius:8, padding:'6px 8px', cursor:'pointer', display:'flex', flexDirection:'column', gap:2, transition:'all 0.12s' }}
+                                      style={{ textAlign:'left', width:'100%', minHeight:48, border:`1px solid ${CELL_BORDER}`, background:CELL_BG, borderRadius:8, padding:'6px 8px', cursor:'pointer', display:'flex', flexDirection:'column', gap:2, transition:'all 0.12s' }}
                                       onMouseEnter={e=>{ e.currentTarget.style.boxShadow='var(--shadow-sm)'; e.currentTarget.style.transform='translateY(-1px)' }}
                                       onMouseLeave={e=>{ e.currentTarget.style.boxShadow='none'; e.currentTarget.style.transform='none' }}>
                                       <div style={{ display:'flex', alignItems:'center', gap:5, minWidth:0 }}>
-                                        <span style={{ width:7, height:7, borderRadius:'50%', background:tintDot(hue), flexShrink:0 }} />
-                                        <span style={{ fontWeight:600, color:'var(--text)', fontSize:12, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{slot.subject}</span>
+                                        <span style={{ width:7, height:7, borderRadius:'50%', background:'var(--green)', flexShrink:0 }} />
+                                        <span style={{ fontWeight:600, color:'var(--green-dark)', fontSize:12, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{slot.subject}</span>
                                       </div>
                                       <div style={{ fontSize:11, color:'var(--text-muted)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
                                         {slot.teacherName}
@@ -392,12 +385,11 @@ export default function Timetable() {
                             {schedule.filter(r => !r.isBreak && r.period <= maxP).map(r => {
                               if (r.period > periodsForDay(day)) return <td key={r.period} style={{ background:'var(--gray-50)', borderLeft:'1px solid var(--gray-100)', borderBottom:'1px solid var(--gray-50)' }} />
                               const slot = tSlots.find(s => s.day === day && s.period === r.period)
-                              const hue = slot ? subjHue(slot.subject) : null
                               return (
                                 <td key={r.period} style={{ padding:'4px 5px', textAlign:'center', borderLeft:'1px solid var(--gray-50)', borderBottom:'1px solid var(--gray-50)' }}>
                                   {slot ? (
-                                    <div onClick={() => openEdit(slot)} style={{ background: tintBg(hue), borderRadius:6, padding:'4px 6px', fontSize:11, cursor:'pointer', whiteSpace:'nowrap' }}>
-                                      <div style={{ fontWeight:600, color:'var(--text)' }}>{slot.subject}</div>
+                                    <div onClick={() => openEdit(slot)} style={{ background: CELL_BG, border:`1px solid ${CELL_BORDER}`, borderRadius:6, padding:'4px 6px', fontSize:11, cursor:'pointer', whiteSpace:'nowrap' }}>
+                                      <div style={{ fontWeight:600, color:'var(--green-dark)' }}>{slot.subject}</div>
                                       <div style={{ color:'var(--text-muted)', fontSize:10 }}>{(slot.classNames?.length ? slot.classNames.join('+') : slot.className || '').replace(/Class /g,'')}</div>
                                     </div>
                                   ) : <span style={{ color:'var(--gray-200)' }}>—</span>}
