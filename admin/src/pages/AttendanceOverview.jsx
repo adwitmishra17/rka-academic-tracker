@@ -124,7 +124,7 @@ export default function AttendanceOverview() {
           style={{ padding: '8px 12px', border: '1px solid var(--gray-200)', borderRadius: 'var(--radius-sm)', fontSize: 13, background: 'var(--white)' }}
         />
         {isSunday(selectedDate) && (
-          <span style={{ fontSize: 12, color: '#8a6d18', background: '#fff8e6', padding: '4px 10px', borderRadius: 12, border: '1px solid #f0d895' }}>
+          <span style={{ fontSize: 12, color: 'var(--gold-dark)', background: 'var(--gold-light)', padding: '4px 10px', borderRadius: 12, border: '1px solid color-mix(in srgb, var(--gold) 30%, transparent)' }}>
             Sunday
           </span>
         )}
@@ -138,7 +138,7 @@ export default function AttendanceOverview() {
         }}>
           <BigStat label="Marked"   primary={totalMarked + '/' + totalActive} color="var(--green-dark)" />
           <BigStat label="Present"  primary={totalPresent} color="var(--green)" />
-          <BigStat label="Late"     primary={totalLate}    color="#c9a227" />
+          <BigStat label="Late"     primary={totalLate}    color="var(--gold-dark)" />
           <BigStat label="Absent"   primary={totalAbsent}  color="var(--crimson)" />
         </div>
       )}
@@ -157,7 +157,7 @@ export default function AttendanceOverview() {
             const allMarked = !isEmpty && r.marked >= r.total
             const noneMarked = r.marked === 0
             const partial = !isEmpty && !allMarked && !noneMarked
-            const barColor = isEmpty ? 'var(--text-muted)' : allMarked ? 'var(--green)' : partial ? '#c9a227' : 'var(--crimson)'
+            const barColor = isEmpty ? 'var(--text-muted)' : allMarked ? 'var(--green)' : partial ? 'var(--gold-dark)' : 'var(--crimson)'
             const statusLabel = isEmpty ? 'No students' : allMarked ? 'Complete' : partial ? 'Partial' : 'Not started'
             const pct = r.total > 0 ? Math.round((r.marked / r.total) * 100) : 0
             return (
@@ -182,7 +182,7 @@ export default function AttendanceOverview() {
                   </div>
                   <div style={{
                     fontSize: 10, fontWeight: 600, padding: '2px 8px', borderRadius: 8,
-                    background: isEmpty ? 'rgba(0,0,0,0.06)' : allMarked ? 'rgba(26,74,46,0.1)' : partial ? 'rgba(201,162,39,0.15)' : 'rgba(139,26,26,0.1)',
+                    background: isEmpty ? 'var(--gray-100)' : allMarked ? 'var(--green-light)' : partial ? 'var(--gold-light)' : 'var(--crimson-light)',
                     color: barColor, textTransform: 'uppercase', letterSpacing: '0.04em',
                   }}>{statusLabel}</div>
                 </div>
@@ -197,7 +197,7 @@ export default function AttendanceOverview() {
                 {r.marked > 0 && (
                   <div style={{ display: 'flex', gap: 10, marginTop: 10, fontSize: 11, color: 'var(--text-muted)' }}>
                     {r.present > 0 && <span><strong style={{ color: 'var(--green)' }}>{r.present}</strong> P</span>}
-                    {r.late > 0    && <span><strong style={{ color: '#c9a227' }}>{r.late}</strong> L</span>}
+                    {r.late > 0    && <span><strong style={{ color: 'var(--gold-dark)' }}>{r.late}</strong> L</span>}
                     {r.absent > 0  && <span><strong style={{ color: 'var(--crimson)' }}>{r.absent}</strong> A</span>}
                   </div>
                 )}

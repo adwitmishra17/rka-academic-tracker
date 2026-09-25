@@ -59,7 +59,7 @@ export default function Impersonate() {
           Impersonate Teacher
         </h1>
         <div style={{
-          background: 'var(--crimson-light)', border: '1px solid rgba(139,26,26,0.25)',
+          background: 'var(--crimson-light)', border: '1px solid color-mix(in srgb, var(--crimson) 25%, transparent)',
           borderRadius: 'var(--radius-md)', padding: '14px 18px', color: 'var(--crimson)', fontSize: 13.5,
         }}>
           This feature is restricted to the super admin account.
@@ -112,7 +112,7 @@ export default function Impersonate() {
 
       {/* Safety notice */}
       <div style={{
-        background: 'var(--crimson-light)', border: '1px solid rgba(139,26,26,0.25)',
+        background: 'var(--crimson-light)', border: '1px solid color-mix(in srgb, var(--crimson) 25%, transparent)',
         borderRadius: 'var(--radius-md)', padding: '13px 16px', marginBottom: 20,
         display: 'flex', gap: 10, alignItems: 'flex-start', color: 'var(--crimson)', fontSize: 12.5, lineHeight: 1.6,
       }}>
@@ -129,7 +129,7 @@ export default function Impersonate() {
 
       {/* Error banner */}
       {error && (
-        <div style={{ background: 'var(--crimson-light)', border: '1px solid rgba(139,26,26,0.2)', borderRadius: 'var(--radius-md)', padding: '11px 15px', marginBottom: 16, color: 'var(--crimson)', fontSize: 13 }}>
+        <div style={{ background: 'var(--crimson-light)', border: '1px solid color-mix(in srgb, var(--crimson) 25%, transparent)', borderRadius: 'var(--radius-md)', padding: '11px 15px', marginBottom: 16, color: 'var(--crimson)', fontSize: 13 }}>
           {error}
         </div>
       )}

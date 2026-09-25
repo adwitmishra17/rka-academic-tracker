@@ -106,7 +106,7 @@ export default function Students() {
 
       {/* Source-of-truth notice */}
       <div style={{
-        background:'var(--gold-light)', border:'1px solid rgba(201,162,39,0.35)',
+        background:'var(--gold-light)', border:'1px solid color-mix(in srgb, var(--gold) 30%, transparent)',
         borderRadius:'var(--radius-md)', padding:'12px 16px', marginBottom:20,
         display:'flex', gap:10, alignItems:'flex-start',
       }}>
@@ -121,7 +121,7 @@ export default function Students() {
 
       {/* Error banner */}
       {loadError && (
-        <div style={{ background:'var(--crimson-light)', border:'1px solid rgba(139,26,26,0.2)', borderRadius:'var(--radius-md)', padding:'12px 16px', marginBottom:18, color:'var(--crimson)', fontSize:13 }}>
+        <div style={{ background:'var(--crimson-light)', border:'1px solid color-mix(in srgb, var(--crimson) 25%, transparent)', borderRadius:'var(--radius-md)', padding:'12px 16px', marginBottom:18, color:'var(--crimson)', fontSize:13 }}>
           Failed to load students: {loadError}
         </div>
       )}

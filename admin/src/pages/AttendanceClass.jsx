@@ -196,7 +196,7 @@ export default function AttendanceClass() {
       {!loading && active.length > 0 && (
         <div style={statsBarStyle}>
           <StatChip label="Present" count={presentCount} color="var(--green)" />
-          <StatChip label="Late"    count={lateCount}    color="#c9a227" />
+          <StatChip label="Late"    count={lateCount}    color="var(--gold-dark)" />
           <StatChip label="Absent"  count={absentCount}  color="var(--crimson)" />
           <StatChip label="Unmarked" count={unmarkedCount} color="var(--text-muted)" />
           <div style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--text-muted)' }}>{active.length} active students</div>
@@ -240,7 +240,7 @@ export default function AttendanceClass() {
                 {!isWithdrawn && (
                   <div style={{ display: 'flex', gap: 6 }}>
                     <BtnLabel label="P" color="var(--green)"   active={currentBtn === 'present'} onClick={() => mark(s, 'present')} />
-                    <BtnLabel label="L" color="#c9a227"        active={currentBtn === 'late'}    onClick={() => mark(s, 'late')} />
+                    <BtnLabel label="L" color="var(--gold-dark)"        active={currentBtn === 'late'}    onClick={() => mark(s, 'late')} />
                     <BtnLabel label="A" color="var(--crimson)" active={currentBtn === 'absent'}  onClick={() => mark(s, 'absent')} />
                     <BtnLabel label="✕" color="var(--text-muted)" active={false} faded={currentBtn === 'none'} onClick={() => mark(s, 'unmark')} title="Clear" />
                   </div>
@@ -290,4 +290,4 @@ const statsBarStyle = { display: 'flex', alignItems: 'center', gap: 8, padding: 
 const loadingStyle = { padding: 32, textAlign: 'center', color: 'var(--text-muted)' }
 const errorStyle = { padding: 12, background: 'var(--crimson-light)', color: 'var(--crimson)', borderRadius: 'var(--radius-sm)' }
 const emptyStyle = { padding: 40, textAlign: 'center', color: 'var(--text-muted)', background: 'var(--white)', border: '1px solid var(--gray-100)', borderRadius: 'var(--radius-md)' }
-const infoBoxStyle = { padding: '10px 14px', background: '#fff8e6', border: '1px solid #f0d895', color: '#8a6d18', borderRadius: 'var(--radius-sm)', fontSize: 13, marginBottom: 14 }
+const infoBoxStyle = { padding: '10px 14px', background: 'var(--gold-light)', border: '1px solid color-mix(in srgb, var(--gold) 30%, transparent)', color: 'var(--gold-dark)', borderRadius: 'var(--radius-sm)', fontSize: 13, marginBottom: 14 }
