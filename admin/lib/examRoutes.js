@@ -23,6 +23,10 @@ const STANDARD_TERMS = [
   { shortCode: 'AN', name: 'Annual', sortOrder: 4 },
 ]
 const PAPER_SELECT = 'id, term_id, subject_id, paper_name, component_key, max_marks, card_max, passing_marks, exam_date, has_practical, theory_max, practical_max, generated'
+// A stored exam_marks row only counts as a mark when it carries a number or an absence. Blank rows
+// (saved from an untouched/cleared cell) are ignored: they must not show as "entered" or lock a paper's max.
+const MARK_COLS = 'paper_id, marks_obtained, theory_obtained, practical_obtained, is_absent'
+const isRealMark = (m) => !!m.is_absent || m.marks_obtained != null || m.theory_obtained != null || m.practical_obtained != null
 // Name heuristics used ONCE to adopt legacy free-text papers into typed slots.
 const ADOPT_PATTERNS = {
   pt:        /p\s*\.?\s*a\s*\.?|p\s*\.?\s*t\b|periodic|unit\s*test|^ut\b/i,
@@ -442,8 +446,8 @@ export function registerExamRoutes(app, { supabase, admin, verifyAuth, branchIdF
       const staleRows = [...typed.values()].filter((p) => onCard.has(p.subject_id) && !wanted.has(`${p.subject_id}|${p.term_id}|${p.component_key}`))
       const leftoverRows = b.papers.filter((p) => !onCard.has(p.subject_id) || !p.component_key)
       let markCount = new Map()
-      const countFor = [...staleRows, ...leftoverRows]
-      if (countFor.length) { const m = await pagedAll(() => supabase.from('exam_marks').select('paper_id').in('paper_id', countFor.map((p) => p.id))); for (const r of m) markCount.set(r.paper_id, (markCount.get(r.paper_id) || 0) + 1) }
+      const countFor = b.papers   // every paper: stale/leftover reporting AND whether a max drift is safe to fix
+      if (countFor.length) { const m = await pagedAll(() => supabase.from('exam_marks').select(MARK_COLS).in('paper_id', countFor.map((p) => p.id))); for (const r of m) if (isRealMark(r)) markCount.set(r.paper_id, (markCount.get(r.paper_id) || 0) + 1) }
       const stale = staleRows.map((p) => ({ id: p.id, label: label(p.subject_id, p.term_id, p.component_key), marks: markCount.get(p.id) || 0 }))
       // Leftover = papers of subjects off the card + untyped legacy papers. Never blocking: a sync deletes the
       // empty ones; the ones with marks are reported so the office knows they exist.
@@ -454,7 +458,11 @@ export function registerExamRoutes(app, { supabase, admin, verifyAuth, branchIdF
       for (const sp of specs) {
         const p = typed.get(`${sp.subjectId}|${sp.termId}|${sp.componentKey}`); if (!p) continue
         if (Number(p.card_max ?? p.max_marks) !== Number(sp.cardMax)) changed.push(`${label(sp.subjectId, sp.termId, sp.componentKey)} (on card /${Number(p.card_max ?? p.max_marks)} → /${sp.cardMax})`)
-        else if (Number(p.max_marks) !== Number(sp.maxMarks)) notes.push(`${label(sp.subjectId, sp.termId, sp.componentKey)} is conducted out of ${Number(p.max_marks)}, rules say ${sp.maxMarks}`)
+        else if (Number(p.max_marks) !== Number(sp.maxMarks)) {
+          // no real marks on it yet → a re-sync reshapes it, so it counts as out of sync; with marks it's deliberate
+          if (!(markCount.get(p.id) || 0)) changed.push(`${label(sp.subjectId, sp.termId, sp.componentKey)} (entered out of ${Number(p.max_marks)} → ${sp.maxMarks})`)
+          else notes.push(`${label(sp.subjectId, sp.termId, sp.componentKey)} is conducted out of ${Number(p.max_marks)}, rules say ${sp.maxMarks}`)
+        }
       }
       res.json({ synced: !missing.length && !stale.length && !changed.length, missing, stale, changed, notes, leftover, papers: typed.size })
     } catch (e) { err(res, e, 'GET /api/exam/papers/sync-status') }
@@ -484,8 +492,16 @@ export function registerExamRoutes(app, { supabase, admin, verifyAuth, branchIdF
         // marks count per untyped paper — to pick the best adoption candidate
         let markCount = new Map()
         if (b.papers.length) {
-          const rowsM = await pagedAll(() => supabase.from('exam_marks').select('paper_id').in('paper_id', b.papers.map((p) => p.id)))
-          for (const m of rowsM) markCount.set(m.paper_id, (markCount.get(m.paper_id) || 0) + 1)
+          const rowsM = await pagedAll(() => supabase.from('exam_marks').select(MARK_COLS).in('paper_id', b.papers.map((p) => p.id)))
+          // Blank rows (no mark, not absent) carry no information — clear them so they stop locking papers.
+          const blankPapers = [...new Set(rowsM.filter((m) => !isRealMark(m)).map((m) => m.paper_id))]
+          for (let i = 0; i < blankPapers.length; i += 100) {
+            const { error } = await supabase.from('exam_marks').delete().in('paper_id', blankPapers.slice(i, i + 100))
+              .is('marks_obtained', null).is('theory_obtained', null).is('practical_obtained', null).eq('is_absent', false)
+            if (error) throw error
+          }
+          per.blankRowsCleared = rowsM.length - rowsM.filter(isRealMark).length
+          for (const m of rowsM) if (isRealMark(m)) markCount.set(m.paper_id, (markCount.get(m.paper_id) || 0) + 1)
         }
         const inserts = []
         for (const sp of specs) {
@@ -576,6 +592,7 @@ export function registerExamRoutes(app, { supabase, admin, verifyAuth, branchIdF
         }
         summary.leftoverRemoved = (summary.leftoverRemoved || 0) + per.leftoverRemoved
         summary.renamed = (summary.renamed || 0) + (per.renamed || 0)
+        summary.blankRowsCleared = (summary.blankRowsCleared || 0) + (per.blankRowsCleared || 0)
         summary.created += per.created; summary.adopted += per.adopted; summary.existing += per.existing
         summary.perClass[cls] = per
       }
@@ -592,8 +609,8 @@ export function registerExamRoutes(app, { supabase, admin, verifyAuth, branchIdF
       const b = await loadBundle(bid, sessionCode, className)
       const counts = new Map()
       if (b.papers.length) {
-        const rows = await pagedAll(() => supabase.from('exam_marks').select('paper_id').in('paper_id', b.papers.map((p) => p.id)))
-        for (const m of rows) counts.set(m.paper_id, (counts.get(m.paper_id) || 0) + 1)
+        const rows = await pagedAll(() => supabase.from('exam_marks').select(MARK_COLS).in('paper_id', b.papers.map((p) => p.id)))
+        for (const m of rows) if (isRealMark(m)) counts.set(m.paper_id, (counts.get(m.paper_id) || 0) + 1)
       }
       // which subjects the rules generate papers for — the Papers stage splits on-card papers from leftovers
       const onCard = b.template && b.terms.length ? [...new Set(paperSpecsFor(b, className).specs.map((sp) => sp.subjectId))] : null
@@ -605,10 +622,13 @@ export function registerExamRoutes(app, { supabase, admin, verifyAuth, branchIdF
   // DELETE /api/exam/papers/:id — only when it carries no marks
   app.delete('/api/exam/papers/:id', verifyAuth, async (req, res) => {
     try {
-      const { count } = await supabase.from('exam_marks').select('id', { count: 'exact', head: true }).eq('paper_id', req.params.id)
+      const { data: rowsD, error: e0 } = await supabase.from('exam_marks').select(MARK_COLS).eq('paper_id', req.params.id)
+      if (e0) throw e0
+      const count = (rowsD || []).filter(isRealMark).length
       const force = req.query.force === '1'
       if (count > 0 && !force) return res.status(409).json({ error: `Paper has ${count} marks — cannot delete` })
-      if (count > 0) { const { error: e1 } = await supabase.from('exam_marks').delete().eq('paper_id', req.params.id); if (e1) throw e1 }
+      // blank rows go with the paper; real marks only when forced
+      if ((rowsD || []).length) { const { error: e1 } = await supabase.from('exam_marks').delete().eq('paper_id', req.params.id); if (e1) throw e1 }
       const { error } = await supabase.from('exam_papers').delete().eq('id', req.params.id)
       if (error) throw error
       res.json({ ok: true, marksDeleted: count || 0 })
@@ -670,10 +690,10 @@ export function registerExamRoutes(app, { supabase, admin, verifyAuth, branchIdF
       const { onCard, applicable } = cardSubjects(b, className, students)
       const expectedFor = (subjectId) => (applicable ? students.filter((st) => applicable[st.id]?.includes(subjectId)).length : students.length)
       const typedPapers = b.papers.filter((p) => p.component_key && (!onCard || onCard.has(p.subject_id)))
-      const marks = typedPapers.length ? await pagedAll(() => supabase.from('exam_marks').select('paper_id, student_id, is_absent, source, entered_at, updated_at').in('paper_id', typedPapers.map((p) => p.id))) : []
+      const marks = typedPapers.length ? await pagedAll(() => supabase.from('exam_marks').select('paper_id, student_id, marks_obtained, theory_obtained, practical_obtained, is_absent, source, entered_at, updated_at').in('paper_id', typedPapers.map((p) => p.id))) : []
       const agg = new Map()
       for (const m of marks) {
-        if (!sids.has(m.student_id)) continue
+        if (!sids.has(m.student_id) || !isRealMark(m)) continue
         if (!agg.has(m.paper_id)) agg.set(m.paper_id, { entered: 0, absent: 0, manual: 0, lastAt: null })
         const a = agg.get(m.paper_id)
         a.entered += 1; if (m.is_absent) a.absent += 1; if (m.source === 'manual') a.manual += 1

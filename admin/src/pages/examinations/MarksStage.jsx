@@ -115,9 +115,10 @@ function ClassGrid({ branch, sessionCode, className, config }) {
         if (p.hasPractical) rows.push({ paperId: pid, studentId: sid, isAbsent: isAB(c.th), theoryObtained: numOrNull(c.th), practicalObtained: numOrNull(c.pr) })
         else rows.push({ paperId: pid, studentId: sid, isAbsent: isAB(c.v), marksObtained: numOrNull(c.v) })
       }
-      const { saved } = await examApi.saveMarks(rows)
-      setVals((x) => { const n = { ...x }; for (const k of dirty) n[k] = { ...n[k], src: 'manual' }; return n })
-      setDirty(new Set()); setFlash(`Saved ${saved} entries`); setTimeout(() => setFlash(''), 2500)
+      const { saved, cleared } = await examApi.saveMarks(rows)
+      // blank cells are cleared on the server (no empty rows), so they carry no source afterwards
+      setVals((x) => { const n = { ...x }; for (const k of dirty) { const c = n[k] || {}; const blank = !isAB(c.v) && !isAB(c.th) && (c.v ?? '') === '' && (c.th ?? '') === '' && (c.pr ?? '') === ''; n[k] = { ...c, src: blank ? null : 'manual' } } return n })
+      setDirty(new Set()); setFlash(`Saved ${saved} entr${saved === 1 ? 'y' : 'ies'}${cleared ? ` · cleared ${cleared} blank` : ''}`); setTimeout(() => setFlash(''), 2500)
     } catch (e) { setErr('Save failed: ' + (e.message || e)) }
     setBusy('')
   }

@@ -706,9 +706,14 @@ app.post('/api/exam/marks', verifyAuth, async (req, res) => {
         }
       })
     if (!rows.length) return res.status(400).json({ error: 'no valid rows' })
-    const { error } = await supabase.from('exam_marks').upsert(rows, { onConflict: 'paper_id,student_id' })
-    if (error) throw error
-    res.json({ saved: rows.length })
+    // A blank cell (no mark, not absent) is not a mark: remove any stored row instead of saving an
+    // empty one. Empty rows used to count as "entered" and locked a paper's max against rule changes.
+    const blank = (r) => !r.is_absent && r.marks_obtained == null && r.theory_obtained == null && r.practical_obtained == null
+    const keep = rows.filter((r) => !blank(r)), clear = rows.filter(blank)
+    if (keep.length) { const { error } = await supabase.from('exam_marks').upsert(keep, { onConflict: 'paper_id,student_id' }); if (error) throw error }
+    const byPaper = new Map(); for (const r of clear) { if (!byPaper.has(r.paper_id)) byPaper.set(r.paper_id, []); byPaper.get(r.paper_id).push(r.student_id) }
+    for (const [pid, sids] of byPaper) { const { error } = await supabase.from('exam_marks').delete().eq('paper_id', pid).in('student_id', sids); if (error) throw error }
+    res.json({ saved: keep.length, cleared: clear.length })
   } catch (e) { console.error('[admin] POST /api/exam/marks:', e); res.status(500).json({ error: e.message }) }
 })
 
