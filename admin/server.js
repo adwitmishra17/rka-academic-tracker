@@ -127,11 +127,21 @@ async function isAdminUser({ uid, email }) {
   const hit = adminCache.get(key)
   if (hit && hit.exp > Date.now()) return hit.ok
   const db = admin.firestore()
-  let ok = false
-  if (uid)   ok = (await db.collection('admins').doc(uid).get()).exists
-  if (!ok && email) ok = (await db.collection('admins').doc(email).get()).exists
+  let snap = uid ? await db.collection('admins').doc(uid).get() : null
+  if (!snap?.exists && email) snap = await db.collection('admins').doc(email).get()
+  const ok = !!snap?.exists && hasTrackerAccess(snap.data())
   adminCache.set(key, { ok, exp: Date.now() + ADMIN_TTL_MS })
   return ok
+}
+
+// An admins doc grants this API only while ACTIVE and only with Tracker
+// access — deactivated admins, and admins scoped to other platforms (HRMS /
+// SMS / social only), are refused. Mirrors the per-platform levels the admin
+// editor writes (moduleRoles), with the legacy modules[] fallback.
+function hasTrackerAccess(d) {
+  if (!d || d.isActive === false) return false
+  if (d.moduleRoles && typeof d.moduleRoles === 'object') return !!d.moduleRoles.tracker
+  return Array.isArray(d.modules) && d.modules.includes('tracker')
 }
 
 // Auth middleware — verifies the Firebase ID token AND that the caller is an

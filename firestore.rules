@@ -10,13 +10,18 @@ service cloud.firestore {
     function isSuperAdmin() {
       return request.auth != null && tokenEmail().lower() == 'adwit@rkacademyballia.in';
     }
+    // An admins doc counts only while ACTIVE — deactivating an admin in HRMS
+    // (isActive:false) must revoke their power here too, not just in the UIs.
+    function isActiveAdminDoc(path) {
+      return exists(path) && get(path).data.get('isActive', true) != false;
+    }
     function isAdmin() {
       return request.auth != null && (
         isSuperAdmin() ||
         // Phone-only admins: their Firebase UID is their admins docId.
-        exists(/databases/$(database)/documents/admins/$(request.auth.uid)) ||
+        isActiveAdminDoc(/databases/$(database)/documents/admins/$(request.auth.uid)) ||
         (tokenEmail() != '' &&
-         exists(/databases/$(database)/documents/admins/$(tokenEmail().lower())))
+         isActiveAdminDoc(/databases/$(database)/documents/admins/$(tokenEmail().lower())))
       );
     }
     function isSchoolUser() {
@@ -48,6 +53,18 @@ service cloud.firestore {
         && exists(/databases/$(database)/documents/classTeacherByEmail/$(request.auth.token.email.lower()))
         && getMyClassAssignment().className == className
         && getMyClassAssignment().branchCode == branchCode;
+    }
+    // studentAttendance doc id = '{date}_{studentId}'. The sync Cloud Function
+    // writes the DOC-ID student into SMS, so a class teacher's write must be
+    // for a student actually in that class: the payload studentId must equal
+    // the id's student, and the (read-only, SMS-synced) students doc must carry
+    // the same className + branchCode.
+    function attendanceStudentIsInClass(docId, data) {
+      let sid = docId.split('_')[1];
+      let stu = get(/databases/$(database)/documents/students/$(sid)).data;
+      return data.get('studentId', sid) == sid
+        && stu.get('className', '') == data.className
+        && stu.get('branchCode', '') == data.branchCode;
     }
     function diffsOnlyAcademicFields() {
       let changedKeys = request.resource.data.diff(resource.data).affectedKeys();
@@ -167,11 +184,15 @@ service cloud.firestore {
     match /studentAttendance/{id} {
       allow read: if isAnyTeacher();
       allow create: if isSchoolUser()
-        || isMyClassStudent(request.resource.data.className, request.resource.data.branchCode);
+        || (isMyClassStudent(request.resource.data.className, request.resource.data.branchCode)
+            && attendanceStudentIsInClass(id, request.resource.data));
       allow update: if isSchoolUser()
-        || isMyClassStudent(resource.data.className, resource.data.branchCode);
+        || (isMyClassStudent(resource.data.className, resource.data.branchCode)
+            && isMyClassStudent(request.resource.data.className, request.resource.data.branchCode)
+            && attendanceStudentIsInClass(id, request.resource.data));
       allow delete: if isSchoolUser()
-        || isMyClassStudent(resource.data.className, resource.data.branchCode);
+        || (isMyClassStudent(resource.data.className, resource.data.branchCode)
+            && attendanceStudentIsInClass(id, resource.data));
     }
     // Attendance audit: append-only.
     match /attendanceAudit/{id} {
