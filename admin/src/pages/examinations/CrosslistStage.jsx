@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react'
 import { examApi, cardEntriesApi } from '../../lib/api'
 import { inp, lbl, card, th, td, Btn, Pill, Note, Spinner } from './ui.jsx'
-import { COMP, valsFromGrid, groupsOf, exportSheetPDF, exportSheetXLSX, loadImage } from './entrySheets.js'
+import { COMP, valsFromGrid, groupsOf, entryColumns, entryLabel, exportSheetPDF, exportSheetXLSX, loadImage } from './entrySheets.js'
 
 /* Stage 5 — Crosslist. Two views of the same class:
      · Raw   — one exam term, every paper summed per subject (as entered)
@@ -29,7 +29,11 @@ async function exportPDF({ title, subtitle, head, body, fileName, tables }) {
     let y = 10
     if (banner) { const bw = 62, bh = (banner.h / banner.w) * bw; if (crest) { const ch = 12, cw = (crest.w / crest.h) * ch; doc.addImage(crest.data, 'PNG', pageW / 2 - bw / 2 - cw - 4, y + (bh - ch) / 2, cw, ch) } doc.addImage(banner.data, 'PNG', pageW / 2 - bw / 2, y, bw, bh); if (skolix) { const lh = 9, lw = (skolix.w / skolix.h) * lh; doc.addImage(skolix.data, 'PNG', pageW - 8 - lw, y + (bh - lh) / 2, lw, lh) } y += bh + 2 }
     doc.setFont('helvetica', 'bold').setFontSize(12).setTextColor(0); doc.text(t.title, pageW / 2, y + 4, { align: 'center' })
-    doc.setFont('helvetica', 'normal').setFontSize(9).setTextColor(0); doc.text(t.subtitle, pageW / 2, y + 9, { align: 'center' }); y += 13
+    // long subtitles (class · branch · session · teacher · note) wrap instead of running off the page
+    doc.setFont('helvetica', 'normal').setFontSize(9).setTextColor(0)
+    const subLines = doc.splitTextToSize(t.subtitle, pageW - 16)
+    doc.text(subLines, pageW / 2, y + 9, { align: 'center' }); y += 13 + (subLines.length - 1) * 3.8
+    if (t.note) { doc.setFontSize(8.5); doc.text(t.note, pageW / 2, y + 0.5, { align: 'center' }); y += 4.5 }
     // Fixed, equal mark columns (instead of autotable's content-proportional shrink, which splits
     // "Mathematics" into "Mathematic / s"). The header font drops uniformly, to 5.5 pt at the
     // smallest, until the longest single word in every heading fits its column.
@@ -56,7 +60,7 @@ async function exportXLSX({ title, subtitle, head, body, fileName, sheet, tables
   const XLSX = await import('xlsx')
   const wb = XLSX.utils.book_new()
   for (const t of (tables || [{ title, subtitle, head, body, sheet }])) {
-    const ws = XLSX.utils.aoa_to_sheet([[t.title], [t.subtitle], [], t.head, ...t.body])
+    const ws = XLSX.utils.aoa_to_sheet([[t.title], [t.subtitle], [t.note || ''], t.head, ...t.body])
     ws['!cols'] = t.head.map((h, i) => ({ wch: i === 1 ? 26 : Math.max(8, Math.min(14, String(h).length + 2)) }))
     XLSX.utils.book_append_sheet(wb, ws, String(t.sheet || sheet).replace(/[\\/?*[\]:]/g, ' ').slice(0, 31))
   }
@@ -147,27 +151,31 @@ export default function CrosslistStage({ branch, sessionCode, className, config 
   const subjectTables = useMemo(() => {
     if (!grid) return []
     const byKey = new Map(grid.marks.map((m) => [`${m.student_id}|${m.paper_id}`, m]))
-    const cellOf = (s, p) => {
+    // One column per entry box: a theory + practical paper shows Th and Pr separately.
+    const cellOf = (s, col) => {
+      const p = col.paper
       if (grid.applicable && !(grid.applicable[s.id] || []).includes(p.subjectId)) return 'n/a'
       const m = byKey.get(`${s.id}|${p.id}`); if (!m) return '—'
       if (m.is_absent) return 'AB'
-      if (p.hasPractical) return m.theory_obtained == null && m.practical_obtained == null ? '—' : `${Number(m.theory_obtained || 0)} + ${Number(m.practical_obtained || 0)}`
-      return m.marks_obtained == null ? '—' : String(Number(m.marks_obtained))
+      const v = col.part === 'th' ? m.theory_obtained : col.part === 'pr' ? m.practical_obtained : m.marks_obtained
+      return v == null ? '—' : String(Number(v))
     }
     const numOf = (s, p) => { const m = byKey.get(`${s.id}|${p.id}`); if (!m || m.is_absent) return m?.is_absent ? 0 : null; return p.hasPractical ? Number(m.theory_obtained || 0) + Number(m.practical_obtained || 0) : (m.marks_obtained == null ? null : Number(m.marks_obtained)) }
     return grid.subjects.filter((sub) => !subjectId || sub.id === subjectId).map((sub) => {
       const papers = grid.papers.filter((p) => p.subjectId === sub.id)
+      const cols = entryColumns([{ subject: sub, papers }])
       const maxTotal = papers.reduce((a, p) => a + (p.hasPractical ? Number(p.theoryMax || 0) + Number(p.practicalMax || 0) : Number(p.max || 0)), 0)
-      const withTotal = papers.length > 1   // one paper in the term → its column IS the total
-      const head = ['Roll', 'Student', ...papers.map((p) => `${COMP[p.componentKey] || p.name} /${p.hasPractical ? `${p.theoryMax}+${p.practicalMax}` : p.max}`), ...(withTotal ? [`Total /${maxTotal}`] : [])]
-      const body = grid.students.map((s) => { const vals = papers.map((p) => numOf(s, p)); const any = vals.some((v) => v != null); return [s.roll || '—', s.name, ...papers.map((p) => cellOf(s, p)), ...(withTotal ? [any ? String(vals.reduce((a, v) => a + (v || 0), 0)) : '—'] : [])] })
+      const withTotal = cols.length > 1   // one box in the term → its column IS the total
+      const head = ['Roll', 'Student', ...cols.map((c) => entryLabel(c, { flat: true })), ...(withTotal ? [`Total /${maxTotal}`] : [])]
+      const body = grid.students.map((s) => { const vals = papers.map((p) => numOf(s, p)); const any = vals.some((v) => v != null); return [s.roll || '—', s.name, ...cols.map((c) => cellOf(s, c)), ...(withTotal ? [any ? String(vals.reduce((a, v) => a + (v || 0), 0)) : '—'] : [])] })
       // blank entry sheet for this subject: empty boxes (n/a stays for subjects a student does not take)
-      const blankBody = grid.students.map((s) => [s.roll || '—', s.name, ...papers.map((p) => (grid.applicable && !(grid.applicable[s.id] || []).includes(p.subjectId) ? 'n/a' : '')), ...(withTotal ? [''] : [])])
-      return { subject: sub, papers, title: `SUBJECT CROSSLIST — ${sub.name.toUpperCase()} · ${(grid.term?.name || '').toUpperCase()}`, subtitle: `${meta}${sub.teacher ? '  ·  ' + sub.teacher : ''}`, head, body, blankBody, sheet: sub.name }
+      const blankBody = grid.students.map((s) => [s.roll || '—', s.name, ...cols.map((c) => (grid.applicable && !(grid.applicable[s.id] || []).includes(c.paper.subjectId) ? 'n/a' : '')), ...(withTotal ? [''] : [])])
+      const note = cols.some((c) => c.part) ? 'Th = theory, Pr = practical / internal assessment' : ''
+      return { subject: sub, papers, title: `SUBJECT CROSSLIST — ${sub.name.toUpperCase()} · ${(grid.term?.name || '').toUpperCase()}`, subtitle: `${meta}${sub.teacher ? '  ·  ' + sub.teacher : ''}`, note, head, body, blankBody, sheet: sub.name }
     })
   }, [grid, subjectId, meta])
   const subjectExport = subjectTables.length ? { tables: subjectTables, fileName: fname(`${(grid?.term?.name || 'term').replace(/\s+/g, '-')}-${subjectId ? subjectTables[0].subject.name.replace(/\s+/g, '-') : 'all-subjects'}`), sheet: className } : null
-  const subjectBlank = subjectTables.length ? { tables: subjectTables.map((t) => ({ ...t, title: `SUBJECT ENTRY SHEET — ${t.subject.name.toUpperCase()} · ${(grid.term?.name || '').toUpperCase()}`, subtitle: `${t.subtitle}  ·  blank — enter raw marks, AB for absent`, body: t.blankBody })), fileName: subjectExport.fileName + '-blank', sheet: className } : null
+  const subjectBlank = subjectTables.length ? { tables: subjectTables.map((t) => ({ ...t, title: `SUBJECT ENTRY SHEET — ${t.subject.name.toUpperCase()} · ${(grid.term?.name || '').toUpperCase()}`, subtitle: `${t.subtitle}  ·  blank — enter raw marks, AB for absent`, note: t.note && `${t.note} — write each part in its own box`, body: t.blankBody })), fileName: subjectExport.fileName + '-blank', sheet: className } : null
 
   // ── graded areas (co-scholastic + graded subjects + discipline + remarks): crosslist and blank entry sheet ──
   const tplDef = useMemo(() => (config?.templates || []).find((t) => t.id === config?.classMap?.[className])?.definition || {}, [config, className])
@@ -275,10 +283,10 @@ export default function CrosslistStage({ branch, sessionCode, className, config 
       {mode === 'sheets' && !busy && grid && (
         <div style={{ ...card }}>
           <div style={{ fontSize: 13, fontWeight: 600 }}>Entry sheet · {grid.term?.name} · {className}{section ? ' - ' + section : ''}</div>
-          <div style={{ fontSize: 11.5, color: 'var(--text-muted)', marginTop: 3 }}>{grid.students.length} students × {grid.papers.length} papers. One column per paper, raw max in the heading; AB for absent. Type the marks back in under Marks entry → Class grid.</div>
+          <div style={{ fontSize: 11.5, color: 'var(--text-muted)', marginTop: 3 }}>{grid.students.length} students × {grid.papers.length} papers. One column per paper — two (Th and Pr) where a paper has theory and practical parts — with the raw max in the heading; AB for absent. Type the marks back in under Marks entry → Class grid.</div>
           {grid.papers.length === 0 ? <Note tone="gold">No papers for this term yet — generate them in Papers.</Note> : (
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 10 }}>
-              {groupsOf(grid).map((g) => <span key={g.subject?.id} style={{ border: '1px solid var(--gray-200)', borderRadius: 99, padding: '3px 10px', fontSize: 11.5 }}><b>{g.subject?.name}</b> · {g.papers.map((p) => `${COMP[p.componentKey] || p.name} /${p.hasPractical ? `${p.theoryMax}+${p.practicalMax}` : p.max}`).join(' · ')}</span>)}
+              {groupsOf(grid).map((g) => <span key={g.subject?.id} style={{ border: '1px solid var(--gray-200)', borderRadius: 99, padding: '3px 10px', fontSize: 11.5 }}><b>{g.subject?.name}</b> · {g.papers.map((p) => (p.hasPractical ? `${COMP[p.componentKey] || p.name} Th /${p.theoryMax} + Pr /${p.practicalMax}` : `${COMP[p.componentKey] || p.name} /${p.max}`)).join(' · ')}</span>)}
             </div>
           )}
           {grid.applicable && <div style={{ fontSize: 11.5, color: 'var(--text-muted)', marginTop: 8 }}>Optional subjects a student does not take are printed as <b>n/a</b>.</div>}
