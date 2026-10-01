@@ -541,7 +541,7 @@ export function computeCard(p) {
   let attendance = null
   if (p.attendance) {
     const mode = p.def?.attendance?.mode || 'sessionTotal'
-    attendance = { mode, sessionTotal: p.attendance.sessionTotal || null, byTerm: {} }
+    attendance = { mode, sessionTotal: p.attendance.sessionTotal || null, halfYear: p.attendance.halfYear || null, byTerm: {} }
     for (const ct of plan.cardTerms) {
       const codes = examCodesFor(ct.key).map((id) => termById[id]?.short_code).filter(Boolean)
       let present = 0, marked = 0, any = false

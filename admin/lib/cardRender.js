@@ -207,7 +207,10 @@ function studentStrip(card) {
 }
 function attendanceFor(card, shown, final) {
   const a = card.attendance; if (!a) return null
-  if (final || a.mode !== 'perTerm') return a.sessionTotal
+  // Final / annual card: the whole session. Half-yearly (interim) card: 1 April → end of the half-yearly exam.
+  if (final || card.family === 'secondary_annual') return a.sessionTotal
+  if (a.halfYear) return a.halfYear
+  if (a.mode !== 'perTerm') return a.sessionTotal
   let present = 0, marked = 0, any = false
   for (const t of shown) { const x = a.byTerm?.[t.key]; if (x) { present += x.present; marked += x.marked; any = true } }
   return any ? { present, marked } : a.sessionTotal

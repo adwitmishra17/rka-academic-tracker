@@ -262,7 +262,7 @@ app.get('/api/students', verifyAuth, async (req, res) => {
       if (req.query.isActive === 'false')    q = q.eq('is_active', false)
       else if (req.query.isActive !== 'all') q = q.eq('is_active', true)
       q = q.or(`admission_session.is.null,admission_session.lte.${nowSession}`)
-      return q.order('class_name').order('roll_number')
+      return q.order('class_name').order('roll_number').order('id')   // id = tie-break so pages never overlap
     }
 
     // Page past PostgREST's 1000-row cap (a single request silently
@@ -598,7 +598,7 @@ app.get('/api/exam/crosslist', verifyAuth, async (req, res) => {
     for (let from = 0; ; from += 1000) {
       const { data, error } = await supabase.from('exam_marks')
         .select('paper_id, student_id, marks_obtained, is_absent')
-        .in('paper_id', paperIds).range(from, from + 999)
+        .in('paper_id', paperIds).order('id').range(from, from + 999)
       if (error) throw error
       marks.push(...(data ?? []))
       if (!data || data.length < 1000) break

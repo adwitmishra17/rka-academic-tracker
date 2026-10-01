@@ -43,7 +43,9 @@ export function registerExamRoutes(app, { supabase, admin, verifyAuth, branchIdF
   async function pagedAll(build) {
     const out = []
     for (let from = 0; ; from += 1000) {
-      const { data, error } = await build().range(from, from + 999)
+      // Pages need a total, stable order — without one Postgres may return overlapping / skipped rows across
+      // pages (rows silently missing or doubled once a result passes 1000). Every paged table has an id.
+      const { data, error } = await build().order('id').range(from, from + 999)
       if (error) throw error
       out.push(...(data || []))
       if (!data || data.length < 1000) break
@@ -124,11 +126,14 @@ export function registerExamRoutes(app, { supabase, admin, verifyAuth, branchIdF
       if (t?.starts_on && t?.ends_on) return [t.starts_on, t.ends_on]
       return ['T1', 'HY'].includes(code) ? [w.from, w.mid] : [w.mid < w.to ? nextDay(w.mid) : w.from, w.to]
     }
+    // Half-yearly card period: 1 April → last day of the half-yearly exam (Setup term dates), else 30 September.
+    const hyEnd = terms.find((x) => x.short_code === 'HY')?.ends_on || w.mid
     const out = {}
     for (const r of rows) {
-      const o = (out[r.student_id] ||= { sessionTotal: { present: 0, marked: 0 }, byTerm: {} })
+      const o = (out[r.student_id] ||= { sessionTotal: { present: 0, marked: 0 }, halfYear: { present: 0, marked: 0, from: w.from, to: hyEnd }, byTerm: {} })
       const p = r.status === 'present' || r.status === 'late' ? 1 : r.status === 'half_day' ? 0.5 : 0
       o.sessionTotal.marked += 1; o.sessionTotal.present += p
+      if (r.date <= hyEnd) { o.halfYear.marked += 1; o.halfYear.present += p }
       for (const t of terms) {
         const [a, b] = termWindow(t.short_code)
         if (r.date >= a && r.date <= b) { const x = (o.byTerm[t.short_code] ||= { present: 0, marked: 0 }); x.marked += 1; x.present += p }
