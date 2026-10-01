@@ -525,6 +525,15 @@ export function computeCard(p) {
     if (gateTerms.has(ct.key) && p.def?.discipline && !m?.discipline) warnings.push({ row: 'Discipline', term: ct.label, reason: 'not entered' })
   }
   const sess = metaRows.find((x) => !x.term_id) || {}
+  // Height / weight are measured twice a year: the half-yearly measurement lives on a T1/HY term row, the
+  // annual one on a T2/AN term row. A value on the old per-session row counts as the half-yearly measurement.
+  const measurement = (half) => {
+    const isHalf = (termId) => ['T1', 'HY'].includes(termById[termId]?.short_code)
+    const r = metaRows.filter((x) => x.term_id && termById[x.term_id] && isHalf(x.term_id) === half && (x.height_cm != null || x.weight_kg != null))
+      .sort((a, b) => new Date(b.updated_at || 0) - new Date(a.updated_at || 0))[0] || (half && (sess.height_cm != null || sess.weight_kg != null) ? sess : null)
+    return r ? { heightCm: r.height_cm != null ? Number(r.height_cm) : null, weightKg: r.weight_kg != null ? Number(r.weight_kg) : null } : null
+  }
+  const measurements = { HY: measurement(true), AN: measurement(false) }
   const lastTerm = cardKey.showTerms[cardKey.showTerms.length - 1]
   const remarkText = remarks[lastTerm] || autoRemark(outRows, overall, p.attendance, p.student)
 
@@ -549,7 +558,7 @@ export function computeCard(p) {
     plan: { cardTerms: plan.cardTerms, components: plan.components.map(({ key, label, max, ia, split, parts }) => ({ key, label, max, ia: !!ia, split: !!split, parts })), subjectTotal: plan.subjectTotal, iaTotal: plan.iaTotal || null },
     rows: outRows, overall,
     coScholastic, gradedSubjects, discipline, remarks, remark: remarkText,
-    session: { achievement: sess.achievement || null, heightCm: sess.height_cm ?? null, weightKg: sess.weight_kg ?? null, promotedTo: sess.promoted_to || nextClass(p.className) || null, promotedToDefault: !sess.promoted_to },
+    session: { achievement: sess.achievement || null, measurements, heightCm: (measurements.AN || measurements.HY)?.heightCm ?? null, weightKg: (measurements.AN || measurements.HY)?.weightKg ?? null, promotedTo: sess.promoted_to || nextClass(p.className) || null, promotedToDefault: !sess.promoted_to },
     attendance,
     scales: { coScholastic: p.def?.coScholastic?.scale || ['A', 'B', 'C'], graded: p.def?.gradedSubjects?.scale || ['A'], discipline: p.def?.discipline?.scale || ['A', 'B', 'C'], gradeScale: { bands: scale?.bands || DEFAULT_BANDS, floorLabel: scale?.floorLabel || 'E' } },
     footer: p.def?.footer || {}, legend: p.def?.legend || null,

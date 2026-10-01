@@ -1063,16 +1063,28 @@ app.get('/api/card-entries', verifyAuth, async (req, res) => {
 
     let meta = {}
     if (sids.length) {
+      // Height / weight are measured per half: T1/HY = half-yearly, T2/AN = annual. The screen shows the value of
+      // the selected term's half (the latest row of that half; an old per-session value counts as half-yearly).
+      const { data: terms, error: tErr } = await supabase.from('exam_terms').select('id, short_code').eq('branch_id', bid).eq('session_code', sessionCode)
+      if (tErr) throw tErr
+      const code = Object.fromEntries((terms || []).map(t => [t.id, t.short_code]))
+      const isHalf = (id) => ['T1', 'HY'].includes(code[id])
+      const selHalf = isHalf(termId)
       const { data, error } = await supabase.from('report_card_student_meta')
-        .select('student_id, term_id, discipline, remarks, achievement, height_cm, weight_kg, promoted_to')
+        .select('student_id, term_id, discipline, remarks, achievement, height_cm, weight_kg, promoted_to, updated_at')
         .eq('session_code', sessionCode).in('student_id', sids)
-        .or(`term_id.eq.${termId},term_id.is.null`)
       if (error) throw error
-      for (const m of data ?? []) {
+      const rows = (data ?? []).filter(m => !m.term_id || code[m.term_id])
+      rows.sort((a, b) => new Date(a.updated_at || 0) - new Date(b.updated_at || 0))   // later rows win below
+      for (const m of rows) {
         const slot = (meta[m.student_id] ||= {})
-        if (m.term_id) { slot.discipline = m.discipline; slot.remarks = m.remarks }
-        else { slot.achievement = m.achievement; slot.heightCm = m.height_cm; slot.weightKg = m.weight_kg; slot.promotedTo = m.promoted_to }
+        if (m.term_id === termId) { slot.discipline = m.discipline; slot.remarks = m.remarks }
+        if (!m.term_id) {
+          slot.achievement = m.achievement; slot.promotedTo = m.promoted_to
+          if (selHalf && slot._hwFrom !== 'term' && (m.height_cm != null || m.weight_kg != null)) { slot.heightCm = m.height_cm; slot.weightKg = m.weight_kg; slot._hwFrom = 'session' }
+        } else if (isHalf(m.term_id) === selHalf && (m.height_cm != null || m.weight_kg != null)) { slot.heightCm = m.height_cm; slot.weightKg = m.weight_kg; slot._hwFrom = 'term' }
       }
+      for (const v of Object.values(meta)) delete v._hwFrom
     }
     res.json({ students, areas, grades, meta })
   } catch (e) { console.error('[admin] GET /api/card-entries:', e); res.status(500).json({ error: e.message }) }
@@ -1102,27 +1114,42 @@ app.post('/api/card-entries', verifyAuth, async (req, res) => {
     }
 
     if (Array.isArray(meta) && meta.length) {
-      const termRows = [], sessRows = []
+      // Height / weight belong to the selected term's half (half-yearly T1/HY · annual T2/AN), stored on the term row.
+      // Upserts carry only the columns being set, so e.g. promotion never wipes anything else.
+      const num = (v) => (v == null || v === '' ? null : Number(v))
+      const termRows = [], sessRows = [], hwStudents = []
       for (const m of meta) {
         if (!m.studentId) continue
-        if (m.discipline !== undefined || m.remarks !== undefined) {
-          termRows.push({ student_id: m.studentId, session_code: sessionCode, term_id: termId,
-            discipline: m.discipline ?? null, remarks: m.remarks ?? null, entered_by: by, updated_at: now })
-        }
-        if (m.achievement !== undefined || m.heightCm !== undefined || m.weightKg !== undefined || m.promotedTo !== undefined) {
-          sessRows.push({ student_id: m.studentId, session_code: sessionCode, term_id: null,
-            achievement: m.achievement ?? null,
-            height_cm: m.heightCm == null || m.heightCm === '' ? null : Number(m.heightCm),
-            weight_kg: m.weightKg == null || m.weightKg === '' ? null : Number(m.weightKg),
-            promoted_to: m.promotedTo ?? null, entered_by: by, updated_at: now })
-        }
+        const tr = { student_id: m.studentId, session_code: sessionCode, term_id: termId, entered_by: by, updated_at: now }
+        let any = false
+        if (m.discipline !== undefined) { tr.discipline = m.discipline ?? null; any = true }
+        if (m.remarks !== undefined) { tr.remarks = m.remarks ?? null; any = true }
+        if (m.heightCm !== undefined || m.weightKg !== undefined) { tr.height_cm = num(m.heightCm); tr.weight_kg = num(m.weightKg); any = true; hwStudents.push(m.studentId) }
+        if (any) termRows.push(tr)
+        const sr = { student_id: m.studentId, session_code: sessionCode, term_id: null, entered_by: by, updated_at: now }
+        let anyS = false
+        if (m.achievement !== undefined) { sr.achievement = m.achievement ?? null; anyS = true }
+        if (m.promotedTo !== undefined) { sr.promoted_to = m.promotedTo ?? null; anyS = true }
+        if (anyS) sessRows.push(sr)
       }
-      for (const rows of [termRows, sessRows]) {
-        if (!rows.length) continue
-        const { error } = await supabase.from('report_card_student_meta')
-          .upsert(rows, { onConflict: 'student_id,session_code,term_id' })
+      // PostgREST upserts need one column set per batch → group rows by their keys
+      const byShape = (rows) => { const g = new Map(); for (const r of rows) { const k = Object.keys(r).sort().join(','); if (!g.has(k)) g.set(k, []); g.get(k).push(r) } return [...g.values()] }
+      for (const rows of [...byShape(termRows), ...byShape(sessRows)]) {
+        const { error } = await supabase.from('report_card_student_meta').upsert(rows, { onConflict: 'student_id,session_code,term_id' })
         if (error) throw error
         saved += rows.length
+      }
+      // One value per half: clear height / weight from the half's other term rows (and, for the half-yearly,
+      // from the old per-session row) so an edit or a clear on this term is the value the card prints.
+      if (hwStudents.length) {
+        const { data: tRow } = await supabase.from('exam_terms').select('branch_id').eq('id', termId).maybeSingle()
+        const { data: terms } = tRow ? await supabase.from('exam_terms').select('id, short_code').eq('branch_id', tRow.branch_id).eq('session_code', sessionCode) : { data: [] }
+        const half = (c) => ['T1', 'HY'].includes(c)
+        const selHalf = half((terms || []).find(t => t.id === termId)?.short_code)
+        const siblings = (terms || []).filter(t => t.id !== termId && half(t.short_code) === selHalf).map(t => t.id)
+        const clear = { height_cm: null, weight_kg: null }
+        if (siblings.length) { const { error } = await supabase.from('report_card_student_meta').update(clear).eq('session_code', sessionCode).in('term_id', siblings).in('student_id', hwStudents); if (error) throw error }
+        if (selHalf) { const { error } = await supabase.from('report_card_student_meta').update(clear).eq('session_code', sessionCode).is('term_id', null).in('student_id', hwStudents); if (error) throw error }
       }
     }
     res.json({ saved })

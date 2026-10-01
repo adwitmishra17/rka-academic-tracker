@@ -95,6 +95,10 @@ const CSS = `
   .co small{color:#1A1A1A;font-style:italic;font-family:Lora,Georgia,serif;font-size:11px;margin-left:5px}
   .co b{color:#7B1F2B;font-family:"JetBrains Mono",ui-monospace,monospace;font-weight:700;font-size:14px}
   .co b.plain{color:#1A1A1A;font-family:Inter,sans-serif;font-weight:600}
+  .co b.hw{white-space:nowrap;font-size:12px}
+  .co span.nw{white-space:nowrap;margin-right:8px}
+  .co b.hw i{font-style:normal;font-weight:500;font-size:10.5px;letter-spacing:.06em;margin-right:3px}
+  .co b.hw em{font-style:normal;font-weight:400;margin:0 6px;color:#9A9A9A}
   .bottom{display:grid;grid-template-columns:1.4fr 1fr;gap:14px;margin-top:2px;flex:0 0 auto}
   .bottom>div{display:flex;flex-direction:column}
   .box{border:1px solid #CFCFCF;padding:6px 9px;font-size:12.5px;line-height:1.45;min-height:15mm}
@@ -390,7 +394,15 @@ function coScholastic(card, shown) {
   for (const r of card.gradedSubjects || []) lines.push(`<div><span>${esc(title(r.name))}<small>graded subject</small></span><b>${esc(g(r))}</b></div>`)
   for (const r of card.coScholastic || []) lines.push(`<div><span>${esc(title(r.name))}</span><b>${esc(g(r))}</b></div>`)
   if (card.discipline && tk.some((k) => card.discipline[k] != null)) lines.push(`<div><span>Discipline<small>punctuality, conduct</small></span><b>${esc(tk.map((k) => card.discipline[k] ?? dash).join(' / '))}</b></div>`)
-  if (card.session?.heightCm || card.session?.weightKg) lines.push(`<div><span>Height · Weight</span><b class="plain">${card.session.heightCm ? card.session.heightCm + ' cm' : dash} · ${card.session.weightKg ? card.session.weightKg + ' kg' : dash}</b></div>`)
+  // Height · weight: measured at the half-yearly and at the annual. The half-yearly (interim) card prints the
+  // half-yearly measurement; the annual / final card prints both. Older snapshots carry one value only.
+  const hw = (m) => `${m?.heightCm != null ? m.heightCm + ' cm' : dash} · ${m?.weightKg != null ? m.weightKg + ' kg' : dash}`
+  const ms = card.session?.measurements
+  if (ms) {
+    const both = card.family === 'secondary_annual' || shown.length > 1
+    const parts = both ? [ms.HY && `<i>HY</i> ${hw(ms.HY)}`, ms.AN && `<i>AN</i> ${hw(ms.AN)}`].filter(Boolean) : (ms.HY ? [hw(ms.HY)] : [])
+    if (parts.length) lines.push(`<div><span class="nw">Height · Weight</span><b class="plain hw">${parts.join('<em>/</em>')}</b></div>`)
+  } else if (card.session?.heightCm || card.session?.weightKg) lines.push(`<div><span>Height · Weight</span><b class="plain">${hw(card.session)}</b></div>`)
   if (!lines.length) return ''
   const scale = (card.scales?.coScholastic || []).join('–')
   const termNote = tk.length > 1 ? ' · ' + shown.map((t) => esc(t.label.replace(/ exam$/i, ''))).join(' / ') : ''

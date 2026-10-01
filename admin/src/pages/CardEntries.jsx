@@ -129,6 +129,8 @@ export default function CardEntries({ embedded = false, ctx = null }) {
     setSaving(false)
   }
 
+  const selTerm = terms.find(x => x.id === termId)
+  const hwTitle = ['T1', 'HY'].includes(selTerm?.short_code) ? 'Half-yearly measurement — prints on the half-yearly card and, with the annual one, on the final card' : 'Annual measurement — prints on the final card next to the half-yearly one'
   const gradedAreas = areas.filter(a => a.subject_code === 'RCG')
   const coshAreas   = areas.filter(a => a.subject_code === 'RCA')
   const sections = useMemo(() => [...new Set(rows.map(r => r.section).filter(Boolean))].sort(), [rows])
@@ -198,8 +200,8 @@ export default function CardEntries({ embedded = false, ctx = null }) {
                   {coshAreas.map(a => <th key={a.id} style={{ padding: '9px 6px', fontSize: 10.5, fontWeight: 600, color: 'var(--text-muted)', textAlign: 'center' }}>{a.subject_name}</th>)}
                   <th style={{ padding: '9px 6px', fontSize: 10.5, fontWeight: 600, color: 'var(--text-muted)', textAlign: 'center' }}>Discipline</th>
                   <th style={{ padding: '9px 6px', fontSize: 10.5, fontWeight: 600, color: 'var(--text-muted)', textAlign: 'left', minWidth: 200 }}>Remarks (term)</th>
-                  <th style={{ padding: '9px 6px', fontSize: 10.5, fontWeight: 600, color: 'var(--text-muted)', textAlign: 'center' }}>Ht (cm)</th>
-                  <th style={{ padding: '9px 6px', fontSize: 10.5, fontWeight: 600, color: 'var(--text-muted)', textAlign: 'center' }}>Wt (kg)</th>
+                  <th style={{ padding: '9px 6px', fontSize: 10.5, fontWeight: 600, color: 'var(--text-muted)', textAlign: 'center' }} title={hwTitle}>Ht (cm)</th>
+                  <th style={{ padding: '9px 6px', fontSize: 10.5, fontWeight: 600, color: 'var(--text-muted)', textAlign: 'center' }} title={hwTitle}>Wt (kg)</th>
                   {isLastTerm && <th style={{ padding: '9px 6px', fontSize: 10.5, fontWeight: 600, color: 'var(--text-muted)', textAlign: 'left' }} title="Prints on the final card. Blank = the next class; type only the exceptions (held back, changed stream).">Promoted to</th>}
                 </tr>
               </thead>
@@ -245,7 +247,7 @@ export default function CardEntries({ embedded = false, ctx = null }) {
               {saving ? 'Saving…' : `Save ${dirty.size} student${dirty.size === 1 ? '' : 's'}`}
             </button>
             <span style={{ fontSize: 11.5, color: 'var(--text-muted)' }}>
-              Grades &amp; discipline are per <b>term</b> · height / weight / promotion are per <b>session</b> · scales come from the class's card template
+              Grades &amp; discipline are per <b>term</b> · height / weight are measured twice — <b>half-yearly</b> (enter under Term 1 or Half Yearly) and <b>annual</b> (Term 2 or Annual) · promotion is per <b>session</b> · scales come from the class's card template
             </span>
           </div>
         </>
