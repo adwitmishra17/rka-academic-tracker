@@ -493,9 +493,18 @@ export function computeCard(p) {
     if (plan.family === 'secondary_annual') for (const c of plan.components) for (const t of c.terms || []) codes.add(t)
     return [...codes].map((c) => termsByCode[c]?.id).filter(Boolean)
   }
+  // Card entries (co-scholastic grades, discipline, remarks) follow one rule for every class: the half-yearly column
+  // reads what was entered under Term 1 OR Half Yearly, the annual / final column under Term 2 OR Annual — on top of
+  // the column's own exam terms. (A card with one column, IX–X, is the annual column.)
+  const entryIdsFor = (ctKey) => {
+    const half = plan.cardTerms.length > 1 && plan.cardTerms[0].key === ctKey
+    const extra = (half ? ['T1', 'HY'] : ['T2', 'AN']).map((c) => termsByCode[c]?.id).filter(Boolean)
+    return [...new Set([...examCodesFor(ctKey), ...extra])]
+  }
   const coSubjects = (p.subjects || []).filter((s) => s.kind === 'co_scholastic')
   const gradeIn = (subjectId, termIds) => {
-    const hits = (p.coGrades || []).filter((g) => g.subject_id === subjectId && termIds.includes(g.term_id))
+    // latest NON-blank grade: a blank saved on the half's other term must not hide a grade that was entered
+    const hits = (p.coGrades || []).filter((g) => g.subject_id === subjectId && termIds.includes(g.term_id) && g.grade != null && String(g.grade).trim() !== '')
     hits.sort((a, b) => new Date(b.entered_at || 0) - new Date(a.entered_at || 0))
     return hits[0]?.grade ?? null
   }
@@ -505,7 +514,7 @@ export function computeCard(p) {
     const byTerm = {}
     for (const ct of plan.cardTerms) {
       if (!cardKey.showTerms.includes(ct.key)) { byTerm[ct.key] = null; continue }
-      const g = subj ? gradeIn(subj.id, examCodesFor(ct.key)) : null
+      const g = subj ? gradeIn(subj.id, entryIdsFor(ct.key)) : null
       byTerm[ct.key] = g
       if (g == null && gateTerms.has(ct.key)) missing.push({ row: name, term: ct.label, component: 'grade', reason: subj ? 'grade not entered' : 'area not configured' })
     }
@@ -518,11 +527,15 @@ export function computeCard(p) {
   const discipline = {}, remarks = {}
   for (const ct of plan.cardTerms) {
     if (!cardKey.showTerms.includes(ct.key)) continue
-    const ids = examCodesFor(ct.key)
-    const m = metaRows.filter((x) => x.term_id && ids.includes(x.term_id)).sort((a, b) => new Date(b.updated_at || 0) - new Date(a.updated_at || 0))[0]
-    discipline[ct.key] = m?.discipline ?? null
-    remarks[ct.key] = m?.remarks ?? null
-    if (gateTerms.has(ct.key) && p.def?.discipline && !m?.discipline) warnings.push({ row: 'Discipline', term: ct.label, reason: 'not entered' })
+    const ids = entryIdsFor(ct.key)
+    // A card term draws on several exam terms (e.g. Term 1 card ← T1 + HY rows). Take the latest row that actually
+    // HAS the value — a newer row of the same card term saved without it (height only, discipline only …) must not
+    // blank out what was entered on the other row.
+    const latestWith = (field) => metaRows.filter((x) => x.term_id && ids.includes(x.term_id) && x[field] != null && String(x[field]).trim() !== '')
+      .sort((a, b) => new Date(b.updated_at || 0) - new Date(a.updated_at || 0))[0]?.[field] ?? null
+    discipline[ct.key] = latestWith('discipline')
+    remarks[ct.key] = latestWith('remarks')
+    if (gateTerms.has(ct.key) && p.def?.discipline && !discipline[ct.key]) warnings.push({ row: 'Discipline', term: ct.label, reason: 'not entered' })
   }
   const sess = metaRows.find((x) => !x.term_id) || {}
   // Height / weight are measured twice a year: the half-yearly measurement lives on a T1/HY term row, the
@@ -535,7 +548,9 @@ export function computeCard(p) {
   }
   const measurements = { HY: measurement(true), AN: measurement(false) }
   const lastTerm = cardKey.showTerms[cardKey.showTerms.length - 1]
-  const remarkText = remarks[lastTerm] || autoRemark(outRows, overall, p.attendance, p.student)
+  // the half-yearly / Term-1 card is interim; the final card (and the single IX–X annual card) covers the session
+  const finalCard = plan.cardTerms.every((t) => cardKey.showTerms.includes(t.key))
+  const remarkText = remarks[lastTerm] || autoRemark(outRows, overall, p.attendance, p.student, { interim: !finalCard })
 
   // Attendance
   let attendance = null
@@ -604,19 +619,20 @@ export function applyClassStats(cards) {
 }
 
 // ── Auto remark (used when the class teacher left the remark blank) ─────────
-export function autoRemark(rows, overall, attendance, student) {
+export function autoRemark(rows, overall, attendance, student, { interim = false } = {}) {
   const pct = overall?.pct
   const first = (student?.full_name || student?.name || 'The student').split(' ')[0]
   if (pct == null) return ''
   const tier = pct >= 90 ? 'an outstanding' : pct >= 75 ? 'a very good' : pct >= 60 ? 'a good' : pct >= 45 ? 'a satisfactory' : 'a below-average'
   const scored = rows.filter((r) => !r.unmapped && r.total.max > 0 && r.countsInAggregate).map((r) => ({ s: r.subject, p: r.total.pct }))
   scored.sort((a, b) => b.p - a.p)
-  const parts = [`${first} has shown ${tier} performance this session.`]
+  const parts = [`${first} has shown ${tier} performance ${interim ? 'this term' : 'this session'}.`]
   if (scored.length >= 2 && scored[0].p >= 75) parts.push(`Strong in ${titleCase(scored[0].s)}${scored[1].p >= 75 ? ` and ${titleCase(scored[1].s)}` : ''}.`)
   const weak = scored.filter((x) => x.p < 45)
   if (weak.length) parts.push(`Needs focused effort in ${weak.slice(0, 2).map((x) => titleCase(x.s)).join(' and ')}.`)
   else if (scored.length && scored[scored.length - 1].p < 65 && pct >= 60) parts.push(`More practice in ${titleCase(scored[scored.length - 1].s)} will help.`)
-  const a = attendance?.sessionTotal
+  // the same attendance the card prints: half-yearly period on an interim card, the whole session on the final one
+  const a = interim ? (attendance?.halfYear || attendance?.sessionTotal) : attendance?.sessionTotal
   if (a?.marked) { const ap = 100 * a.present / a.marked; if (ap >= 95) parts.push('Attendance has been excellent.'); else if (ap < 75) parts.push('Regular attendance is essential for further improvement.') }
   parts.push(pct >= 75 ? 'Keep it up!' : 'Keep working hard.')
   return parts.join(' ')
