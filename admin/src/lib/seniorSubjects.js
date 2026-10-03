@@ -63,6 +63,15 @@ export function resolveSubjects(student, rows) {
     else if (path === 'pcb') subs = subs.filter((s) => !/^math|^maths/i.test(s))
   }
 
+  // Humanities take ONE of History / Economics (SMS humanities_choice): keep
+  // the chosen one, drop the other. Not recorded → both stay.
+  const hc = norm(student.humanitiesChoice)
+  if (/Humanities/.test(cls) && (hc === 'history' || hc === 'economics')) {
+    const other = hc === 'history' ? 'economics' : 'history'
+    subs = subs.filter((s) => norm(s) !== other)
+    if (!subs.some((s) => norm(s) === hc)) subs.push(student.humanitiesChoice)
+  }
+
   const opt = student.optionalSubject
   if (opt && !subs.some((s) => norm(s) === norm(opt))) subs.push(opt)
 

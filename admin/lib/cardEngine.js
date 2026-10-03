@@ -229,6 +229,17 @@ export function resolveRows(def, family, className, subjects, student) {
     const sp = String(student?.science_path || '').toUpperCase()
     if (sp === 'PCM') core = core.filter((s) => normName(s) !== 'BIOLOGY')
     if (sp === 'PCB') core = core.filter((s) => normName(s) !== 'MATHEMATICS')
+    // Humanities take ONE of History / Economics (SMS students.humanities_choice,
+    // migration 172): keep the chosen one — adding it if this template's core
+    // lacks it — and drop the other. Not recorded yet → both stay (as before).
+    const hc = /Humanities$/.test(className) ? normName(student?.humanities_choice || '') : ''
+    if (hc === 'HISTORY' || hc === 'ECONOMICS') {
+      const other = hc === 'HISTORY' ? 'ECONOMICS' : 'HISTORY'
+      core = core.filter((s) => normName(s) !== other)
+      if (!core.some((s) => normName(s) === hc)) {
+        core.push(Object.keys(schemes).find((k) => rowSourceNames(k).includes(hc)) || student.humanities_choice)
+      }
+    }
     const opt = student?.optional_subject ? normName(student.optional_subject) : null
     let names = [...core]
     if (opt && !names.some((n) => normName(n) === opt)) {

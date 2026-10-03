@@ -36,6 +36,7 @@ const hasStream = (c) => /Science|Commerce|Humanities/.test(String(c || ''))
 function statusOf(r) {
   if (r.needsStream) return { label: 'Set stream', color: 'var(--crimson)' }
   if (!r.optionalSubject) return { label: 'Set optional', color: 'var(--gold-dark)' }
+  if (r.needsChoice) return { label: 'Set History/Economics', color: 'var(--gold-dark)' }
   return { label: 'Complete', color: 'var(--green-dark)' }
 }
 
@@ -90,6 +91,7 @@ export default function SeniorSubjects() {
       const resolved = students.map((s) => ({
         ...s,
         needsStream: !hasStream(s.className),
+        needsChoice: /Humanities/.test(s.className || '') && !s.humanitiesChoice,
         subjects: resolveSubjects(s, cat.get(`${s.branchCode}|${s.className}`) || cat.get(s.className) || []),
       })).sort((a, b) =>
         (a.className || '').localeCompare(b.className || '')
@@ -110,9 +112,12 @@ export default function SeniorSubjects() {
   }, [rows])
 
   const summary = useMemo(() => {
-    let complete = 0, noOpt = 0, noStream = 0
-    for (const r of (rows || [])) { if (r.needsStream) noStream++; else if (!r.optionalSubject) noOpt++; else complete++ }
-    return { complete, noOpt, noStream }
+    let complete = 0, noOpt = 0, noStream = 0, noChoice = 0
+    for (const r of (rows || [])) {
+      if (r.needsStream) noStream++; else if (!r.optionalSubject) noOpt++
+      else if (r.needsChoice) noChoice++; else complete++
+    }
+    return { complete, noOpt, noStream, noChoice }
   }, [rows])
 
   const fileBase = `senior-subjects-${(currentBranch || 'all').toLowerCase()}-${className ? className.replace(/\s+/g, '-') : 'class-11-12'}-${new Date().toISOString().slice(0, 10)}`
@@ -211,10 +216,11 @@ export default function SeniorSubjects() {
             <div style={{ fontSize:12.5, color:'var(--text-muted)', marginBottom:10 }}>
               {rows.length} students in {className || 'Class 11 & 12'} · {sessionCode}
             </div>
-            {(summary.noOpt > 0 || summary.noStream > 0) && (
+            {(summary.noOpt > 0 || summary.noStream > 0 || summary.noChoice > 0) && (
               <div style={{ display:'flex', flexWrap:'wrap', gap:8, marginBottom:12 }}>
                 <span style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'4px 11px', borderRadius:999, background:'var(--green-light)', border:'1px solid rgba(26,74,46,0.2)', fontSize:12.5, color:'var(--green-dark)' }}>Complete <b>{summary.complete}</b></span>
                 {summary.noOpt > 0 && <span style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'4px 11px', borderRadius:999, background:'var(--gold-light)', border:'1px solid rgba(201,162,39,0.35)', fontSize:12.5, color:'var(--gold-dark)' }}>Set optional in SMS <b>{summary.noOpt}</b></span>}
+                {summary.noChoice > 0 && <span style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'4px 11px', borderRadius:999, background:'var(--gold-light)', border:'1px solid rgba(201,162,39,0.35)', fontSize:12.5, color:'var(--gold-dark)' }}>Set History/Economics in SMS <b>{summary.noChoice}</b></span>}
                 {summary.noStream > 0 && <span style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'4px 11px', borderRadius:999, background:'var(--crimson-light)', border:'1px solid rgba(139,26,26,0.2)', fontSize:12.5, color:'var(--crimson)' }}>Set stream in SMS <b>{summary.noStream}</b></span>}
               </div>
             )}

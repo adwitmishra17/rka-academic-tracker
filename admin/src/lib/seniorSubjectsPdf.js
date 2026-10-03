@@ -30,6 +30,7 @@ function loadImage(src, maxW = 400) {
 function statusLabel(r) {
   if (r.needsStream) return 'Set stream'
   if (!r.optionalSubject) return 'Set optional'
+  if (r.needsChoice) return 'Set History/Economics'
   return 'Complete'
 }
 

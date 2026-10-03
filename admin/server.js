@@ -201,6 +201,7 @@ function toFrontendStudent(row, branches) {
     rollNumber:       row.roll_number != null ? String(row.roll_number) : '',
     optionalSubject:  row.optional_subject || '',
     sciencePath:      row.science_path     || '',
+    humanitiesChoice: row.humanities_choice || '',
     fatherName:       row.father_name      || '',
     motherName:       row.mother_name      || '',
     guardianName:     row.guardian_name    || '',
